@@ -38,6 +38,12 @@
   padding: 1rem;
 }
 
+.export-group-head {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .export-group + .export-group {
   border-top: 1px solid var(--border);
 }
@@ -261,16 +267,6 @@ label.export-chip:has(input:disabled) {
   padding: 0.5rem 0.75rem;
   color: var(--destructive);
   border-color: var(--destructive);
-}
-
-.export-summary .export-go {
-  width: 100%;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.export-go .export-ext {
-  opacity: 0.7;
 }
 
 /* The preview: a line with its title and the size of the file, and the file in a frame that scrolls. */

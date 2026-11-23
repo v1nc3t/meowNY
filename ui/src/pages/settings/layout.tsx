@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
+import HelpButton from '../../components/HelpButton'
 
 /** One setting: its name (and a short hint) on the left, the control on the right. On a phone the two stack. */
 export function Row({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
@@ -45,4 +46,14 @@ export function Rows({ children }: { children: ReactNode }) {
 /** The buttons at the end of a form. */
 export function Actions({ children }: { children: ReactNode }) {
   return <div className="settings-actions">{children}</div>
+}
+
+/** The small heading of a part of a section, with its explanation (if it needs one) behind a help button beside it. */
+export function Subtitle({ children, help }: { children: ReactNode; help?: ReactNode }) {
+  return (
+    <div className="settings-subhead">
+      <h3 className="settings-subtitle">{children}</h3>
+      {help ? <HelpButton>{help}</HelpButton> : null}
+    </div>
+  )
 }

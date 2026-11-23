@@ -5,23 +5,27 @@ import { useProfile } from '../hooks/profile'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
-import { canOpen, canPreview, fileState, fileStateText, typeText } from '../lib/documents'
+import { fileState, fileStateText, typeText } from '../lib/documents'
 import { formatDate } from '../lib/money'
+import Facts, { type FactItem } from './Facts'
 import Button from './ui/Button'
 
 /**
- * What a document is, in the details dialog and in the panel of its row: its kind and size and where its file is, then what it is
- * attached to. `children` (the buttons for the file) sit beside the facts. With `onChanged` each link has a "detach" button, and it is
- * called after one is detached; without it, nothing here can be changed.
+ * What a document is, in the details dialog and in the panel of its row: its kind and size and where its file is (and what else the page adds,
+ * `extra`), one to a line, then what it is attached to. `children` (the buttons for the file) follow the facts. With `onChanged` each link has a
+ * "detach" button, and it is called after one is detached; without it, nothing here can be changed.
  */
 export default function DocumentDetails({
   doc,
   locale,
+  extra = [],
   onChanged,
   children,
 }: {
   doc: Doc
   locale: string
+  /** More pairs for the facts, after the file's own (the box that keeps it on the phone). */
+  extra?: FactItem[]
   onChanged?: () => void
   children?: ReactNode
 }) {
@@ -58,20 +62,15 @@ export default function DocumentDetails({
   const state = fileStateText(fileState(doc, phone))
   return (
     <>
-      <section className="detail-section">
-        <p className="detail-title">{t('docs.sectionAbout')}</p>
-        <div className="doc-file">
-          <dl className="doc-facts">
-            <dt>{t('common.type')}</dt>
-            <dd>{t(typeText(doc.mediaType))}</dd>
-            <dt>{t('docs.size')}</dt>
-            <dd>{formatSize(doc.sizeBytes, locale)}</dd>
-          </dl>
-          {children}
-        </div>
-        {state ? <p className="hint">{t(state)}</p> : null}
-        {doc.hasFile && !canOpen(doc) && !canPreview(doc) ? <p className="hint">{t('docs.cannotOpen')}</p> : null}
-      </section>
+      <Facts
+        items={[
+          { label: t('common.type'), value: t(typeText(doc.mediaType)) },
+          { label: t('docs.size'), value: formatSize(doc.sizeBytes, locale) },
+          { label: t('docs.fileLabel'), value: state ? t(state) : null, tone: 'negative' },
+          ...extra,
+        ]}
+      />
+      {children}
       <section className="detail-section">
         <p className="detail-title">{t('docs.links')}</p>
         {links === null ? null : links.length === 0 ? (
@@ -83,7 +82,8 @@ export default function DocumentDetails({
                 <span className="doc-link-text">
                   <span className="doc-link-name">{link.name}</span>
                   <span className="doc-link-meta">
-                    {t(link.kind === 'transaction' ? 'docs.kindTransaction' : link.kind === 'recurring' ? 'docs.kindRecurring' : 'docs.kindLedger')} · {formatDate(link.date, locale)}
+                    <span>{t(link.kind === 'transaction' ? 'docs.kindTransaction' : link.kind === 'recurring' ? 'docs.kindRecurring' : 'docs.kindLedger')}</span>
+                    <span>{formatDate(link.date, locale)}</span>
                   </span>
                 </span>
                 {onChanged ? (

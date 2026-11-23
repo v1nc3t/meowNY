@@ -6,6 +6,7 @@ import PageHeader from '../components/PageHeader'
 import AppFooter from '../components/AppFooter'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import CommandApiBlock from '../components/CommandApiBlock'
+import HelpButton from '../components/HelpButton'
 import PhoneSyncBlock from '../components/PhoneSyncBlock'
 import { cn } from '../components/ui/cn'
 import type { Settings } from '../vault/rules'
@@ -77,6 +78,15 @@ export default function SettingsPage() {
     }
   }
 
+  const currencyLocked = (accountList ?? []).some((account) => account.foreign)
+
+  /** What a section explains, behind a help button: beside its name on the computer, beside the title of the page on a phone. */
+  function helpFor(id: SectionId): ReactNode {
+    if (id === 'region') return phone ? <p>{t('settings.currencyOnDesktop')}</p> : currencyLocked ? <p>{t('settings.currencyLocked')}</p> : undefined
+    if (id === 'notifications') return <p>{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
+    return undefined
+  }
+
   function body(id: SectionId): ReactNode {
     switch (id) {
       case 'region':
@@ -87,7 +97,7 @@ export default function SettingsPage() {
               phone={phone}
               onSaved={setSettings}
               onChangeCurrency={() => setChangingCurrency(true)}
-              currencyLocked={(accountList ?? []).some((account) => account.foreign)}
+              currencyLocked={currencyLocked}
               say={say}
             />
           )
@@ -119,6 +129,7 @@ export default function SettingsPage() {
         // on a phone a section opens in place of the list: the header has its name, and a way back to the list
         title={phone && current ? t(current.title) : t('settings.title')}
         back={phone && current ? '/app/settings' : undefined}
+        help={phone && current ? helpFor(current.id) : undefined}
       />
 
       {changingCurrency && settings ? (
@@ -172,6 +183,7 @@ export default function SettingsPage() {
             {phone ? null : (
               <header className="settings-section-head">
                 <h2>{t(current.title)}</h2>
+                {helpFor(current.id) ? <HelpButton>{helpFor(current.id)}</HelpButton> : null}
               </header>
             )}
             {body(current.id)}

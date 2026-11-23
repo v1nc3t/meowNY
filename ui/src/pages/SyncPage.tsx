@@ -5,13 +5,15 @@ import { whenText } from '../api/locales'
 import { scanQr, stopScan } from '../api/scanner'
 import { cleanDeviceName, clockGapText, DEVICE_NAME_MAX, phoneClockGap, syncApi, type Peer } from '../api/sync'
 import { today } from '../api/today'
+import Modal, { modalFormId } from '../components/Modal'
 import PageHeader from '../components/PageHeader'
-import { TapRow } from '../components/RowParts'
+import { ListGroup, TapRow } from '../components/RowParts'
 import SyncStatusPanel from '../components/SyncStatusPanel'
 import Button from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { useDeviceName } from '../hooks/useDeviceName'
 import { useToast } from '../hooks/toast'
+import { useOpenRow } from '../hooks/useOpenRow'
 import { useProfile } from '../hooks/profile'
 import { remindersChanged } from '../lib/reminders'
 import { useRegion } from '../hooks/useRegion'
@@ -32,12 +34,14 @@ export default function SyncPage() {
 function PhoneSync() {
   const t = useT()
   const { locale, timezone } = useRegion()
+  const rows = useOpenRow()
   const { status, refresh, cancel, acknowledge } = useSyncStatus()
   const [devices, setDevices] = useState<Peer[] | null>(null)
   const [offsetMs, setOffsetMs] = useState(0)
   const [name, setName] = useDeviceName('phone')
   const [scanning, setScanning] = useState(false)
   const [pasted, setPasted] = useState('')
+  const [pasting, setPasting] = useState(false)
   const say = useToast()
 
   const loadDevices = useCallback(() => {
@@ -93,10 +97,43 @@ function PhoneSync() {
   const idle = state === 'idle'
   const paired = devices !== null && devices.length > 0
   const clockGap = phoneClockGap(offsetMs)
+  /** The day of a sync, short, for the value at the end of a row: "20 Oct 2026". The time is in the open row. */
+  const dayOf = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleDateString(locale, { timeZone: timezone, dateStyle: 'medium' })
+    } catch {
+      return iso
+    }
+  }
 
   return (
     <section className="tx-page settings-page">
-      <PageHeader title={t('phone.title')} />
+      <PageHeader
+        title={t('nav.sync')}
+        // what to do on the computer, behind a help button beside the title
+        help={<p>{t(paired ? 'phone.pairedHint' : 'phone.unpairedHint')}</p>}
+        // the text of a code, to try the app without a camera: only in a development build
+        more={[(import.meta.env.DEV || import.meta.env.VITE_MEOWNY_TEST_PASTE === '1') && { label: t('phone.paste'), onSelect: () => setPasting(true) }]}
+      />
+
+      {pasting ? (
+        <Modal title={t('phone.paste')} doneLabel={t('phone.pasteUse')} pending={pasted.trim() === ''} onClose={() => setPasting(false)}>
+          <form
+            id={modalFormId}
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (pasted.trim() === '') return
+              setPasting(false)
+              void begin(pasted.trim())
+            }}
+          >
+            <label>
+              <span className="sr-only">{t('phone.paste')}</span>
+              <input value={pasted} onChange={(e) => setPasted(e.target.value)} autoComplete="off" spellCheck={false} />
+            </label>
+          </form>
+        </Modal>
+      ) : null}
 
       {scanning ? (
         <div className="scan-overlay" role="dialog" aria-label={t('phone.scan')}>
@@ -109,24 +146,23 @@ function PhoneSync() {
       <div className="tx-pane wide settings-grid">
         <Card className="settings-block">
           <CardContent>
-            <p className="hint">{t(paired ? 'phone.pairedHint' : 'phone.unpairedHint')}</p>
-
             {paired && (
-              <ul className="card-list">
+              <ListGroup>
                 {devices.map((device) => (
                   <TapRow
                     key={device.deviceId}
-                    id={device.deviceId}
+                    id={rows.panelId(device.deviceId)}
+                    open={rows.isOpen(device.deviceId)}
+                    onToggle={() => rows.toggle(device.deviceId)}
                     name={device.name}
-                    sub={
-                      <>
-                        <span className="is-line">{device.lastSyncAt ? t('sync.lastSync', { time: whenText(device.lastSyncAt, locale, timezone) }) : t('sync.neverSynced')}</span>
-                        {device.changesWaiting !== null ? <span className="is-line">{t('sync.changesWaiting', { count: device.changesWaiting })}</span> : null}
-                      </>
-                    }
+                    amount={<span className="cell-size">{device.lastSyncAt ? dayOf(device.lastSyncAt) : t('sync.neverSynced')}</span>}
+                    facts={[
+                      { label: t('sync.colSynced'), value: device.lastSyncAt ? whenText(device.lastSyncAt, locale, timezone) : t('sync.neverSynced') },
+                      { label: t('sync.waitingLabel'), value: device.changesWaiting === null ? null : String(device.changesWaiting) },
+                    ]}
                   />
                 ))}
-              </ul>
+              </ListGroup>
             )}
 
             {clockGap !== null ? <p className="hint">{t('sync.phoneClockOff', { gap: clockGapText(clockGap) })}</p> : null}
@@ -142,19 +178,6 @@ function PhoneSync() {
                     {t('phone.scan')}
                   </Button>
                 </div>
-                {(import.meta.env.DEV || import.meta.env.VITE_MEOWNY_TEST_PASTE === '1') && (
-                  <>
-                    <label>
-                      {t('phone.paste')}
-                      <input value={pasted} onChange={(e) => setPasted(e.target.value)} autoComplete="off" spellCheck={false} />
-                    </label>
-                    <div className="actions">
-                      <Button variant="outline" disabled={pasted.trim() === ''} onClick={() => void begin(pasted.trim())}>
-                        {t('phone.pasteUse')}
-                      </Button>
-                    </div>
-                  </>
-                )}
               </>
             ) : (
               <SyncStatusPanel

@@ -9,6 +9,7 @@ import { focusChosen, useListKeys } from '../hooks/useListKeys'
 export default function Pick({
   label,
   className,
+  compact = false,
   text,
   title,
   open,
@@ -18,6 +19,8 @@ export default function Pick({
 }: {
   label: string
   className?: string
+  /** No visible label above the button; the label is kept for screen readers. */
+  compact?: boolean
   text: string
   /** For a choice that may be cut short in a narrow field: the whole of it, as a tooltip. */
   title?: string
@@ -61,7 +64,7 @@ export default function Pick({
 
   return (
     <div className={className ? `pick ${className}` : 'pick'} ref={ref}>
-      <span>{label}</span>
+      <span className={compact ? 'sr-only' : undefined}>{label}</span>
       <button
         ref={buttonRef}
         type="button"

@@ -338,8 +338,14 @@ html.is-phone .gate:has(> .app-footer) {
   container-type: inline-size;
 }
 
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .settings-section-head h2 {
-  margin: 0;
+  margin: 0 0.5rem 0 0;
 }
 
 /* What a section holds: forms and rows, one below the other. */
@@ -573,16 +579,28 @@ html.is-phone .gate:has(> .app-footer) {
   border-radius: var(--radius-lg);
 }
 
-.settings-subtitle {
+/* A small heading of a part of a section, with its help button beside it. */
+.settings-subhead {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
   margin: 0.5rem 0 -0.5rem;
+}
+
+.settings-subtitle {
+  margin: 0;
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1.4;
   color: var(--foreground);
 }
 
-.settings-stack > .settings-subtitle:first-child {
+.settings-stack > .settings-subhead:first-child {
   margin-top: 0;
+}
+
+.settings-value.is-failed {
+  color: var(--destructive);
 }
 
 /* The foot of the settings (components/AppFooter.tsx), across the whole page. The page lines its children up at the start, so the
@@ -603,18 +621,16 @@ html.is-phone .gate:has(> .app-footer) {
 /* The tokens: the name takes what the rest leaves (a long one wraps), the access and each time are columns in ch (the width of a character
    of 1rem: "read and write" is 14 characters and "19 Dec 2026, 10:30" 18, of 0.875rem), and the last column is as wide as its button (the
    head has a hidden copy of the word, so both are the same in every language). The columns need 52em; a narrower table is lines (below). */
+/* The access tokens, one value to a cell: the name takes what the rest leaves, then its access, when it expires ("expired 1 Jun 2026, 11:30" is 25
+   characters of 0.875rem), when it was last used, and the button that revokes it with the chevron that opens the details. One line to a row: with less
+   room the last use goes (under 52em), then the access (under 40em); the details have them. */
 .card-list.token-table {
-  --cols: minmax(0, 1fr) 13ch 17ch 17ch max-content;
+  --cols: minmax(0, 1fr) 13ch 22ch 17ch max-content;
 }
 
 ul.card-list.token-table > li.card-item,
 ul.card-list.token-table > li.list-head {
   column-gap: 0.75rem;
-}
-
-.token-table .cell-name > .card-name {
-  white-space: normal;
-  overflow-wrap: anywhere;
 }
 
 .token-table .head-spacer {
@@ -623,25 +639,51 @@ ul.card-list.token-table > li.list-head {
   visibility: hidden;
 }
 
-/* The paired phones: the name takes what the rest leaves. Each date is a column of 17ch (a column in ch is the width of a character of 1rem,
-   and "20 Oct 2026, 11:30" is 18 characters of 0.875rem), so a date is on one line, and the button is as wide as "entfernen", the longest
-   of "remove" in the languages. Longer dates (with AM and PM) wrap at their comma. */
+@container (max-width: 52em) {
+  ul.card-list.token-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(0, 1fr) 13ch 22ch max-content;
+  }
+
+  ul.card-list.token-table :is(.token-used, .head-used) {
+    display: none;
+  }
+}
+
+@container (max-width: 40em) {
+  ul.card-list.token-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(0, 1fr) 22ch max-content;
+  }
+
+  ul.card-list.token-table :is(.token-scope, .head-scope) {
+    display: none;
+  }
+}
+
+/* The paired phones, one value to a cell: the name takes what the rest leaves, then when it was paired, its last sync (each 19ch: "20 Oct 2026, 11:30" is 18
+   characters of 0.875rem), the changes waiting, and the button that removes it. One line to a row: with less room the day it was paired goes (under 52em), then the
+   changes waiting (under 40em). */
 .card-list.device-table {
-  --cols: minmax(0, 1fr) 17ch 17ch 7rem;
+  --cols: minmax(0, 1fr) 19ch 19ch 9ch 2.25rem;
 }
 
-.token-table .cell-sub,
-.token-table .cell-sub-end,
-.device-table .cell-sub,
-.device-table .cell-sub-end {
-  overflow: visible;
-  white-space: normal;
+@container (max-width: 52em) {
+  ul.card-list.device-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(0, 1fr) 19ch 9ch 2.25rem;
+  }
+
+  ul.card-list.device-table :is(.device-paired, .head-paired) {
+    display: none;
+  }
 }
 
-.cell-extra {
-  min-width: 0;
-  font-size: 0.875rem;
-  color: var(--muted-foreground);
+@container (max-width: 40em) {
+  ul.card-list.device-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(0, 1fr) 19ch 2.25rem;
+  }
+
+  ul.card-list.device-table :is(.device-waiting, .head-waiting) {
+    display: none;
+  }
 }
 
 /* The question to remove a phone is under its row: the words at the left, the two answers at the right, where the button of the row above
@@ -661,71 +703,6 @@ ul.card-list.token-table > li.list-head {
   display: flex;
   gap: 0.5rem;
   margin-left: auto;
-}
-
-/* A table with no room for its columns: no head, and a row is the name with its button, then a line for each of the others, which say
-   what they are (the generic rules for 40em, in primitives.css, do the same with two lines). */
-@container (max-width: 52em) {
-  ul.card-list.token-table > li.list-head {
-    display: none;
-  }
-
-  ul.card-list.token-table > li.list-head + li {
-    border-top: 0;
-  }
-
-  ul.card-list.token-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'name actions'
-      'sub sub'
-      'sub-end sub-end'
-      'extra extra';
-    row-gap: 0;
-  }
-
-  .token-table .cell-name {
-    grid-area: name;
-  }
-
-  .token-table .cell-sub {
-    grid-area: sub;
-  }
-
-  .token-table .cell-sub-end {
-    grid-area: sub-end;
-    text-align: left;
-  }
-
-  .token-table .cell-extra {
-    grid-area: extra;
-  }
-
-  .token-table .cell-actions {
-    grid-area: actions;
-  }
-
-  .token-table [data-label]::before {
-    content: attr(data-label) ' ';
-  }
-}
-
-@container (max-width: 40em) {
-  ul.card-list.device-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'name actions'
-      'sub sub'
-      'sub-end sub-end';
-  }
-
-  ul.card-list.device-table .cell-sub-end {
-    text-align: left;
-  }
-
-  .device-table [data-label]::before {
-    content: attr(data-label) ' ';
-  }
 }
 
 .settings-section .ui-badge {

@@ -9,13 +9,12 @@ import { useProfile } from '../hooks/profile'
 import { useI18n } from '../i18n/context'
 import { accountById, accountLabel, accountName } from '../lib/accountsView'
 import { formatDate } from '../lib/money'
-import { canAdd, dayWords, nextLine, nextText, overBooked, progress, stashMoney } from '../lib/stashView'
+import { overBooked, stashFacts, stashMoney } from '../lib/stashView'
 import BalanceChart from './BalanceChart'
-import Icon from './NavIcon'
-import { DayGroups, IconAction, Row, Table, TapRow } from './RowParts'
-import { DepositFacts, StashBar } from './StashParts'
+import Facts from './Facts'
+import { DayGroups, IconAction, PanelActions, Row, Table, TapRow, type PanelAction } from './RowParts'
+import { StashBar } from './StashParts'
 import YearNav from './YearNav'
-import Button from './ui/Button'
 import { Card, CardAction, CardHeader } from './ui/Card'
 import { cn } from './ui/cn'
 
@@ -23,9 +22,9 @@ import { cn } from './ui/cn'
 const stashHistory = (id: string, year: string) => stashesApi.history(id, year).then((points) => points.map((point) => ({ month: point.month, balance: point.saved })))
 
 /**
- * One stash: back, its name and account, and what can be done with it (edit, archive or restore, delete); a large block that says how far it is; the
- * notes; the saved amount over the year as a chart with a dashed line at the target; the history of what was added and taken out, newest first, a click on
- * a row opens it; and what its account has free, with a warning when the stashes hold more than the account has. docs/stash-design.md, section 13.3.
+ * One stash, under the header (its back button, name, what it holds and its buttons are in the page's `PageHeader`): how far it is as a bar; its facts, one to
+ * a line; the notes; the saved amount over the year as a chart with a dashed line at the target; the history of what was added and taken out, newest first, a
+ * click on a row opens it; and what its account has, with a warning when the stashes hold more than the account has. docs/stash-design.md, section 13.3.
  */
 export default function StashDetail({
   detail,
@@ -33,10 +32,6 @@ export default function StashDetail({
   settings,
   now,
   reload,
-  onEdit,
-  onArchive,
-  onRestore,
-  onDelete,
   onEntry,
   onTransfer,
 }: {
@@ -46,10 +41,6 @@ export default function StashDetail({
   now: Today
   /** Read again when this changes. */
   reload: number
-  onEdit: () => void
-  onArchive: () => void
-  onRestore: () => void
-  onDelete: () => void
   onEntry: (entry: Entry) => void
   /** Open the transfer that came with an entry. */
   onTransfer: (id: string) => void
@@ -61,26 +52,16 @@ export default function StashDetail({
   const { stash, entries } = detail
   const money = stashMoney(stash, settings.locale)
   const account = accountById(accounts, stash.accountId)
-  const shown = progress(stash.saved, stash.target)
-  const line = nextLine(stash)
-  const words = line ? nextText(line, money, t, settings.locale) : null
-  const below = stash.saved.startsWith('-')
 
   /** "+50.00" in the success colour, "-40.00" in the danger colour. */
   const signed = (entry: Entry) => (entry.kind === 'ADD' ? { text: `+${money(entry.amount)}`, tone: 'is-income' } : { text: `-${money(entry.amount)}`, tone: 'is-expense' })
-  const mark = (entry: Entry) => (
-    <span className={cn('stash-mark', entry.kind === 'ADD' ? 'is-income' : 'is-expense')}>
-      <span aria-hidden="true">{entry.kind === 'ADD' ? '+' : '−'}</span>
-      <span className="sr-only">{t(`stashes.kind.${entry.kind}`)}</span>
-    </span>
-  )
   const transferText = (entry: Entry) => (entry.otherAccount ? t(entry.kind === 'ADD' ? 'stashes.fromAccount' : 'stashes.toAccount', { account: entry.otherAccount }) : '')
   const amountCell = (entry: Entry) => {
     const view = signed(entry)
     return <span className={`cell-amount ${view.tone}`}>{view.text}</span>
   }
 
-  // A desktop row: the day, + or -, the note (or a dash), the transfer that came with it, the amount, what the stash held after, then edit.
+  // A desktop row, one value to a cell: the day, the note (or a dash), the transfer that came with it, the amount (signed), what the stash held after, then edit.
   function tableRow(entry: Entry) {
     return (
       <Row
@@ -93,7 +74,6 @@ export default function StashDetail({
         actions={<IconAction icon="pencil" label={t('stashes.editEntry')} data-row-focus onClick={() => onEntry(entry)} />}
       >
         <span className="cell-sub line-date">{formatDate(entry.date, settings.locale)}</span>
-        {mark(entry)}
         <div className="cell-name">
           <span className="card-name stash-note" title={entry.note ?? undefined}>
             {entry.note ?? '—'}
@@ -107,111 +87,51 @@ export default function StashDetail({
           ) : null}
         </span>
         {amountCell(entry)}
-        <span className={cn('cell-sub-end', entry.savedAfter.startsWith('-') && 'is-below')}>{money(entry.savedAfter)}</span>
+        <span className={cn('cell-sub-end stash-held', entry.savedAfter.startsWith('-') && 'is-below')}>{money(entry.savedAfter)}</span>
       </Row>
     )
   }
 
-  // A phone row: the note (or a dash) and the amount, what the stash held after under them. It opens to a labelled button for what can be done.
+  // A phone row: the note (or a dash) and the amount, the transfer that came with it under the name. It opens to the day and what the stash held after, and
+  // the buttons: edit, and the transfer.
   function tapRow(entry: Entry) {
     const key = String(entry.id)
+    const actions: (PanelAction | false)[] = [
+      { label: t('stashes.editEntry'), icon: 'pencil', onClick: () => onEntry(entry) },
+      entry.transferId !== null && entry.otherAccount !== null && { label: transferText(entry), icon: 'sync', onClick: () => onTransfer(entry.transferId ?? '') },
+    ]
     return (
       <TapRow
         key={key}
         id={rows.panelId(key)}
         open={rows.isOpen(key)}
         onToggle={() => rows.toggle(key)}
-        name={
-          <>
-            {mark(entry)} {entry.note ?? '—'}
-          </>
-        }
+        name={entry.note ?? '—'}
         amount={amountCell(entry)}
-        sub={
-          <>
-            {entry.otherAccount ? <span>{transferText(entry)}</span> : null}
-            <span>{`${t('stashes.savedAfter')} ${money(entry.savedAfter)}`}</span>
-          </>
-        }
+        meta={entry.otherAccount ? transferText(entry) : undefined}
+        facts={[
+          { label: t('report.date'), value: formatDate(entry.date, settings.locale) },
+          { label: t('stashes.savedAfter'), value: money(entry.savedAfter), tone: entry.savedAfter.startsWith('-') ? 'negative' : undefined },
+        ]}
       >
-        <div className="row-panel-actions">
-          <Button variant="outline" onClick={() => onEntry(entry)}>
-            <Icon name="pencil" className="btn-icon" />
-            {t('stashes.editEntry')}
-          </Button>
-          {entry.transferId !== null && entry.otherAccount ? (
-            <Button variant="outline" onClick={() => onTransfer(entry.transferId ?? '')}>
-              {transferText(entry)}
-            </Button>
-          ) : null}
-        </div>
+        <PanelActions actions={actions} />
       </TapRow>
     )
   }
 
+  const accountNode = account ? (
+    <Link to={`/app/accounts/${account.id}`} title={accountLabel(account, t)}>
+      {accountLabel(account, t)}
+    </Link>
+  ) : (
+    stash.account
+  )
+
   return (
     <>
-      <div className="debts-name stash-actions-row">
-        {stash.archived ? (
-          <Button variant="outline" size="sm" onClick={onRestore}>
-            {t('stashes.restore')}
-          </Button>
-        ) : (
-          <>
-            <Button variant="outline" size="sm" onClick={onEdit}>
-              {t('common.edit')}
-            </Button>
-            <Button variant="outline" size="sm" onClick={onArchive}>
-              <Icon name="archive" className="btn-icon" />
-              {t('stashes.archive')}
-            </Button>
-          </>
-        )}
-        <Button variant="outline" size="sm" className="row-danger" onClick={onDelete}>
-          <Icon name="trash" className="btn-icon" />
-          {t('common.delete')}
-        </Button>
-      </div>
-      <p className="hint stash-account-line">
-        {account ? (
-          <Link to={`/app/accounts/${account.id}`} title={accountLabel(account, t)}>
-            {accountLabel(account, t)}
-          </Link>
-        ) : (
-          stash.account
-        )}
-        {stash.archived ? ` · ${t('accounts.archived')}` : ''}
-      </p>
-      <Card className="stash-block">
-        <div className="stash-block-numbers">
-          <span className="stash-block-main">
-            <span className="dash-stat-label">{t('stashes.savedLabel')}</span>
-            <span className={cn('stash-big', below && 'is-below')}>{money(stash.saved)}</span>
-          </span>
-          {stash.target !== null ? (
-            <span className="stash-block-main">
-              <span className="dash-stat-label">{t('stashes.target')}</span>
-              <span className="stash-big">{money(stash.target)}</span>
-            </span>
-          ) : null}
-          {stash.percent !== null ? (
-            <span className={cn('stash-percent', shown.reached && 'is-reached')}>{t('stashes.percent', { percent: stash.percent })}</span>
-          ) : null}
-        </div>
-        <StashBar saved={stash.saved} target={stash.target} large />
-        {stash.deposit ? <DepositFacts stash={stash} locale={settings.locale} /> : null}
-        <div className="stash-block-facts">
-          {words ? <span className={cn('stash-next', words.warning && 'is-late', shown.reached && 'is-reached')}>{words.text}</span> : null}
-          {stash.targetDate && !stash.deposit ? (
-            <span className="stash-next">
-              {t('stashes.targetDate')} {dayWords(stash.targetDate, settings.locale)}
-            </span>
-          ) : null}
-        </div>
-        {stash.notes ? <p className="acct-notes">{stash.notes}</p> : null}
-        {stash.accountArchived && !stash.archived ? <p className="hint">{t('stashes.accountArchivedHint')}</p> : null}
-        {stash.archived && !stash.accountArchived && !canAdd(stash) ? <p className="hint">{t('stashes.archivedHint')}</p> : null}
-      </Card>
+      <StashBar saved={stash.saved} target={stash.target} large />
+      <Facts items={stashFacts(stash, accountNode, money, settings.locale, t)} className="acct-facts" />
+      {stash.notes ? <p className="acct-notes">{stash.notes}</p> : null}
       <Card className="acct-chart">
         <CardHeader>
           <CardAction>
@@ -240,17 +160,23 @@ export default function StashDetail({
       ) : null}
       {entries.length > 0 && !phone ? (
         <Table
+          tidy
           className="stash-history"
-          heads={[t('report.date'), '', t('debts.note'), '', { label: t('tx.amount'), className: 'is-end' }, { label: t('stashes.savedAfter'), className: 'is-end' }, '']}
+          heads={[t('report.date'), t('debts.note'), { label: '', className: 'head-transfer' }, { label: t('tx.amount'), className: 'is-end' }, { label: t('stashes.savedAfter'), className: 'is-end head-after' }, '']}
         >
           {entries.map(tableRow)}
         </Table>
       ) : null}
-      <p className={cn('stash-free-line', overBooked(stash.free) && 'is-over')}>
-        {account ? accountName(account, t) : stash.account}: {money(account?.balance ?? stash.free)}
-        {account ? ` · ${t('stashes.setAside', { amount: money(account.setAside) })}` : ''} · <span className="stash-free">{t('stashes.free', { amount: money(stash.free) })}</span>
-        {overBooked(stash.free) ? <span className="stash-warn"> {t('stashes.overBooked')}</span> : null}
-      </p>
+      {/* what its account has: the balance, what the stashes hold and what is free; red, with a warning, when they hold more than the account has */}
+      <Facts
+        className="acct-facts"
+        items={[
+          { label: account ? accountName(account, t) : stash.account, value: account ? money(account.balance) : null },
+          { label: t('accounts.setAsideHead'), value: account ? money(account.setAside) : null },
+          { label: t('accounts.free'), value: money(stash.free), tone: overBooked(stash.free) ? 'negative' : undefined },
+        ]}
+      />
+      {overBooked(stash.free) ? <p className="stash-warn">{t('stashes.overBooked')}</p> : null}
     </>
   )
 }

@@ -6,6 +6,7 @@ import { debtsLabels } from '../api/debtsLabels'
 import { ApiError, errorText, inDesktopApp } from '../api/invoke'
 import { periodLabel, reportLabels } from '../api/reportLabels'
 import { useToday, type Today } from '../api/today'
+import HelpButton from '../components/HelpButton'
 import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
 import Button from '../components/ui/Button'
@@ -329,7 +330,11 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
 
   return (
     <section className="tx-page export-page">
-      <PageHeader title={t('export.title')} />
+      {/* the one thing this page does: save the file, in the format chosen below */}
+      <PageHeader
+        title={t('export.title')}
+        actions={[{ label: `${t('export.go')} .${format}`, icon: 'export', primary: true, disabled: busy || problem !== null, onClick: () => void run() }]}
+      />
 
       <div className="tx-pane wide export-pane">
         <div className="export-layout">
@@ -458,7 +463,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
               )}
 
               {(format === 'json' || format === 'xlsx') && (
-                <Group title={t('export.include')}>
+                <Group title={t('export.include')} help={format === 'json' ? <p>{t('export.historyHint')}</p> : undefined}>
                   <div className="export-chips">
                     {partsOfFile.map((section) => {
                       // the change history, the transfers and the stashes are only in a file with no limits
@@ -470,7 +475,6 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                       )
                     })}
                   </div>
-                  {format === 'json' && limited && <p className="hint">{t('export.historyHint')}</p>}
                 </Group>
               )}
 
@@ -532,10 +536,6 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                   </div>
                 )
               )}
-              <Button size="lg" className="export-go" disabled={busy || problem !== null} onClick={() => void run()}>
-                <span>{t('export.go')}</span>
-                <span className="export-ext">.{format}</span>
-              </Button>
             </div>
           </aside>
 
@@ -576,11 +576,14 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
   )
 }
 
-/** A group of the options panel: a small heading and what it holds. */
-function Group({ title, children }: { title: string; children: ReactNode }) {
+/** A group of the options panel: a small heading (with its explanation, if it needs one, behind a help button) and what it holds. */
+function Group({ title, help, children }: { title: string; help?: ReactNode; children: ReactNode }) {
   return (
     <section className="export-group">
-      <h2>{title}</h2>
+      <div className="export-group-head">
+        <h2>{title}</h2>
+        {help ? <HelpButton>{help}</HelpButton> : null}
+      </div>
       {children}
     </section>
   )

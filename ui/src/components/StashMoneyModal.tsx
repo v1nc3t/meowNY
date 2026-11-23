@@ -143,10 +143,6 @@ function MoneyForm({
   const bar = previewBar(stash.saved, after, stash.target)
   const ownAccount = accountById(accounts, stash.accountId)
   const ownName = ownAccount ? accountName(ownAccount, t) : stash.account
-  const otherName = (id: string) => {
-    const account = accountById(accounts, id)
-    return account ? accountName(account, t) : ''
-  }
 
   /** Why a change is not allowed, in words. */
   function whyNot(why: Exclude<DeltaCheck, { ok: true }>): string {
@@ -244,22 +240,26 @@ function MoneyForm({
   const removalText = removal === null || removal.ok ? '' : whyNot(removal)
   const suggestions = entry || (breaking && kind === 'TAKE') ? [] : chips(stash, kind)
   const code = stash.currency.toUpperCase() !== settings.currency.toUpperCase() ? stash.currency.toUpperCase() : null
-  const transferFrom = kind === 'ADD'
-  const otherId = fields.account
-  const transferWords =
-    bring && typed !== null
-      ? t('stashes.transferLine', {
-          amount: money(typed),
-          from: transferFrom ? otherName(otherId) : ownName,
-          to: transferFrom ? ownName : otherName(otherId),
-        })
-      : ''
+  // what stays as it is is behind a help button beside the title, not lines in the form: a broken deposit keeps its entries, an entry keeps its transfer
+  const help =
+    kept || (entry && entry.transferId !== null && entry.otherAccount) ? (
+      <>
+        {kept ? <p>{t('stashes.brokenFixed')}</p> : null}
+        {entry && entry.transferId !== null && entry.otherAccount ? (
+          <>
+            <p>{t(entry.kind === 'ADD' ? 'stashes.cameWith' : 'stashes.wentWith', { account: entry.otherAccount })}</p>
+            <p>{t('stashes.transferKept')}</p>
+          </>
+        ) : null}
+      </>
+    ) : undefined
 
   return (
     <>
       <Modal
         title={title}
         pending={state === 'SAVING' || blocked}
+        help={help}
         onClose={onClose}
         doneLabel={breaking && kind === 'TAKE' && !entry ? t('stashes.breakDeposit') : undefined}
         danger={breaking && kind === 'TAKE' && !entry}
@@ -300,7 +300,6 @@ function MoneyForm({
               />
             </label>
             {breaking && kind === 'TAKE' && !entry ? <p className="hint">{t('stashes.breakLine')}</p> : null}
-            {kept ? <p className="hint">{t('stashes.brokenFixed')}</p> : null}
             {suggestions.length > 0 ? (
               <div className="stash-chips">
                 {suggestions.map((chip) => (
@@ -371,16 +370,9 @@ function MoneyForm({
                       options={others.map((account) => ({ value: account.id, label: accountLabel(account, t) }))}
                       onChange={(account) => set({ account })}
                     />
-                    {transferWords ? <p className="hint stash-transfer-line">{transferWords}</p> : null}
                   </>
                 ) : null}
               </>
-            ) : null}
-            {entry && entry.transferId !== null && entry.otherAccount ? (
-              <div className="stash-linked">
-                <p className="hint">{t(entry.kind === 'ADD' ? 'stashes.cameWith' : 'stashes.wentWith', { account: entry.otherAccount })}</p>
-                <p className="hint">{t('stashes.transferKept')}</p>
-              </div>
             ) : null}
           </form>
         </div>

@@ -32,37 +32,29 @@
   --fill: var(--destructive);
 }
 
-/* -- the words under a bar ----------------------------------------------------------------------------------------------------------------- */
+/* -- what is below 0 -------------------------------------------------------------------------------------------------------------------- */
 .stash-saved.is-below,
-.stash-big.is-below,
 .stash-mini-figures.is-below {
   color: var(--destructive);
 }
 
-.stash-next {
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
-  font-variant-numeric: tabular-nums;
-}
-
-.stash-next.is-late {
-  color: var(--destructive);
-}
-
-.stash-next.is-reached {
-  color: var(--success);
-}
-
-/* -- the list: a table of rows on the computer (RowParts), small cards on the phone ----------------------------------------------------------- */
-/* A ledger of columns, each with one job: the name, the account, what is saved, the target, the bar with its figure, the date (a goal's target
-   date, a deposit's maturity), where it stands, then + and -. Every cell has its place by name, so a narrower list stacks the account under the
-   name and the target under what is saved, and the narrowest stacks the bar and the state under them; the head names only the columns there are.
-   A row can be held and dragged, like an account: no text selection or touch menu when it is held. The grip is there while the order can be changed
-   (no filter chosen); the head's name starts where the names do. --act is the room of the buttons: two of 1.75rem. */
+/* -- the list: a tidy table on the computer (RowParts), flat rows on the phone ------------------------------------------------------------- */
+/* A ledger of columns, one value to a cell: the name, the account, what is saved, the target, the bar with its figure, the date (a goal's target
+   date, a deposit's maturity), where it stands, then + and -. A tidy table has one line to a row: with less room a column goes (below), none is
+   stacked under another. A row can be held and dragged, like an account: no text selection or touch menu when it is held. The grip is there while
+   the order can be changed (no filter chosen); the head's name starts where the names do. --act is the room of the buttons: two of 1.75rem. */
 .card-list.stash-list {
   --act: 3.75rem;
   --grip-room: calc(12px + 0.5rem);
+  --cols: minmax(6.5rem, 1.6fr) minmax(5rem, 1fr) 11ch 10ch 11ch 9.5ch minmax(15ch, 1fr) var(--act);
+}
+
+.card-list.stash-list.no-account {
+  --cols: minmax(8rem, 1.6fr) 11ch 10ch 11ch 9.5ch minmax(15ch, 1fr) var(--act);
+}
+
+ul.card-list.stash-list > :is(li.card-item, li.list-head) {
+  column-gap: 0.75rem;
 }
 
 /* A deposit that matured has a "return" button where the + would be, a word wide (the longest, "rendimiento", has 11 characters). */
@@ -70,64 +62,16 @@
   --act: calc(9ch + 3.25rem);
 }
 
-/* The archived ones: restore (the longest, "wiederherstellen", has 16 characters) and the place of delete. */
+/* The archived ones: restore and delete, two icon buttons. */
 .card-list.stash-list.stash-archived {
-  --act: calc(15ch + 4rem);
-}
-
-ul.card-list.stash-list > :is(li.card-item, li.list-head) {
-  grid-template-columns: minmax(10rem, 1.5fr) minmax(8rem, 1.1fr) 12ch 11ch 13ch 9.5ch minmax(13ch, 1fr) var(--act);
+  --act: calc(2 * var(--control-sm) + 0.25rem);
 }
 
 ul.card-list.stash-list > li.card-item {
-  grid-template-areas: 'name account saved target meter date status actions';
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
-}
-
-ul.card-list.stash-list.no-account > :is(li.card-item, li.list-head) {
-  grid-template-columns: minmax(10rem, 1.6fr) 12ch 11ch 13ch 9.5ch minmax(13ch, 1.3fr) var(--act);
-}
-
-ul.card-list.stash-list.no-account > li.card-item {
-  grid-template-areas: 'name saved target meter date status actions';
-}
-
-ul.card-list.stash-list .cell-name {
-  grid-area: name;
-}
-
-ul.card-list.stash-list .stash-account {
-  grid-area: account;
-}
-
-ul.card-list.stash-list .stash-saved {
-  grid-area: saved;
-}
-
-ul.card-list.stash-list .stash-goal {
-  grid-area: target;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-ul.card-list.stash-list .stash-meter {
-  grid-area: meter;
-}
-
-ul.card-list.stash-list .stash-date {
-  grid-area: date;
-  font-variant-numeric: tabular-nums;
-}
-
-ul.card-list.stash-list .stash-status {
-  grid-area: status;
-}
-
-ul.card-list.stash-list .cell-actions {
-  grid-area: actions;
 }
 
 .stash-list .row-grip {
@@ -144,9 +88,18 @@ ul.card-list.stash-list.can-reorder > li.list-head > :first-child {
   padding-left: var(--grip-room);
 }
 
-/* "of" before a target is for where it sits under what is saved; in its own column the head says it. */
-.stash-list .stash-of {
-  display: none;
+/* The archived ones, a group under the others in the same columns: no grip, so their names start where the others' do. */
+ul.card-list.stash-list.stash-archived > li.card-item > .cell-name {
+  padding-left: var(--grip-room);
+}
+
+ul.card-list.stash-list .stash-goal {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+ul.card-list.stash-list .stash-when {
+  font-variant-numeric: tabular-nums;
 }
 
 /* A cell with nothing to say: a quiet dash, so the eye can skip it. */
@@ -163,16 +116,14 @@ ul.card-list.stash-list.can-reorder > li.list-head > :first-child {
   min-width: 0;
 }
 
-.stash-meter > .stash-bar,
-.stash-card-meter > .stash-bar {
+.stash-meter > .stash-bar {
   flex: 1 1 auto;
   width: auto;
   min-width: 2rem;
   height: 6px;
 }
 
-.stash-meter-figure,
-.stash-card-flag {
+.stash-meter-figure {
   flex: none;
   font-size: 0.75rem;
   white-space: nowrap;
@@ -186,26 +137,22 @@ ul.card-list.stash-list.can-reorder > li.list-head > :first-child {
   text-align: right;
 }
 
-/* Where a stash stands: plain words to act on, quiet ones for nothing to do, green for good news, red for a warning. A deposit's rate follows, quiet. */
-:is(.stash-list, .stash-card) .tone-plain {
+/* Where a stash stands: plain words to act on, quiet ones for nothing to do, green for good news, red for a warning. */
+.stash-list .tone-plain {
   color: var(--foreground);
 }
 
-:is(.stash-list, .stash-card) .tone-quiet {
+:is(.stash-list, .stash-phone) .tone-quiet {
   color: var(--muted-foreground);
 }
 
-:is(.stash-list, .stash-card) .tone-good {
+:is(.stash-list, .stash-phone) .tone-good {
   color: var(--success);
 }
 
-:is(.stash-list, .stash-card) .tone-late,
-:is(.stash-list, .stash-card) .is-late {
+:is(.stash-list, .stash-phone) .tone-late,
+:is(.stash-list, .stash-phone) .is-late {
   color: var(--destructive);
-}
-
-.stash-rate {
-  color: var(--muted-foreground);
 }
 
 /* The total under the rows: what they hold and their targets, set off by a solid line; not a row to open. */
@@ -247,8 +194,7 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   line-height: 1;
 }
 
-.stash-return,
-.stash-archived .row-primary {
+.stash-return {
   flex: none;
   height: var(--control-sm);
   padding-inline: 0.625rem;
@@ -256,81 +202,66 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   white-space: nowrap;
 }
 
-.stash-archived .row-primary {
-  max-width: none;
-}
-
-/* Less room (under about 1050px): the account goes under the name and the target under what is saved, each row two lines; the head names the
-   columns that are left. */
-@container (max-width: 66em) {
-  ul.card-list.stash-list > :is(li.card-item, li.list-head),
-  ul.card-list.stash-list.no-account > :is(li.card-item, li.list-head) {
-    grid-template-columns: minmax(9rem, 1.5fr) 12ch 12ch 9.5ch minmax(13ch, 1fr) var(--act);
+/* With less room a column goes, never a line is added. In this order: the date (first while the account is there), the account, the target, the bar, where
+   it stands. The name and what is saved stay at every width. Each width is what the columns of its row add up to and a little more, so no row is wider than
+   its list at any width, and the units are the list's own, so they follow the text size. */
+@container (max-width: 65em) {
+  ul.card-list.stash-list:where(:not(.no-account)) > :is(li.card-item, li.list-head) {
+    --cols: minmax(6.5rem, 1.6fr) minmax(5rem, 1fr) 11ch 10ch 11ch minmax(15ch, 1fr) var(--act);
   }
 
-  ul.card-list.stash-list > li.card-item,
-  ul.card-list.stash-list.no-account > li.card-item {
-    grid-template-areas:
-      'name saved meter date status actions'
-      'account target meter date status actions';
-    row-gap: 0;
-  }
-
-  ul.card-list.stash-list > li.list-head > :is(.head-account, .head-target) {
-    display: none;
-  }
-
-  ul.card-list.stash-list .stash-account,
-  ul.card-list.stash-list .stash-goal {
-    font-size: 0.8125rem;
-  }
-
-  .stash-list .stash-of {
-    display: inline;
-  }
-
-  /* under the name, the account starts where the name does */
-  ul.card-list.stash-list.can-reorder > li.card-item > .stash-account {
-    padding-left: var(--grip-room);
-  }
-
-  .stash-list .stash-goal > .stash-none {
+  ul.card-list.stash-list:where(:not(.no-account)) :is(.stash-when, .head-date) {
     display: none;
   }
 }
 
-/* Little room (a narrow window): no head, three lines: the name and what is saved, the account and the target, then the bar and where it stands; the
-   buttons beside them all. The date is on the stash's page. */
+@container (max-width: 60em) {
+  ul.card-list.stash-list:where(.no-account) > :is(li.card-item, li.list-head) {
+    --cols: minmax(8rem, 1.6fr) 11ch 10ch 11ch minmax(15ch, 1fr) var(--act);
+  }
+
+  ul.card-list.stash-list:where(.no-account) :is(.stash-when, .head-date) {
+    display: none;
+  }
+}
+
+@container (max-width: 57em) {
+  ul.card-list.stash-list:where(:not(.no-account)) > :is(li.card-item, li.list-head) {
+    --cols: minmax(8rem, 1.6fr) 11ch 10ch 11ch minmax(15ch, 1fr) var(--act);
+  }
+
+  ul.card-list.stash-list :is(.stash-account, .head-account) {
+    display: none;
+  }
+}
+
+@container (max-width: 53em) {
+  ul.card-list.stash-list > :is(li.card-item, li.list-head) {
+    --cols: minmax(8rem, 1.6fr) 11ch 11ch minmax(15ch, 1fr) var(--act);
+  }
+
+  ul.card-list.stash-list :is(.stash-goal, .head-target) {
+    display: none;
+  }
+}
+
 @container (max-width: 46em) {
-  ul.card-list.stash-list > li.list-head {
+  ul.card-list.stash-list > :is(li.card-item, li.list-head) {
+    --cols: minmax(7rem, 1.6fr) 11ch minmax(15ch, 1fr) var(--act);
+  }
+
+  ul.card-list.stash-list :is(.stash-meter, .head-meter) {
     display: none;
   }
+}
 
-  ul.card-list.stash-list > li.list-head + li {
-    border-top: 0;
+@container (max-width: 39em) {
+  ul.card-list.stash-list > :is(li.card-item, li.list-head) {
+    --cols: minmax(5rem, 1fr) 11ch var(--act);
   }
 
-  ul.card-list.stash-list > li.card-item,
-  ul.card-list.stash-list.no-account > li.card-item {
-    grid-template-columns: minmax(0, 1fr) minmax(0, auto) var(--act);
-    grid-template-areas:
-      'name saved actions'
-      'account target actions'
-      'meter status actions';
-    row-gap: 0.125rem;
-    padding-block: 0.5rem;
-  }
-
-  ul.card-list.stash-list .stash-date {
+  ul.card-list.stash-list :is(.stash-status, .head-status) {
     display: none;
-  }
-
-  ul.card-list.stash-list .stash-meter > .stash-none {
-    display: none;
-  }
-
-  ul.card-list.stash-list .stash-status {
-    text-align: right;
   }
 }
 
@@ -339,111 +270,13 @@ ul.card-list > li.card-item.is-archived {
   opacity: 0.7;
 }
 
-/* The phone: each stash is a small card of three lines, read top to bottom: the name and what is saved; the account and the date, with the target
-   (or a deposit's rate) at the right; the bar across, its figure, and + and - at the end, low buttons of 2rem (2.5rem wide, an easy tap). */
-ul.card-list.stash-phone > li.card-item.stash-card {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.375rem;
-  min-height: 0;
-  padding: 0.75rem 1rem;
-  cursor: pointer;
+/* The phone: a thin bar under the name for a goal's progress (a deposit says its state in words there). */
+.stash-phone .row-toggle > .cell-meta > .stash-bar {
+  height: 4px;
+  margin-top: 0.375rem;
 }
 
-.stash-card-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-ul.card-list.stash-phone .stash-card-name {
-  display: -webkit-box;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--foreground);
-  text-decoration: none;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.stash-card .cell-amount {
-  flex: none;
-}
-
-.stash-card-line.is-sub {
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
-  font-variant-numeric: tabular-nums;
-}
-
-.stash-card-where {
-  display: flex;
-  min-width: 0;
-}
-
-.stash-card-account {
-  min-width: 4ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stash-card-date {
-  flex: none;
-  white-space: nowrap;
-}
-
-.stash-card-date::before {
-  content: '·';
-  margin-inline: 0.375rem;
-  color: var(--muted-foreground);
-}
-
-.stash-card-aside {
-  flex: none;
-  white-space: nowrap;
-}
-
-.stash-card-line.is-foot {
-  align-items: center;
-  min-height: 2rem;
-}
-
-.stash-card-meter {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.stash-card .stash-steps {
-  flex: none;
-  gap: 0.375rem;
-}
-
-html.is-phone .stash-card .stash-steps > :is(.ui-btn, .icon-slot) {
-  min-height: 2rem;
-  height: 2rem;
-}
-
-html.is-phone .stash-card .stash-steps > :is(.stash-step, .icon-slot) {
-  width: 2.5rem;
-  min-width: 2.5rem;
-}
-
-html.is-phone .stash-card .stash-return {
-  padding-inline: 0.75rem;
-}
-
-/* The two dropdowns of the list (account, kind) share one line on the phone, half each. */
+/* The account and the kind (a compact line with no labels) share one line on the phone, half each. */
 html.is-phone .stashes-page .filter-bar {
   flex-wrap: nowrap;
   gap: 0.5rem;
@@ -459,11 +292,6 @@ html.is-phone .stashes-page .filter-bar .pick-button {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* An archived one on the phone is a row that opens: its name is plain text beside the amount. */
-.stash-phone .card-name a {
-  text-decoration: none;
 }
 
 /* -- a small card on an account's page and on the dashboard ----------------------------------------------------------------------------- */
@@ -540,71 +368,22 @@ html.is-phone .stash-mini-list {
 }
 
 /* -- one stash's page ---------------------------------------------------------------------------------------------------------------------- */
-.debts-name.stash-actions-row {
-  flex-wrap: wrap;
-}
-
-.stash-account-line {
-  margin: 0;
-}
-
-.stash-block {
-  gap: 0.75rem;
-}
-
-.stash-block-numbers {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.5rem 2rem;
-}
-
-.stash-block-main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.stash-big {
-  font-size: 1.75rem;
-  font-weight: 600;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-
-.stash-percent {
-  margin-left: auto;
-  font-size: 1.75rem;
-  font-weight: 600;
-  line-height: 1.2;
-  color: var(--c-savings);
-}
-
-.stash-percent.is-reached {
-  color: var(--success);
-}
-
-.stash-block-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1.5rem;
-}
-
-/* The history: the day, + or -, the note, the transfer that came with it, the amount, what the stash held after, then edit. */
+/* The history, one value to a cell: the day, the note, the transfer that came with it, the amount, what the stash held after, then edit. One line to
+   a row; with less room the transfer goes (under 50em), then what the stash held after (under 38em). */
 .card-list.stash-history {
-  --cols: 12ch 1.5ch minmax(8rem, 1.6fr) minmax(10rem, 1.2fr) 16ch 16ch 2.25rem;
+  --cols: 12ch minmax(8rem, 1.6fr) minmax(10rem, 1.2fr) 14ch 14ch 2.25rem;
 }
 
 ul.card-list.stash-history > li.card-item {
   cursor: pointer;
 }
 
-.stash-history .cell-sub-end {
+.stash-history .stash-held {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.stash-history .cell-sub-end.is-below {
+.stash-history .stash-held.is-below {
   color: var(--destructive);
 }
 
@@ -619,16 +398,10 @@ ul.card-list.stash-history > li.card-item {
   white-space: nowrap;
 }
 
-.stash-mark {
-  font-weight: 700;
-}
-
-.stash-mark.is-income,
 .stash-history .cell-amount.is-income {
   color: var(--success);
 }
 
-.stash-mark.is-expense,
 .stash-history .cell-amount.is-expense {
   color: var(--destructive);
 }
@@ -659,62 +432,30 @@ ul.card-list.stash-history > li.card-item {
   overflow: hidden;
 }
 
-@container (max-width: 44em) {
-  ul.card-list.stash-history > li.list-head {
+@container (max-width: 50em) {
+  ul.card-list.stash-history > :is(li.card-item, li.list-head) {
+    --cols: 12ch minmax(8rem, 1fr) 14ch 14ch 2.25rem;
+  }
+
+  ul.card-list.stash-history :is(.stash-transfer, .head-transfer) {
     display: none;
   }
+}
 
-  ul.card-list.stash-history > li.list-head + li {
-    border-top: 0;
+@container (max-width: 38em) {
+  ul.card-list.stash-history > :is(li.card-item, li.list-head) {
+    --cols: 12ch minmax(6rem, 1fr) 14ch 2.25rem;
   }
 
-  ul.card-list.stash-history > li.card-item {
-    grid-template-columns: auto minmax(2rem, 1fr) auto auto;
-    grid-template-areas:
-      'date note amount actions'
-      'mark transfer saved actions';
-    row-gap: 0;
-  }
-
-  ul.card-list.stash-history > li.card-item > .line-date {
-    grid-area: date;
-  }
-
-  ul.card-list.stash-history > li.card-item > .stash-mark {
-    grid-area: mark;
-  }
-
-  ul.card-list.stash-history > li.card-item > .cell-name {
-    grid-area: note;
-  }
-
-  ul.card-list.stash-history > li.card-item > .stash-transfer {
-    grid-area: transfer;
-  }
-
-  ul.card-list.stash-history > li.card-item > .cell-amount {
-    grid-area: amount;
-  }
-
-  ul.card-list.stash-history > li.card-item > .cell-sub-end {
-    grid-area: saved;
-  }
-
-  ul.card-list.stash-history > li.card-item > .cell-actions {
-    grid-area: actions;
+  ul.card-list.stash-history :is(.stash-held, .head-after) {
+    display: none;
   }
 }
 
-/* What the account has free, under the history; red, with its warning, when the stashes hold more than the account has. */
-.stash-free-line {
+/* The warning under what the account has: the stashes hold more than the account has. */
+.stash-warn {
   margin: 0;
   font-size: 0.8125rem;
-  color: var(--muted-foreground);
-  font-variant-numeric: tabular-nums;
-}
-
-.stash-free-line.is-over .stash-free,
-.stash-warn {
   color: var(--destructive);
 }
 
@@ -821,11 +562,6 @@ ul.card-list.stash-history > li.card-item {
   font-size: 0.75rem;
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
-}
-
-.stash-linked > .hint,
-.stash-transfer-line {
-  margin: 0;
 }
 
 .stash-delete-transfer {

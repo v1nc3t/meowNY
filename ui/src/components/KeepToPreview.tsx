@@ -6,7 +6,7 @@ import { useT } from '../i18n/context'
 import Button from './ui/Button'
 
 /**
- * On the phone, a file that stays on the computer cannot be previewed. This says so, with one button that turns "keep on phone" on
+ * On the phone, a file that stays on the computer cannot be previewed. This is the one button in place of the preview that turns "keep on phone" on
  * for the document (the same call as the switch in its details); the file then comes with the next sync. `onKept` reloads the list.
  */
 export default function KeepToPreview({ doc, onKept }: { doc: Pick<Doc, 'id'>; onKept: () => void }) {
@@ -29,11 +29,8 @@ export default function KeepToPreview({ doc, onKept }: { doc: Pick<Doc, 'id'>; o
   }
 
   return (
-    <div className="keep-offer">
-      <p>{t('docs.previewOnComputer')}</p>
-      <Button variant="outline" size="sm" disabled={pending} onClick={() => void onKeep()}>
-        {t('docs.keepOnPhone')}
-      </Button>
-    </div>
+    <Button variant="ghost" size="sm" disabled={pending} onClick={() => void onKeep()}>
+      {t('docs.keepOnPhone')}
+    </Button>
   )
 }

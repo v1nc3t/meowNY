@@ -8,11 +8,12 @@ import { NAME_MAX } from '../api/categories'
 import { dialogNext, type DialogState } from '../lib/accountDialogs'
 import { accountById, accountLabel, accountName } from '../lib/accountsView'
 import { aMonthOn, stashBlock, stashFields, stashSubmit, termIsFixed, withKind, type StashFields } from '../lib/stashDialogs'
-import { dayWords, homeAccounts, STASH_NOTES_MAX } from '../lib/stashView'
-import { moneyIn, formatMoney } from '../lib/money'
+import { homeAccounts, STASH_NOTES_MAX } from '../lib/stashView'
+import { formatDate, formatMoney, moneyIn } from '../lib/money'
 import { tabId } from '../lib/tabs'
 import DatePicker from './DatePicker'
 import Dropdown from './Dropdown'
+import Facts from './Facts'
 import Icon from './NavIcon'
 import Modal, { modalFormId } from './Modal'
 import SectionTabs from './SectionTabs'
@@ -102,8 +103,10 @@ export default function StashModal({
   }
 
   const label = (key: 'stashes.target') => (currency ? t('accounts.labelIn', { label: t(key), code: currency.toUpperCase() }) : t(key))
+  // why the list of accounts is short: behind a help button beside the title, not a line under the field
+  const help = home.hidden && stash ? <p>{t('stashes.sameCurrencyOnly', { currency: stash.currency.toUpperCase() })}</p> : undefined
   return (
-    <Modal title={stash ? t('stashes.editTitle') : t('stashes.addTitle')} pending={state === 'SAVING' || block !== null} onClose={onClose}>
+    <Modal title={stash ? t('stashes.editTitle') : t('stashes.addTitle')} pending={state === 'SAVING' || block !== null} help={help} onClose={onClose}>
       {!stash ? (
         <SectionTabs
           label={t('stashes.kindTabs')}
@@ -140,7 +143,6 @@ export default function StashModal({
           options={home.choices.map((account) => ({ value: account.id, label: accountLabel(account, t) }))}
           onChange={(account) => set({ account })}
         />
-        {home.hidden && stash ? <p className="hint">{t('stashes.sameCurrencyOnly', { currency: stash.currency.toUpperCase() })}</p> : null}
         {deposit && !fixed ? (
           <>
             <label className="rate-sentence">
@@ -182,13 +184,13 @@ export default function StashModal({
           </>
         ) : null}
         {deposit && fixed && stash?.deposit && stash.targetDate ? (
-          <p className="hint">
-            {[
-              t('accounts.rateShown', { rate: stash.deposit.interestRate, period: t(`accounts.period.${stash.deposit.interestPeriod}`) }),
-              `${t('stashes.startDate')} ${dayWords(stash.deposit.startDate, language)}`,
-              `${t('stashes.maturity')} ${dayWords(stash.targetDate, language)}`,
-            ].join(' · ')}
-          </p>
+          <Facts
+            items={[
+              { label: t('accounts.rate'), value: t('accounts.rateShown', { rate: stash.deposit.interestRate, period: t(`accounts.period.${stash.deposit.interestPeriod}`) }) },
+              { label: t('stashes.startDate'), value: formatDate(stash.deposit.startDate, language) },
+              { label: t('stashes.maturity'), value: formatDate(stash.targetDate, language) },
+            ]}
+          />
         ) : null}
         {deposit ? null : (
           <div className="tx-date-group">

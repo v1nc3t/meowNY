@@ -41,10 +41,10 @@ import {
   savedAfter,
   signedAmount,
   listTotal,
-  rowFlag,
+  rowMark,
   rowMeter,
   rowStatus,
-  targetLine,
+  stashFacts,
 } from './stashView.ts'
 
 // docs/stash-design.md, section 3.1: the delta rule, and what the money dialog shows of it. Money is whole cents; nothing here uses floating point.
@@ -526,14 +526,6 @@ test('the words of a card: saved of target with the percent, or saved alone; wha
   assert.deepEqual(nextText({ kind: 'overdue', since: '2026-06-30' }, plain, say as never, 'en-GB'), { text: 'stashes.overdue date=30 june 2026', warning: true })
 })
 
-test('the target of a row in one line: the amount and the date, each alone when the other is missing, a dash for none', () => {
-  const plain = (amount: string) => amount
-  assert.equal(targetLine({ target: '1200.00', targetDate: '2027-06-30' }, plain, 'en-GB'), '1200.00 · 30/06/2027')
-  assert.equal(targetLine({ target: '1200.00', targetDate: null }, plain, 'en-GB'), '1200.00')
-  assert.equal(targetLine({ target: null, targetDate: '2027-06-30' }, plain, 'en-GB'), '30/06/2027')
-  assert.equal(targetLine({ target: null, targetDate: null }, plain, 'en-GB'), '—')
-})
-
 // -- deposits (docs/loans-deposits-design.md, sections 5.3 and 5.5) ---------------------------------------------------------------------------------
 
 const STATES = ['RUNNING', 'MATURED', 'BOOKED', 'BROKEN'] as const
@@ -666,13 +658,34 @@ test('the status of a row: the state of a deposit, and for a goal reached, overd
   ])
 })
 
-test('the word by the bar of a phone row: a word that matters before the figure, the state of a deposit with no bar, nothing for a goal with neither', () => {
-  const meter = { fill: 0.5, reached: false, label: '50%' }
-  assert.deepEqual(rowFlag(meter, { text: 'overdue', tone: 'late' }, false), { text: 'overdue', tone: 'late' })
-  assert.deepEqual(rowFlag(meter, { text: 'a month', tone: 'plain' }, false), { text: '50%', tone: 'plain' })
-  assert.deepEqual(rowFlag({ fill: 1, reached: true, label: '' }, { text: 'matured', tone: 'good' }, true), { text: 'matured', tone: 'good' })
-  assert.deepEqual(rowFlag(null, { text: 'booked', tone: 'quiet' }, true), { text: 'booked', tone: 'quiet' })
-  assert.equal(rowFlag(null, { text: '—', tone: 'quiet' }, false), null)
+test('the mark after the name of a phone row is only for a state that matters: good news or a warning', () => {
+  assert.deepEqual(rowMark({ text: 'overdue', tone: 'late' }), { text: 'overdue', tone: 'late' })
+  assert.deepEqual(rowMark({ text: 'reached', tone: 'good' }), { text: 'reached', tone: 'good' })
+  assert.equal(rowMark({ text: 'a month', tone: 'plain' }), null)
+  assert.equal(rowMark({ text: 'booked', tone: 'quiet' }), null)
+})
+
+test('the facts of a stash: one pair for each thing it says, and none for what it has not got', () => {
+  const plain = (amount: string) => amount
+  const say = (key: string, vars?: Record<string, string | number>) => (vars ? `${key} ${Object.values(vars).join(' ')}` : key)
+  const shown = (facts: ReturnType<typeof stashFacts>) => facts.filter((fact) => fact.value != null).map((fact) => [fact.label, fact.value])
+  assert.deepEqual(shown(stashFacts(stash(), 'Savings', plain, 'en-GB', say as never)), [
+    ['stashes.account', 'Savings'],
+    ['stashes.target', '1200.00'],
+    ['stashes.progress', 'stashes.percent 37'],
+    ['stashes.leftLabel', '750.00'],
+    ['stashes.perMonthLabel', '107.15'],
+    ['stashes.targetDate', '30/06/2027'],
+  ])
+  // reached or overdue is said in a pair of its own
+  assert.deepEqual(stashFacts(stash({ reached: true, left: '0.00', perMonth: null }), '', plain, 'en-GB', say as never).find((fact) => fact.label === 'stashes.status'), { label: 'stashes.status', value: 'stashes.reached', tone: 'positive' })
+  assert.deepEqual(stashFacts(stash({ overdue: true, perMonth: null }), '', plain, 'en-GB', say as never).find((fact) => fact.label === 'stashes.status'), { label: 'stashes.status', value: 'stashes.overdueWord', tone: 'negative' })
+  // a deposit: the rate, the start and what it expects while it runs or has matured, its state and, once closed, the day
+  const running = shown(stashFacts(term('RUNNING'), 'Savings', plain, 'en-GB', say as never))
+  assert.deepEqual(running.map(([label]) => label), ['stashes.account', 'stashes.maturity', 'accounts.rate', 'stashes.startDate', 'stashes.daysLeft', 'stashes.expectedReturn', 'stashes.valueAtMaturity', 'stashes.depositState'])
+  const broken = shown(stashFacts(term('BROKEN', { deposit: { ...info, state: 'BROKEN', brokenOn: '2026-10-05' } }), 'Savings', plain, 'en-GB', say as never))
+  assert.deepEqual(broken.map(([label]) => label), ['stashes.account', 'stashes.maturity', 'accounts.rate', 'stashes.startDate', 'stashes.depositState', 'stashes.closedOn'])
+  assert.deepEqual(broken.at(-1), ['stashes.closedOn', '05/10/2026'])
 })
 
 test('the return opens with what the deposit expects, nothing when that is nothing, and the last category while it is an income one', () => {

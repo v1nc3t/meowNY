@@ -470,36 +470,6 @@ ul.card-list > li.list-head > .span-2 {
   border-radius: var(--radius-md);
 }
 
-.doc-facts {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 0.25rem 1rem;
-  margin: 0;
-  font-size: 0.8125rem;
-}
-
-.doc-facts dt {
-  color: var(--muted-foreground);
-}
-
-.doc-facts dd {
-  margin: 0;
-  color: var(--foreground);
-  overflow-wrap: anywhere;
-}
-
-/* The file in the details: what it is on the left, what can be done with it on the right, in one frame. */
-.doc-file {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
 /* What the document is attached to: one framed row each, the name over its kind and date, detach at the right. */
 .doc-links {
   display: flex;
@@ -535,6 +505,8 @@ ul.card-list > li.list-head > .span-2 {
 }
 
 .doc-link-meta {
+  display: flex;
+  gap: 0.75rem;
   font-size: 0.75rem;
   color: var(--muted-foreground);
 }
@@ -550,17 +522,13 @@ ul.card-list > li.list-head > .span-2 {
   gap: 0.5rem;
 }
 
-/* The documents: name, day (13 characters of small print), size ("1.023,9 KB"), the box to keep the document on the phone, how many things
-   it is attached to, then preview, edit, save a copy and delete and the chevron that opens the details (five buttons of 2rem and four
-   gaps of 0.125rem, 10.5rem). The two new heads are small print too: 9 characters of 0.8125rem are 7.3 characters of the row, so 7.5ch
-   holds "téléphone" and "telemóvel", and a paper clip with a number of three digits; a longer head ("verknüpft mit") takes a second line.
-   With these the columns take 32.7rem, the gaps 5rem and the padding 2.5rem, which leaves the name 8rem from 48.2em (a window of about
-   1080px; the app opens at 1100px). The name is cut with an ellipsis, and the whole name is its title. Narrower, a row is two lines (see
-   below). */
-/* A document: its name, its type ("pdf file", "text file": 11 characters of small print), the day, the size (at the right, as amounts are), the
-   box that keeps it on the phone, how many things it is attached to, then four icon buttons and the chevron. */
+/* A document, one value to a cell: its name, its type ("pdf file", "text file": 11 characters of small print), the day, the size (at the right, as amounts
+   are), then six icon buttons (the paper clip when it is attached to something, preview, edit, save a copy, delete, and the chevron that opens the
+   details). One line to a row: with less room the type goes (under 46em), then the day (under 36em). The name is cut with an ellipsis, and the whole
+   name is its title. */
 .card-list.doc-table {
-  --cols: minmax(8rem, 1fr) 10ch 10ch 6rem 7ch 6ch calc(5 * var(--control-sm) + 0.5rem);
+  --act: calc(6 * var(--control-sm) + 0.625rem);
+  --cols: minmax(8rem, 1fr) 11ch 12ch 6rem var(--act);
 }
 
 .doc-table .doc-type {
@@ -577,82 +545,22 @@ ul.card-list.doc-table .doc-size {
   font-variant-numeric: tabular-nums;
 }
 
-/* The box is at the left of its column, under the word of the head, and so is the paper clip (its padding goes to the left). The word
-   beside the box is the head's, so it shows only where there is no head. */
-.doc-table .cell-keep {
-  width: auto;
-  justify-self: start;
-}
+@container (max-width: 46em) {
+  ul.card-list.doc-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(8rem, 1fr) 12ch 6rem var(--act);
+  }
 
-.doc-table .cell-keep > span {
-  display: none;
-  font-size: 0.875rem;
-  white-space: nowrap;
-  color: var(--muted-foreground);
-}
-
-.doc-table .clip {
-  margin-left: -0.375rem;
-}
-
-/* Under 55em a row is two lines: the name, how many things it is attached to and the buttons, then the day, the size and the box with
-   its word. The buttons are beside both lines, and the paper clip and the box share a column, so they line up. The type is in the filter
-   above the list, so it goes. */
-@container (max-width: 55em) {
-  ul.card-list.doc-table .doc-type {
+  ul.card-list.doc-table :is(.doc-type, .head-type) {
     display: none;
   }
-
-  ul.card-list.doc-table > li.list-head {
-    display: none;
-  }
-
-  ul.card-list.doc-table > li.list-head + li {
-    border-top: 0;
-  }
-
-  ul.card-list.doc-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
-    grid-template-areas:
-      'name name links actions'
-      'sub sub-end keep actions';
-    row-gap: 0;
-  }
-
-  ul.card-list.doc-table .cell-name {
-    grid-area: name;
-  }
-
-  ul.card-list.doc-table .cell-sub {
-    grid-area: sub;
-  }
-
-  ul.card-list.doc-table .cell-sub-end {
-    grid-area: sub-end;
-    text-align: right;
-  }
-
-  ul.card-list.doc-table .cell-keep {
-    grid-area: keep;
-  }
-
-  ul.card-list.doc-table .cell-keep > span {
-    display: inline;
-  }
-
-  ul.card-list.doc-table .cell-links {
-    grid-area: links;
-  }
-
-  ul.card-list.doc-table .cell-actions {
-    grid-area: actions;
-  }
 }
 
-/* In under 33em the day would be cut (13 characters, "2026. 12. 28.", in a column that the word of the box leaves too narrow), so the box
-   has no word. */
-@container (max-width: 33em) {
-  ul.card-list.doc-table .cell-keep > span {
+@container (max-width: 36em) {
+  ul.card-list.doc-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(6rem, 1fr) 6rem var(--act);
+  }
+
+  ul.card-list.doc-table :is(.doc-day, .head-day) {
     display: none;
   }
 }
@@ -673,56 +581,14 @@ ul.card-list.doc-table .doc-size {
   color: var(--muted-foreground);
 }
 
-/* The page of documents: what is here and where to add more. It lights up when files are held over the window. */
-.doc-drop {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem 1.5rem;
-  width: 100%;
-  max-width: none;
-  padding: 0.875rem 1rem;
-  border: 1px dashed var(--input);
-  border-radius: var(--radius-lg);
-  background: var(--muted);
-}
-
-.tx-page > .doc-drop {
-  width: auto;
-  max-width: none;
-  align-self: stretch;
-}
-
-.doc-drop-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.doc-drop-text p {
-  margin: 0;
-}
-
-.doc-count {
-  font-size: 0.875rem;
-  color: var(--foreground);
-}
-
-.doc-page > p.warn,
-.doc-page > p.warning {
-  align-self: stretch;
-  max-width: 40rem;
-  font-size: 0.8125rem;
-}
-
+/* The page of documents lights up when files are held over the window: its list is framed. */
 .doc-page.is-dragging {
   outline: none;
 }
 
-.doc-page.is-dragging .doc-drop {
-  border-color: var(--ring);
+.doc-page.is-dragging .tx-pane {
+  outline: 2px dashed var(--ring);
+  outline-offset: -4px;
   background: var(--accent);
 }
 
@@ -1046,26 +912,4 @@ html.is-phone .attach-list > li {
 
 html.is-phone .attach-list .attach-name {
   flex: 1 1 6rem;
-}
-
-/* On the phone, a file that stays on the computer: a short note and one button to bring it (components/KeepToPreview.tsx). */
-.keep-offer {
-  display: flex;
-  flex: 1 1 100%;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-}
-
-.keep-offer > p,
-.attach-note {
-  flex: 1 1 10rem;
-  margin: 0;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: var(--muted-foreground);
-}
-
-.attach-note {
-  flex-basis: 100%;
 }

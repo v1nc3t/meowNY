@@ -1,8 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { Stash } from '../api/stashes'
 import { useT } from '../i18n/context'
-import { formatDate } from '../lib/money'
-import { rateWords } from '../lib/loansView'
 import { figures, progress, stashMoney } from '../lib/stashView'
 import { cn } from './ui/cn'
 
@@ -46,41 +44,5 @@ export function StashMini({ stash, locale }: { stash: Stash; locale: string }) {
       </span>
       <StashBar saved={stash.saved} target={stash.target} />
     </Link>
-  )
-}
-
-/**
- * What a term deposit says of itself, on its page (docs/loans-deposits-design.md, section 10), as the facts of a loan are laid out: the rate, the start and the
- * maturity, the days left and the return it expects, the value it will have, and where it stands (with the day it was booked or broken). The expected
- * return and the value are left out once it is booked or broken (they are worked out on what it holds, which is no longer the money of its term), the days
- * left once it has matured. The numbers are the app's (`Stash.deposit`).
- */
-export function DepositFacts({ stash, locale }: { stash: Stash; locale: string }) {
-  const t = useT()
-  const deposit = stash.deposit
-  if (!deposit) return null
-  const money = stashMoney(stash, locale)
-  const live = deposit.state === 'RUNNING' || deposit.state === 'MATURED'
-  const day = deposit.brokenOn ?? (deposit.state === 'BOOKED' ? deposit.returnedOn : null)
-  const rows: [string, string][] = [
-    [t('accounts.rate'), rateWords(deposit, t)],
-    [t('stashes.startDate'), formatDate(deposit.startDate, locale)],
-    [t('stashes.maturity'), stash.targetDate === null ? '' : formatDate(stash.targetDate, locale)],
-    [t('stashes.daysLeft'), deposit.state === 'RUNNING' ? String(deposit.daysLeft) : ''],
-    [t('stashes.expectedReturn'), live ? money(deposit.expectedReturn) : ''],
-    [t('stashes.valueAtMaturity'), live ? money(deposit.valueAtMaturity) : ''],
-    [t('stashes.depositState'), day ? `${t(`stashes.state.${deposit.state}`)} · ${formatDate(day, locale)}` : t(`stashes.state.${deposit.state}`)],
-  ]
-  return (
-    <div className="dash-rec-sum">
-      {rows
-        .filter(([, value]) => value !== '')
-        .map(([label, value]) => (
-          <span key={label}>
-            <span className="dash-stat-label">{label}</span>
-            <b>{value}</b>
-          </span>
-        ))}
-    </div>
   )
 }

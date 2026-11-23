@@ -65,7 +65,7 @@ export function RegionSection({
         <Field>
           <Dropdown label={t('settings.timezone')} value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
         </Field>
-        <Row label={t('settings.currency')} hint={phone ? t('settings.currencyOnDesktop') : currencyLocked ? t('settings.currencyLocked') : undefined}>
+        <Row label={t('settings.currency')}>
           <span className="settings-value">{currencyLabel(settings.currency)}</span>
           {phone ? null : (
             <Button variant="outline" size="sm" disabled={currencyLocked} onClick={onChangeCurrency}>
@@ -236,13 +236,10 @@ export function NotificationsSection({ notifyDue, phone, onNotify, say }: { noti
   const { t } = useI18n()
 
   return (
-    <div className="settings-stack">
-      <Rows>
-        <SwitchRow label={t('settings.notifyDue')} checked={notifyDue} onChange={(event) => onNotify(event.target.checked)} />
-        <DebtReminderFields phone={phone} say={say} />
-      </Rows>
-      <p className="hint">{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
-    </div>
+    <Rows>
+      <SwitchRow label={t('settings.notifyDue')} checked={notifyDue} onChange={(event) => onNotify(event.target.checked)} />
+      <DebtReminderFields phone={phone} say={say} />
+    </Rows>
   )
 }
 

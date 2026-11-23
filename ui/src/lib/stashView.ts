@@ -1,5 +1,6 @@
 import { isLiability, type Account } from '../api/accounts'
 import type { Category } from '../api/categories'
+import type { FactItem } from '../components/Facts'
 import type { DepositState, Entry, EntryKind, EntryPatch, NewEntry, NewTake, ReturnInput, Stash } from '../api/stashes'
 import type { MessageKey } from '../i18n/en'
 import type { DialogState } from './accountDialogs'
@@ -347,15 +348,6 @@ export function figures(stash: Pick<Stash, 'saved' | 'target' | 'percent'>, mone
   return stash.percent === null ? of : `${of} · ${t('stashes.percent', { percent: stash.percent })}`
 }
 
-/**
- * A row's target in one line: "1200.00 · 30/06/2027". Only the part there is when the stash has a target without a date or a date without a target;
- * "—" when it has neither. `money` writes an amount in the stash's currency.
- */
-export function targetLine(stash: Pick<Stash, 'target' | 'targetDate'>, money: (amount: string) => string, locale: string): string {
-  const parts = [stash.target === null ? null : money(stash.target), stash.targetDate === null ? null : formatDate(stash.targetDate, locale)]
-  return parts.filter((part) => part !== null).join(' · ') || '—'
-}
-
 // -- a row of the list (docs/loans-deposits-design.md, section 10) ---------------------------------------------------------------------
 
 /** How a word of a row reads: plain, quiet (nothing to do), good news (reached, matured) or a warning (overdue, broken). */
@@ -430,13 +422,39 @@ export function listTotal(list: readonly Pick<Stash, 'saved' | 'target' | 'curre
 }
 
 /**
- * The one word or figure beside the bar of a phone row, which has no status column: a word that matters (reached, overdue, matured, broken) comes before the
- * figure of the bar; a deposit with no bar says its state (booked); a goal with neither says nothing.
+ * The mark after the name of a phone row: only a state that matters (reached, matured: good news; overdue, broken: a warning). The other states of a
+ * row (a deposit that runs, one that is booked) are the grey line under the name, and a goal that is on its way has its bar there.
  */
-export function rowFlag(meter: RowMeter | null, status: RowStatus, deposit: boolean): RowStatus | null {
-  if (status.tone === 'good' || status.tone === 'late') return status
-  if (meter && meter.label !== '') return { text: meter.label, tone: 'plain' }
-  return deposit ? status : null
+export function rowMark(status: RowStatus): RowStatus | null {
+  return status.tone === 'good' || status.tone === 'late' ? status : null
+}
+
+/**
+ * What a stash says of itself, one fact to a line (docs/ui-design.md, rule 4), on its page and in the open row of a phone: where it lives (`account`, the
+ * caller's own node: a link on the page), its target and how far it is, what is left and what to save each month, its date (a goal's target date, a
+ * deposit's maturity), where a goal stands when that is news, then a deposit's rate, start, days left, the return it expects, its value at maturity and
+ * its state (with the day it was closed). What it holds is not here: the row and the header of the page have that. `Facts` leaves out a pair with no value.
+ */
+export function stashFacts(stash: Stash, account: FactItem['value'], money: (amount: string) => string, locale: string, t: Translate): FactItem[] {
+  const deposit = stash.deposit
+  const live = deposit?.state === 'RUNNING' || deposit?.state === 'MATURED'
+  const closedOn = deposit ? (deposit.brokenOn ?? (deposit.state === 'BOOKED' ? deposit.returnedOn : null)) : null
+  return [
+    { label: t('stashes.account'), value: account },
+    { label: t('stashes.target'), value: stash.target === null ? null : money(stash.target) },
+    { label: t('stashes.progress'), value: stash.percent === null ? null : t('stashes.percent', { percent: stash.percent }), tone: stash.reached ? 'positive' : undefined },
+    { label: t('stashes.leftLabel'), value: stash.left !== null && minor(stash.left) > 0n ? money(stash.left) : null },
+    { label: t('stashes.perMonthLabel'), value: stash.perMonth === null ? null : money(stash.perMonth) },
+    { label: deposit ? t('stashes.maturity') : t('stashes.targetDate'), value: stash.targetDate === null ? null : formatDate(stash.targetDate, locale), tone: stash.overdue ? 'negative' : undefined },
+    { label: t('stashes.status'), value: deposit ? null : stash.reached ? t('stashes.reached') : stash.overdue ? t('stashes.overdueWord') : null, tone: stash.reached ? 'positive' : 'negative' },
+    { label: t('accounts.rate'), value: deposit ? t('accounts.rateShown', { rate: deposit.interestRate, period: t(`accounts.period.${deposit.interestPeriod}`) }) : null },
+    { label: t('stashes.startDate'), value: deposit ? formatDate(deposit.startDate, locale) : null },
+    { label: t('stashes.daysLeft'), value: deposit?.state === 'RUNNING' ? String(deposit.daysLeft) : null },
+    { label: t('stashes.expectedReturn'), value: deposit && live ? money(deposit.expectedReturn) : null },
+    { label: t('stashes.valueAtMaturity'), value: deposit && live ? money(deposit.valueAtMaturity) : null },
+    { label: t('stashes.depositState'), value: deposit ? t(`stashes.state.${deposit.state}`) : null, tone: deposit?.state === 'MATURED' ? 'positive' : deposit?.state === 'BROKEN' ? 'negative' : undefined },
+    { label: t('stashes.closedOn'), value: closedOn === null ? null : formatDate(closedOn, locale) },
+  ]
 }
 
 /** The words of `nextLine`: "750.00 left · 107.15 a month until june 2027", "750.00 left", "reached", "overdue since 30 june 2026" (a warning). */

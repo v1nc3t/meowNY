@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import PageHeader from '../components/PageHeader'
-import ClipMark from '../components/ClipMark'
+import Badge from '../components/ui/Badge'
 import ConfirmModal from '../components/ConfirmModal'
 import DocumentDetails from '../components/DocumentDetails'
 import DocumentLinksModal from '../components/DocumentLinksModal'
 import DocumentModal from '../components/DocumentModal'
-import KeepToPreview from '../components/KeepToPreview'
 import Pager from '../components/Pager'
 import PreviewModal from '../components/PreviewModal'
 import Icon from '../components/NavIcon'
 import Pick, { PickOption } from '../components/Pick'
-import { IconAction, Row, Table, TapRow } from '../components/RowParts'
-import Button from '../components/ui/Button'
+import { IconAction, ListGroup, PanelActions, Row, Table, TapRow, type PanelAction } from '../components/RowParts'
 import { EmptyState } from '../components/ui/Pixel'
 import { documents, type Doc, type DocPage, type LibrarySize, type Report } from '../api/documents'
 import { errorText } from '../api/invoke'
@@ -215,6 +213,8 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
     disabled: doc.id in keeping,
     onChange: (event: ChangeEvent<HTMLInputElement>) => void onKeep(doc, event.target.checked),
   })
+  /** The box as a fact of the open row: its label at the left, the box at the right. */
+  const keepFact = (doc: Doc) => ({ label: t('docs.keepOnPhone'), value: <input type="checkbox" aria-label={`${doc.name} ${t('docs.keepOnPhone')}`} {...keepProps(doc)} /> })
 
   // Keyboard: n adds a file, / searches, j and k move between rows.
   useShortcut('new', () => fileInput.current?.click())
@@ -230,10 +230,9 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
   /** Where the file is, in words, when that is not simply here. */
   const stateOf = (doc: Doc) => fileStateText(fileState(doc, phone))
 
-  // A desktop row: the name, the day, the size, keep on phone, how many things the document is attached to, then preview, edit, save a
-  // copy and delete. It opens to the details.
+  // A desktop row, one value to a cell: the name, the type, the day, the size, then the paper clip (when it is attached to something), preview, edit,
+  // save a copy and delete. It opens to the details: where the file is, the box to keep it on the phone, and what it is attached to.
   function tableRow(doc: Doc) {
-    const state = stateOf(doc)
     return (
       <Row
         key={doc.id}
@@ -241,14 +240,14 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
         id={doc.id}
         actions={
           <>
+            {doc.linkCount > 0 ? <IconAction icon="clip" label={`${t('docs.links')}: ${doc.linkCount}`} onClick={() => setLinking(doc)} /> : <span className="icon-slot" />}
             <IconAction icon="eye" label={t('docs.previewButton')} disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)} />
             <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => setViewing(doc.id)} />
             {doc.hasFile && !phone ? <IconAction icon="download" label={t('docs.saveCopy')} onClick={() => void onSaveCopy(doc)} /> : <span className="icon-slot" />}
             <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDeleting(doc)} />
           </>
         }
-        note={state ? t(state) : null}
-        panel={<DocumentDetails doc={doc} locale={locale} />}
+        panel={<DocumentDetails doc={doc} locale={locale} extra={[keepFact(doc)]} />}
       >
         <div className="cell-name">
           <Icon name="documents" className="doc-icon" />
@@ -257,26 +256,26 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           </span>
         </div>
         <span className="doc-type">{t(typeText(doc.mediaType))}</span>
-        <span className="cell-sub">{formatDate(doc.documentDate, locale)}</span>
+        <span className="cell-sub doc-day">{formatDate(doc.documentDate, locale)}</span>
         <span className="cell-sub-end doc-size">{formatSize(doc.sizeBytes, locale)}</span>
-        {/* The head names this column; the word beside the box shows only in a narrow list, which has no head. */}
-        <label className="cell-keep" title={t('docs.keepOnPhone')}>
-          <input type="checkbox" aria-label={`${doc.name} ${t('docs.keepOnPhone')}`} {...keepProps(doc)} />
-          <span aria-hidden="true">{t('docs.colPhone')}</span>
-        </label>
-        <div className="cell-links">{doc.linkCount > 0 ? <ClipMark count={doc.linkCount} onClick={() => setLinking(doc)} /> : null}</div>
       </Row>
     )
   }
 
-  // A phone row: the name and the size, the day and where the file is under them (or that it is kept on the phone). It opens to a labelled
-  // button for each thing to do (a file that stays on the computer gets a note and a button to keep it, instead of the preview; the note
-  // then replaces the small line; any other gets the box to keep it on the phone).
+  // A phone row: the name and the size, the day under the name. It opens to the type, the day, where the file is, the box to keep it on the phone and how many
+  // things it is attached to, then a button for each thing to do: preview (a file that stays on the computer gets the button that keeps it instead), what it
+  // is attached to, edit and delete.
   function tapRow(doc: Doc) {
     const state = stateOf(doc)
     const offer = canKeepToPreview(doc, phone)
-    const where = state && !(offer && rows.isOpen(doc.id)) ? t(state) : doc.keepOnPhone ? t('docs.keepOnPhone') : null
-    const day = formatDate(doc.documentDate, locale)
+    const actions: (PanelAction | false)[] = [
+      offer
+        ? { label: t('docs.keepOnPhone'), icon: 'download', onClick: () => void onKeep(doc, true) }
+        : canPreview(doc) && { label: t('docs.previewButton'), icon: 'eye', onClick: () => setPreviewing(doc) },
+      doc.linkCount > 0 && { label: t('docs.links'), icon: 'clip', onClick: () => setLinking(doc) },
+      { label: t('common.edit'), icon: 'pencil', onClick: () => setViewing(doc.id) },
+      { label: t('common.delete'), icon: 'trash', danger: true, onClick: () => setDeleting(doc) },
+    ]
     return (
       <TapRow
         key={doc.id}
@@ -285,72 +284,58 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
         onToggle={() => rows.toggle(doc.id)}
         name={doc.name}
         amount={<span className="cell-size">{formatSize(doc.sizeBytes, locale)}</span>}
-        sub={<span>{where ? `${day} · ${where}` : day}</span>}
+        meta={formatDate(doc.documentDate, locale)}
+        facts={[
+          { label: t('common.type'), value: t(typeText(doc.mediaType)) },
+          { label: t('report.date'), value: formatDate(doc.documentDate, locale) },
+          { label: t('docs.fileLabel'), value: state ? t(state) : null, tone: 'negative' },
+          keepFact(doc),
+          { label: t('docs.links'), value: doc.linkCount > 0 ? String(doc.linkCount) : null },
+        ]}
       >
-        {doc.linkCount > 0 ? (
-          <section className="detail-section">
-            <p className="detail-title">{t('docs.links')}</p>
-            <ClipMark count={doc.linkCount} onClick={() => setLinking(doc)} />
-          </section>
-        ) : null}
-        {offer ? null : (
-          <label>
-            <input type="checkbox" {...keepProps(doc)} />
-            {t('docs.keepOnPhone')}
-          </label>
-        )}
-        <div className="row-panel-actions">
-          {offer ? (
-            <KeepToPreview doc={doc} onKept={refresh} />
-          ) : (
-            <Button variant="outline" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
-              <Icon name="eye" className="btn-icon" />
-              {t('docs.previewButton')}
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => setViewing(doc.id)}>
-            <Icon name="pencil" className="btn-icon" />
-            {t('common.edit')}
-          </Button>
-          <Button variant="outline" className="row-danger" onClick={() => setDeleting(doc)}>
-            <Icon name="trash" className="btn-icon" />
-            {t('common.delete')}
-          </Button>
-        </div>
+        <PanelActions actions={actions} />
       </TapRow>
     )
   }
 
+  /** What the header says of the files in a small mark each: waiting for the next sync, not on this device, damaged. The sentence is behind the help button. */
+  const marks = lines.map((line) => (
+    <Badge key={line.key} variant={line.key === 'docs.waiting' ? 'secondary' : 'destructive'} title={t(line.key, { count: line.count })}>
+      {t(line.short, { count: line.count })}
+    </Badge>
+  ))
+  const helpLines = [phone && size ? t('docs.heldSummary', { count: size.heldCount, size: formatSize(size.heldBytes, locale) }) : null, ...lines.map((line) => t(line.key, { count: line.count }))].filter((text) => text !== null)
+
   return (
     <section className={dragging ? 'tx-page doc-page is-dragging' : 'tx-page doc-page'}>
-      <PageHeader title={t('docs.title')} />
+      <PageHeader
+        title={t('docs.title')}
+        actions={[
+          { label: t('docs.add'), icon: 'add', primary: true, shortcut: 'new', disabled: busy, onClick: () => fileInput.current?.click() },
+          phone && { label: t('docs.takePhoto'), disabled: busy, onClick: () => photoInput.current?.click() },
+        ]}
+        aside={
+          size ? (
+            <>
+              {size.count} · <b>{formatSize(size.bytes, locale)}</b> {marks}
+            </>
+          ) : null
+        }
+        help={
+          helpLines.length > 0 ? (
+            <>
+              {helpLines.map((text) => (
+                <p key={text}>{text}</p>
+              ))}
+            </>
+          ) : undefined
+        }
+      />
       <input ref={fileInput} type="file" multiple hidden tabIndex={-1} onChange={onChosen} />
       <input ref={photoInput} type="file" accept="image/*" capture="environment" hidden tabIndex={-1} onChange={onChosen} />
-      {/* What is here and where to add more: a frame that also lights up when files are held over the window. */}
-      <div className="doc-drop">
-        <div className="doc-drop-text">
-          {size ? <p className="doc-count">{t('docs.summary', { count: size.count, size: formatSize(size.bytes, locale) })}</p> : null}
-          {size && phone ? <p className="hint">{t('docs.heldSummary', { count: size.heldCount, size: formatSize(size.heldBytes, locale) })}</p> : null}
-        </div>
-        <div className="tx-actions">
-          <Button disabled={busy} onClick={() => fileInput.current?.click()} {...tip('new', t('docs.add'))}>
-            {t('docs.add')}
-          </Button>
-          {phone ? (
-            <Button variant="outline" disabled={busy} onClick={() => photoInput.current?.click()}>
-              {t('docs.takePhoto')}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      {lines.map((line) => (
-        <p key={line.key} className={line.key === 'docs.damaged' ? 'warning' : 'warn'}>
-          {t(line.key, { count: line.count })}
-        </p>
-      ))}
       <div className="toolbar wide tx-bar">
         <label className="grow" {...tip('search')}>
-          {t('common.search')}
+          <span className="sr-only">{t('common.search')}</span>
           <input
             ref={searchRef}
             onKeyDown={(event) => {
@@ -358,6 +343,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
             }}
             value={q}
             maxLength={120}
+            placeholder={t('common.search')}
             autoComplete="off"
             onChange={(event) => {
               setQ(event.target.value)
@@ -366,6 +352,7 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
           />
         </label>
         <Pick
+          compact
           label={t('common.type')}
           className="kind"
           text={t(KIND_CHOICES.find((choice) => choice.value === kind)?.label ?? 'common.all')}
@@ -404,12 +391,12 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
                 action={search || kind ? undefined : { label: t('docs.add'), onClick: () => fileInput.current?.click() }}
               />
             ) : phone ? (
-              <ul className="card-list">{page.documents.map(tapRow)}</ul>
+              <ListGroup>{page.documents.map(tapRow)}</ListGroup>
             ) : (
               <Table
+                tidy
                 className="doc-table"
-                // A short head for the links, so it fits the column on one line in every language.
-                heads={[t('common.name'), t('common.type'), t('sync.field.date'), { label: t('docs.size'), className: 'is-end' }, t('docs.colPhone'), t('docs.colLinks'), '']}
+                heads={[t('common.name'), { label: t('common.type'), className: 'head-type' }, { label: t('sync.field.date'), className: 'head-day' }, { label: t('docs.size'), className: 'is-end' }, '']}
                 opens
               >
                 {page.documents.map(tableRow)}
