@@ -3,6 +3,15 @@
 How stashes work: money set aside inside an account for something you save for. Section numbers are cited in the code; keep them.
 User side: the [guide](https://v1nc3t.github.io/meowNY/guide.html#stashes). Status: built (migration `0021`, sync protocol 12).
 
+## In short
+
+- A stash is money set aside inside one account for a goal. The money never leaves the account.
+- A stash changes no balance, net worth, budget or statistic.
+- Money goes in and out by entries: an add or a take, each with an amount, a date and a note.
+- An entry can make a transfer from or to another account in the same step.
+- Free money is what an account holds that no stash has set aside. An add must fit in it and in the target. A take cannot pass what is saved.
+- A stash shows how far it is, what is left and, with a target date, what to save a month.
+
 ## 1. What it has to do
 
 - A stash is a goal you save for: a holiday, a new laptop, a rainy-day fund. It has a name, **one account it lives in (chosen when it
@@ -503,11 +512,12 @@ formatting the account page uses), `useToast`, `errorText`, `saveChoice`/`stored
 - Sidebar (`AppSidebar.tsx`) right after accounts: label `nav.stashes`, icon `stash` (a new pixel jar in `NavIcon.tsx`, drawn in the same
   grid and stroke as the other icons), shortcut `goStashes` = `g` then `h` (`keys/shortcuts.ts`: `SHORTCUTS`, `GO_SECOND_KEY`, the
   shortcuts test).
-- Phone: an icon in the top bar right after accounts. Check at 360 px that the bar still fits (`phone.css`); if it does not, shrink
-  the gaps of `.phone-actions`, never hide the lock.
+- Phone: a line of the menu behind the logo, right after accounts (`PHONE_ITEMS` in `lib/navItems.ts`, `ui-design.md` section 4).
 
 ### 13.2 The list (`/app/stashes`)
 
+- **The list is a table now** (`loans-deposits-design.md` section 10), not a grid of cards. What follows says what a stash shows;
+  the card form is still the small card of an account's page (13.6) and of the dashboard.
 - Title row: "stashes", the total saved (in the app's currency, from `Summary`), **new stash**.
 - With more than one active account: an account `Pick` ("all accounts" first), remembered as `choice.stashes.account`, dropped when that
   account is gone.
@@ -522,7 +532,7 @@ formatting the account page uses), `useToast`, `errorText`, `saveChoice`/`stored
   - two small buttons: **+ add** and **− take out**, opening `StashMoneyModal` on that tab (add hidden when the stash cannot take money:
     its account archived; take hidden when saved <= 0);
   - a click elsewhere on the card opens the stash.
-- Under the grid: **archived (n)** switch (remembered, `choice.stashes.archived`), then the archived cards, greyed, with **restore** and
+- Archived stashes: **show archived (n)** in the "⋯" menu (remembered, `choice.stashes.archived`) adds the archived cards, greyed, with **restore** and
   **delete**.
 - Empty: `EmptyState` with `stashes.emptyTitle`, `stashes.emptyText` (what a stash is in two sentences: money set aside in an account,
   the money stays there) and **new stash**.
@@ -540,8 +550,8 @@ formatting the account page uses), `useToast`, `errorText`, `saveChoice`/`stored
 - The history: a table (phone: `TapRow`s) newest first: date; a `+` or `−` mark in the success / danger colour; the note (or a dash);
   "from {account}" / "to {account}" as a link opening the transfer dialog (`TransferModal`) when the entry has a transfer; the amount
   (signed, coloured); saved after. A click on a row opens `StashMoneyModal` in edit mode.
-- Free in the account, under the history: "{account}: {balance} · set aside {setAside} · free {free}"; free below 0 in the danger
-  colour with `stashes.overBooked`.
+- Free in the account, under the history: `Facts` (`ui-design.md` rule 4) with the account's balance, **set aside** and **free**; free
+  below 0 in the danger colour with `stashes.overBooked`.
 
 ### 13.4 `StashMoneyModal` (`components/StashMoneyModal.tsx`)
 
@@ -569,9 +579,9 @@ a line "only accounts in {currency}" when that hides some); target (optional, "n
 
 ### 13.6 Elsewhere
 
-- **Accounts list** (`AccountsPage`): under a balance, small, "set aside {setAside}" when it is not 0. **An account's page**: a part
-  "stashes" under the breakdown with the account's stashes as small cards (name, bar, saved of target) linking to each, the line
-  "set aside · free" from 13.3, and **new stash** (opens `StashModal` with this account).
+- **Accounts list** (`AccountsPage`): a **set aside** column. **An account's page**: a part
+  "stashes" under the breakdown with the account's stashes as small cards (name, bar, saved of target) linking to each, the
+  **set aside** and **free** facts from 13.3, and **new stash** (opens `StashModal` with this account).
 - **Dashboard**: when `Summary.stashes > 0`, a card "stashes": the total saved and, under it, the first three active stashes in order
   with a small bar each; the card links to the stashes page.
 - **Account delete**: `entries` now counts stashes, so the delete button is not offered for an account with one; the guide says why.

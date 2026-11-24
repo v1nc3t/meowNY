@@ -1,5 +1,5 @@
 // The develop page: building meowNY, its tests, how the code is laid out, and how a release is made. Short; the code
-// and its comments hold the rest.
+// and its comments hold the rest. A how-to is a numbered list of steps; what something is, a bullet list.
 
 import { REPO, SPONSOR } from './render.mjs'
 
@@ -34,7 +34,15 @@ const SECTIONS = [
         ],
       },
       { t: 'h3', id: 'android', text: 'Android' },
-      { t: 'p', text: 'Java 21, the Android SDK and NDK 27 (`sdkmanager "ndk;27.2.12479018"`, with `ANDROID_HOME`, `NDK_HOME` and the NDK compilers on the `PATH`), and `rustup target add aarch64-linux-android`.' },
+      { t: 'p', text: 'You need:' },
+      {
+        t: 'ul',
+        items: [
+          'Java 21.',
+          'The Android SDK and NDK 27: `sdkmanager "ndk;27.2.12479018"`, with `ANDROID_HOME`, `NDK_HOME` and the NDK compilers on the `PATH`.',
+          '`rustup target add aarch64-linux-android`.',
+        ],
+      },
       {
         t: 'ol',
         items: [
@@ -46,7 +54,7 @@ const SECTIONS = [
         ],
       },
       { t: 'h3', id: 'ios', text: 'iPhone' },
-      { t: 'p', text: `A Mac with Xcode and \`rustup target add aarch64-apple-ios\`. ${file('src-tauri/Info.ios.plist')} holds the camera, photo and local network texts.` },
+      { t: 'p', text: `You need a Mac with Xcode and \`rustup target add aarch64-apple-ios\`. ${file('src-tauri/Info.ios.plist')} holds the camera, photo and local network texts.` },
       {
         t: 'ol',
         items: ['Make the Xcode project: `npx tauri ios init`.', 'Build the unsigned IPA: `npx tauri ios build --target aarch64 --no-sign`. It lands in `src-tauri/gen/apple/build/arm64/meowNY.ipa`.'],
@@ -57,7 +65,7 @@ const SECTIONS = [
     id: 'tests',
     title: 'Tests and checks',
     blocks: [
-      { t: 'p', text: '`npm run check` runs what CI runs on every pull request (the UI lint, build and tests, the website, the network call list, the Android script, the Rust tests of the app and the command line), and clippy on both Rust programs. It stops at the first failure. It builds the Rust code, so it takes a while. The parts, one by one:' },
+      { t: 'p', text: '`npm run check` runs what CI runs, plus clippy on both Rust programs. It stops at the first failure and takes a while. The parts, one by one:' },
       {
         t: 'code',
         text: 'cd src-tauri && cargo test          # the Rust core\ncd cli && cargo test                # the command line, against the real app code\nnpm run lint --workspace ui && npm test --workspace ui\nnpm run check:docs                  # the website\nnpm run check:outbound              # fails on new network code',
@@ -67,7 +75,7 @@ const SECTIONS = [
         items: [
           'After a route changes: `cd cli && cargo run --example dump_schema > schema.json`.',
           'After a command changes: `cd cli && UPDATE_DOCS=1 cargo test --offline --test docs`, then `npm run docs`. The command line page is made from real output, and a test fails until it is recorded again.',
-          'CI (`.github/workflows/ci.yml`) runs all of this on every pull request, builds the desktop, Android and iPhone apps, audits the dependencies, and on `main` publishes this website. Releases are `release.yml`.',
+          'CI (`.github/workflows/ci.yml`) runs all of this on every pull request, builds the three apps, audits the dependencies, and on `main` publishes this website. Releases are `release.yml`.',
         ],
       },
     ],
@@ -107,7 +115,7 @@ const SECTIONS = [
           '**Phone sync.** Only if the data goes to the phone: remake the table\'s sync-stamp and `updated_at` triggers with the new column in them (see `0014_category_order.sql`; a new table follows `0012_debts.sql`), add the field to its row in `src-tauri/src/sync/wire.rs`, raise `PROTOCOL` there, and add it to section 9 of `docs/sync-design.md`. Two devices with different schema or protocol versions refuse to sync and are told to update.',
           '**Screen.** Add the call to the matching module in `ui/src/api/` (it goes through `ui/src/api/invoke.ts`, which checks the answer against a Zod schema). Build the page from `PageHeader` (the title, one main button and the "⋯" menu), the shared list pieces in `ui/src/components/RowParts.tsx` (`Table` and `Row` for the computer, `ListGroup`, `DayGroups` and `TapRow` for the phone), `Facts` and `useOpenRow`, as `docs/ui-design.md` says; one page serves the computer and the phone. A new page also goes in `ui/src/pages/index.ts`, `ui/src/App.tsx` and `ui/src/lib/navItems.ts` (the sidebar\'s list, and the phone\'s menu if the phone has it).',
           '**Texts.** Every text is a key in `ui/src/i18n/en.ts` and in the six other files there (`de`, `es`, `fr`, `it`, `pt`, `ro`). A test fails if one is missing.',
-          '**Guide.** Write how to use it as steps in `docs/site/guide.mjs`, in the section where it belongs. If the app now stores or sends something new, add it to the privacy tables there (browser storage included). Update the design note the change touches in `docs/`, and keep its section numbers: code cites them.',
+          '**Guide.** In `docs/site/guide.mjs`, write how to use it as numbered steps, and what it can do as a short list. If the app now stores or sends something new, add it to the privacy tables there (browser storage included). Update the design note the change touches in `docs/`, and keep its section numbers: code cites them.',
           '**Check.** Run `npm run check`.',
         ],
       },
@@ -119,7 +127,17 @@ const SECTIONS = [
     blocks: [
       { t: 'p', text: 'Sixteen months of made-up data, dated from today: budgets, recurring items, debts, and awkward text for the exports. Quit the app, then:' },
       { t: 'code', text: 'cd src-tauri\ncargo run --example dev_vault -- ~/.local/share/org.meowny.app   # deletes the app data there first\ncargo run --example api_demo                                     # the command API on demo data, no app needed' },
-      { t: 'p', text: 'The website\'s screenshots are not this data: they are the real UI (`ui/`) in a browser, against a fake backend with made-up data (a local test harness, `ui/harness.html`, kept out of git; `?profile=phone` for the phone\'s screens), at 1280 × 800 and 400 × 860, each in light and dark: `docs/site/images/<name>-light.png` and `<name>-dark.png`, named in `docs/site/shots.mjs`. Retake them when a screen changes. Run the demo data with its own `HOME` and keychain, so your own data is never touched.' },
+      { t: 'p', text: 'Run the demo data with its own `HOME` and keychain, so your own data is never touched.' },
+      { t: 'h3', id: 'screenshots', text: 'The website\'s screenshots' },
+      {
+        t: 'ul',
+        items: [
+          'They are not the demo data. They are the real UI (`ui/`) in a browser, against a fake backend with made-up data: the local test harness `ui/harness.html`, kept out of git. `?profile=phone` gives the phone\'s screens.',
+          'Sizes: 1280 × 800 and 400 × 860, each in light and dark.',
+          'Files: `docs/site/images/<name>-light.png` and `<name>-dark.png`, named in `docs/site/shots.mjs`.',
+          'Retake them when a screen changes.',
+        ],
+      },
     ],
   },
   {
@@ -135,8 +153,17 @@ const SECTIONS = [
           'Run `git pull` to get the version commit.',
         ],
       },
-      { t: 'p', text: 'By hand, on Linux and on an up-to-date `main`: `npm run release patch`, then `git push origin main v<version>`. Releases come from `main` only: the script refuses another branch, and the workflow refuses a tag whose commit is not on `main`.' },
-      { t: 'p', text: `${file('.github/workflows/release.yml')} builds the Linux \`.deb\` and AppImage, the Windows installer, a signed APK, the unsigned IPA, the command line for Linux and Windows, \`SHA256SUMS\`, a build attestation per file and \`altstore.json\`. If a build fails, fix it and release the next patch version.` },
+      { t: 'p', text: 'By hand, on Linux and on an up-to-date `main`: `npm run release patch`, then `git push origin main v<version>`. Releases come from `main` only.' },
+      { t: 'p', text: `${file('.github/workflows/release.yml')} builds:` },
+      {
+        t: 'ul',
+        items: [
+          'The Linux `.deb` and AppImage, the Windows installer, a signed APK and the unsigned IPA.',
+          'The command line for Linux and Windows.',
+          '`SHA256SUMS`, a build attestation per file and `altstore.json`.',
+          'If a build fails, fix it and release the next patch version.',
+        ],
+      },
       { t: 'h3', id: 'android-key', text: 'Once: the Android release key' },
       { t: 'p', text: 'Every Android version must be signed with the same key, or phones refuse the update.' },
       {
@@ -144,7 +171,8 @@ const SECTIONS = [
         items: ['Make the key with `keytool`, outside the repository. Keep it, with its password, in a password manager.', 'Give it to GitHub as three secrets with `gh secret set`: the key (as base64), its password and its alias.'],
       },
       { t: 'code', label: 'both steps', text: 'keytool -genkeypair -v -keystore ~/meowny-release.keystore -alias meowny \\\n  -keyalg RSA -keysize 4096 -validity 10000 -storetype PKCS12\nbase64 -w0 ~/meowny-release.keystore | gh secret set ANDROID_KEYSTORE_BASE64\ngh secret set ANDROID_KEYSTORE_PASSWORD\ngh secret set ANDROID_KEY_ALIAS --body meowny' },
-      { t: 'p', text: 'Not done yet: signed Windows installers (a paid certificate), macOS (notarisation needs a paid Apple account), updates from inside the desktop app.' },
+      { t: 'p', text: 'Not done yet:' },
+      { t: 'ul', items: ['Signed Windows installers (a paid certificate).', 'macOS (notarisation needs a paid Apple account).', 'Updates from inside the desktop app.'] },
     ],
   },
   {

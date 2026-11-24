@@ -3,6 +3,14 @@
 How receipts and invoices are stored, sealed, synced and backed up. Section numbers are cited in the code; keep them.
 User side: the [guide](https://v1nc3t.github.io/meowNY/guide.html#documents).
 
+## In short
+
+- A document is an encrypted file with a name, a date and links to transactions, recurring items or debt entries.
+- It lives on its own: deleting a transaction never deletes it.
+- The computer holds every file. The phone holds the ones marked "keep on phone", and the ones it added until the computer has them.
+- Every file is untrusted. A preview runs nothing. A plain copy for another program is removed on lock and close.
+- Backups can include the files. Exports list documents by name only.
+
 ## 1. What it has to do
 
 A document is a file stored encrypted, with a name, a date and links to transactions, recurring items or ledger

@@ -4,6 +4,15 @@ Credits, loans and mortgages as accounts you owe on; term deposits as stashes wi
 Section numbers are cited in the code; keep them. Builds on `accounts-design.md` and `stash-design.md`; where this file disagrees with
 them, this file wins. Migration `0022_loans_deposits.sql`. Sync protocol **13**. Status: built.
 
+## In short
+
+- A credit, loan or mortgage is an account you owe on. Its balance is what you owe, below 0.
+- A payment is split: the interest is an expense, the rest is a transfer that lowers the debt.
+- Any account can have a rate. The app shows estimates and books nothing by itself.
+- A term deposit is a stash with a rate, a start and a maturity. It runs, matures, is booked or is broken.
+- At maturity, **book return** makes the income and the add in one step.
+- The stashes page is a list with **+** and **−** on each row. The debts page has two tabs: **friends** and **debts**.
+
 ## 1. What it has to do
 
 1. **The stashes page is a list**, not a grid of cards. Each row has a **+** and a **−** button that open the add or take dialog of
@@ -294,11 +303,12 @@ No test that repeats what an existing test proves for goal stashes or plain acco
   or maturity), status (what to save a month, what is left, reached, overdue, or a deposit's state with its rate), and an actions cell
   with **+** and **−** (`Button` size `sm`, text "+" and "−", `aria-label` "add money to X" / "take money from X"). A total row under
   the rows when they share one currency; a **kind of stash** filter beside the account filter when there are goals and deposits both.
-  A narrower list stacks the account under the name and the target under what is saved (`lib/stashView.ts`: `rowMeter`, `rowStatus`,
-  `rowFlag`, `listTotal`). For a deposit the row shows its state word (running, matured, booked, broken) and, when `MATURED`, a
-  **return** button in place of +. + is hidden when an add is not allowed (`canAdd`), − when a take is not (`canTake`). Reorder by drag
-  keeps working on the rows. The archived list under the toggle uses the same table. The phone shows each stash as a card of three lines (name and saved; account and
-  date with the target or the rate; the bar, its figure and the buttons); an archived one is a `TapRow`.
+  A narrower list drops columns, the date first, then the target, the account and the bar; it never stacks a second line under a cell
+  (`ui-design.md` rule 2; `lib/stashView.ts`: `rowMeter`, `rowStatus`, `rowFlag`, `listTotal`). For a deposit the row shows its state word
+  (running, matured, booked, broken) and, when `MATURED`, a **return** button in place of +. + is hidden when an add is not allowed
+  (`canAdd`), − when a take is not (`canTake`). Reorder by drag keeps working on the rows. The archived list under the toggle uses the
+  same table. The phone shows each stash as a `TapRow`: the name, what is saved, and a thin bar of the progress with a mark (reached,
+  overdue, matured, broken); the buttons are in the open row, with the facts as `Facts`.
 - **Stash page**: a deposit shows rate, start, maturity, days left, expected return, value at maturity, state; its buttons follow 5.3.
 - **Debts page**: `SectionTabs` **friends | debts** at the top, kept in the address as `?tab=debts`. The friends tab is today's page.
   The debts tab: total owed, a **new** button (`AccountModal` with liability kinds), and a `Table` of the liabilities (archived ones

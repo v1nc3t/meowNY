@@ -5,10 +5,10 @@ Thanks for helping. How to build and test: the [develop page](https://v1nc3t.git
 1. Open an issue before a large change.
 2. Run `npm run check` before you push: what CI runs, plus clippy. A bug fix comes with a test that fails without it.
 3. Keep dependencies few, and say why when you add one.
-4. Keep it local-first: no new network call unless it is off until the user turns it on, and listed in
+4. Keep it local-first. A new network call must be off until the user turns it on, and listed in
    `scripts/outbound-allowlist.txt`.
 5. A new desktop feature ships its command line commands in the same change.
-6. Update the [guide](docs/site/guide.mjs) when what users see, or what the app stores or sends, changes.
+6. Update the [guide](docs/site/guide.mjs) when what users see, or what the app stores or sends, changes. Write a how-to as numbered steps and a feature as a short list.
 
 Security problems go privately, not in an issue: see [SECURITY.md](SECURITY.md).
 

@@ -2,6 +2,15 @@
 
 Status: built on branch `feat/tidy-ui`. Where the build differs from the first plan, the text below says what was built.
 
+## In short
+
+- Each list is a set of columns that line up. A row shows the two or three facts you scan for. The rest is one tap away.
+- No loose sentences. An explanation goes behind a "?" button. Values are never joined by dots.
+- A page starts with a quiet top: a title, at most two buttons and a "⋯" menu for the rest.
+- On the phone, the logo opens a menu with every page. One round add button holds the page's main action.
+- A name cut with "…" shows all of it in a small box when you rest the pointer on it. On the phone, press and hold it.
+- The same components and spacing on every page.
+
 ## 1. The problem
 
 Rows on the phone (and some on the desktop) carry loose text: a name, an amount, then "set aside €3,900.00", "≈ €10.01 / month",
@@ -20,9 +29,9 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
 1. **One fact per cell.** A table cell holds one value. No second line of grey text under a name or an amount (no "available €680.10",
    no "≈ €10.01 / month", no "not in net worth", no "reminder came 16/11/2026"). Such a fact gets a column of its own when it is worth
    scanning for, a small mark (an icon or a short badge of one or two words, the `Badge` component) when it is a state, or goes to
-   the row's details (rule 4).
+   the row's details (rule 4). Values are never joined by dots, in a cell or under a name.
 2. **Columns line up.** Amounts are right aligned with tabular figures in a column of the same width on every row; names are at the
-   left and cut with an ellipsis, never wrapped. Rows have one height in a list. A narrower list has fewer columns, not rows of two
+   left and cut with an ellipsis, never wrapped (rule 9 shows the whole text). Rows have one height in a list. A narrower list has fewer columns, not rows of two
    lines: each list's styles say which column goes first (the least needed), and the name and the amount stay at every width.
 3. **No loose sentences.** No paragraph that explains a page or a field. An explanation that is worth keeping goes behind a help
    button (`HelpButton`: a small "?" icon button that opens a popover with the text). Fields keep their label and show a line under
@@ -30,18 +39,21 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
 4. **Details one tap away.** What is not in the row's columns is in its details: on the desktop the panel under the row (the chevron
    of `Row`, as now) or the page of the thing (an account's page, a stash's page); on the phone the panel the row opens (`TapRow`).
    Details are a list of label → value pairs (`Facts`), then the row's buttons. Never a run of words joined by dots.
-5. **A quiet top of the page.** A page starts with `PageHeader`: its title, at most two buttons (the main action filled, one more
-   plain), and a "more" button (`MoreMenu`, the "⋯" icon) that holds the rest: second actions (scan, paste a code, add friend,
-   notifications), and switches such as "show removed friends" or "show archived". On the phone the second button goes into the "⋯"
-   menu, in front of the page's own items, and the main action is not a header button either: where the round add button is shown, it
-   is the first line of that button's menu (rule in section 4). Filters and search stay where
-   the list needs them, in one line: a search field and a filter button that opens the filters. The month or year a page shows is one
-   compact control in the header (`PeriodNav`).
+5. **A quiet top of the page.** A page starts with `PageHeader`:
+   - its title and at most two buttons: the main action (filled) and one more (plain);
+   - a "more" button (`MoreMenu`, the "⋯" icon) for the rest: second actions (scan, paste a code, add friend, notifications) and
+     switches such as "show removed friends" or "show archived";
+   - on the phone, the second button goes into the "⋯" menu, in front of the page's own items. The main action is not a header button
+     either: where the round add button is shown, it is the first line of that button's menu (section 4);
+   - filters and search stay where the list needs them, in one line: a search field and a filter button that opens the filters;
+   - the month or year a page shows is one compact control in the header (`PeriodNav`).
 6. **Fewer words on buttons.** A button whose icon says it all is an icon button with an `aria-label` (edit, delete, archive, restore,
    mark as paid). Buttons with words have one or two words.
 7. **Dialogs too.** Dialogs follow rules 3 and 6: no explaining paragraphs (a `HelpButton` beside the title when needed), one short line
    of warning at most where something cannot be taken back.
 8. **Same on every page.** The same components and the same spacing everywhere; nothing page-local that looks like them.
+9. **Cut text shows itself.** Text that is cut with "…" shows the whole text in a small box when you rest the pointer on it, and
+   slides to show the rest. On the phone, press and hold the cut text to see it.
 
 ## 4. The phone shell
 

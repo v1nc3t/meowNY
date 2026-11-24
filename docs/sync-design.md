@@ -3,6 +3,14 @@
 How the phone and the computer sync, directly, with no server. Section numbers are cited in the code; keep them.
 User side: the [guide](https://v1nc3t.github.io/meowNY/guide.html#phone).
 
+## In short
+
+- The phone keeps a full copy. Both devices can change everything, and the phone works alone.
+- Every sync starts on the unlocked computer, which shows a QR code. Both devices are on the same network.
+- No server, relay or open router port.
+- A sync needs the pairing secret (the paired phone) and a one-time secret (the screen right now).
+- The larger stamp wins a row. A row changed on both sides is shown, and you choose.
+
 ## 1. What it has to do
 
 - The phone is a full copy; both devices can change everything, and the phone works alone away from home.
