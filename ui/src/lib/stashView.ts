@@ -282,27 +282,6 @@ export function isSome(amount: string): boolean {
   return minor(amount) !== 0n
 }
 
-// -- the line under a card ----------------------------------------------------------------------------------------------------------------
-
-/**
- * What is next for a stash, in words for the card and the page: it has no target (nothing to say), it has reached it, its date has passed, or this
- * much is left, with what to save each month until its date when it has one.
- */
-export type NextLine =
-  | { kind: 'reached' }
-  | { kind: 'overdue'; since: string }
-  | { kind: 'left'; left: string; perMonth: string | null; until: string | null }
-
-export function nextLine(stash: Pick<Stash, 'target' | 'left' | 'reached' | 'overdue' | 'targetDate' | 'perMonth'>): NextLine | null {
-  if (stash.target === null) return null
-  if (stash.reached) return { kind: 'reached' }
-  if (stash.overdue && stash.targetDate) return { kind: 'overdue', since: stash.targetDate }
-  if (stash.left === null || minor(stash.left) <= 0n) return null
-  return stash.perMonth !== null && stash.targetDate !== null
-    ? { kind: 'left', left: stash.left, perMonth: stash.perMonth, until: stash.targetDate }
-    : { kind: 'left', left: stash.left, perMonth: null, until: null }
-}
-
 const textFormatter = memoByKey(
   (locale: string, kind: string) => `${locale}|${kind}`,
   (locale: string, kind: string) => {
@@ -339,13 +318,12 @@ export function dayWords(isoDate: string, locale: string): string {
 type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string
 
 /**
- * "450.00 of 1200.00 · 37%" for a stash with a target, "450.00 saved" for one without. `money` writes an amount in the stash's currency. The
- * percent is the app's own (it may be above 100).
+ * "450.00 of 1200.00" for a stash with a target, "450.00 saved" for one without. `money` writes an amount in the stash's currency. The percent is
+ * a value of its own beside it (`percentOf`), not part of the line.
  */
-export function figures(stash: Pick<Stash, 'saved' | 'target' | 'percent'>, money: (amount: string) => string, t: Translate): string {
+export function figures(stash: Pick<Stash, 'saved' | 'target'>, money: (amount: string) => string, t: Translate): string {
   if (stash.target === null) return t('stashes.saved', { amount: money(stash.saved) })
-  const of = t('stashes.of', { saved: money(stash.saved), target: money(stash.target) })
-  return stash.percent === null ? of : `${of} · ${t('stashes.percent', { percent: stash.percent })}`
+  return t('stashes.of', { saved: money(stash.saved), target: money(stash.target) })
 }
 
 // -- a row of the list (docs/loans-deposits-design.md, section 10) ---------------------------------------------------------------------
@@ -455,17 +433,6 @@ export function stashFacts(stash: Stash, account: FactItem['value'], money: (amo
     { label: t('stashes.depositState'), value: deposit ? t(`stashes.state.${deposit.state}`) : null, tone: deposit?.state === 'MATURED' ? 'positive' : deposit?.state === 'BROKEN' ? 'negative' : undefined },
     { label: t('stashes.closedOn'), value: closedOn === null ? null : formatDate(closedOn, locale) },
   ]
-}
-
-/** The words of `nextLine`: "750.00 left · 107.15 a month until june 2027", "750.00 left", "reached", "overdue since 30 june 2026" (a warning). */
-export function nextText(line: NextLine, money: (amount: string) => string, t: Translate, locale: string): { text: string; warning: boolean } {
-  if (line.kind === 'reached') return { text: t('stashes.reached'), warning: false }
-  if (line.kind === 'overdue') return { text: t('stashes.overdue', { date: dayWords(line.since, locale) }), warning: true }
-  const left = t('stashes.left', { amount: money(line.left) })
-  return {
-    text: line.perMonth !== null && line.until !== null ? `${left} · ${t('stashes.perMonth', { amount: money(line.perMonth), date: monthWords(line.until, locale) })}` : left,
-    warning: false,
-  }
 }
 
 // -- the accounts a stash may use ---------------------------------------------------------------------------------------------------------

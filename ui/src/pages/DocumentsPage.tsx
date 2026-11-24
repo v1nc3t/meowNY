@@ -317,7 +317,13 @@ function DocumentsView({ settings }: { settings: MoneySettings }) {
         aside={
           size ? (
             <>
-              {size.count} · <b>{formatSize(size.bytes, locale)}</b> {marks}
+              <span className="label-pair">
+                {t('docs.countLabel')} <b>{size.count}</b>
+              </span>
+              <span className="label-pair">
+                {t('docs.size')} <b>{formatSize(size.bytes, locale)}</b>
+              </span>
+              {marks}
             </>
           ) : null
         }

@@ -495,8 +495,8 @@ ul.card-list > li.list-head > .is-end {
   color: var(--muted-foreground);
 }
 
-/* A cut text (any of the ellipsis ones above and elsewhere) slides to show the rest while the mouse is on it (lib/marquee.ts sets
-   the attribute, the distance and the time). The indent moves the one line inside its own clipped box, so no wrapper is needed.
+/* A cut text (any of the ellipsis ones above and elsewhere) slides to show the rest while the mouse is on it, or a finger held on it
+   (lib/marquee.ts sets the attribute, the distance and the time). The indent moves the one line inside its own clipped box, so no wrapper is needed.
    The end value is a var() of the element, which keyframes resolve in every web view. The clip is !important because the ellipsis rules
    are more specific than this one. With reduced motion the ellipsis stays. */
 @media (prefers-reduced-motion: no-preference) {
@@ -516,6 +516,29 @@ ul.card-list > li.list-head > .is-end {
       text-indent: var(--marquee-shift, 0);
     }
   }
+}
+
+/* The box with the whole of a cut text (lib/marquee.ts): one in the body, or in the dialog the text is in, put just above the text. The look
+   of the help popover; the pointer goes through it. */
+.cut-box {
+  position: fixed;
+  z-index: 50;
+  width: max-content;
+  max-width: min(40ch, calc(100vw - 1rem));
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--popover-foreground);
+  background: var(--popover);
+  border: var(--border-width) solid var(--input);
+  border-radius: var(--radius-md);
+  pointer-events: none;
+  animation: panel-in var(--t-fast) var(--ease-step);
 }
 
 .cell-amount {

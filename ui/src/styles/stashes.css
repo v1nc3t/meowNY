@@ -334,11 +334,11 @@ html.is-phone .stash-mini-list {
   }
 }
 
+/* The name at the left and the percent at the right of the first line, the figures under them. */
 .stash-mini-text {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  justify-content: space-between;
   gap: 0.125rem 0.75rem;
   min-width: 0;
 }
@@ -352,7 +352,13 @@ html.is-phone .stash-mini-list {
   white-space: nowrap;
 }
 
+.stash-mini-percent {
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .stash-mini-figures {
+  grid-column: 1 / -1;
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   color: var(--muted-foreground);

@@ -19,7 +19,6 @@ import {
   CHIP_WORDS,
   chips,
   ENTRY_NOTE_MAX,
-  figures,
   isBreak,
   kindForKey,
   moneyOfEntry,
@@ -46,6 +45,7 @@ import { tabId } from '../lib/tabs'
 import ConfirmModal from './ConfirmModal'
 import DatePicker from './DatePicker'
 import Dropdown from './Dropdown'
+import { FactStrip } from './Facts'
 import Modal, { modalFormId } from './Modal'
 import SectionTabs from './SectionTabs'
 import Button from './ui/Button'
@@ -156,18 +156,9 @@ function MoneyForm({
     return t(stash.archived ? 'stashes.archivedHint' : stash.accountArchived ? 'stashes.accountArchivedHint' : 'stashes.notRunning')
   }
 
-  /** What the line under the bar says: why the amount is not allowed, what the stash would hold, or (nothing typed yet) what it holds now. */
-  function line(): { text: string; broken: boolean } {
-    if (typed !== null && !rule.ok) return { text: whyNot(rule), broken: true }
-    // nothing typed yet: what the stash holds now
-    if (typed === null) return { text: figures(stash, money, t), broken: false }
-    const percent = percentOf(after, stash.target)
-    return {
-      text: stash.target === null ? t('stashes.afterSaved', { saved: money(after) }) : t('stashes.after', { saved: money(after), target: money(stash.target), percent: percent ?? 0 }),
-      broken: false,
-    }
-  }
-  const shownLine = line()
+  // under the bar: why the amount is not allowed, and the figures as a strip, now or (an amount typed) after the change
+  const problem = typed !== null && !rule.ok ? whyNot(rule) : null
+  const held = typed === null ? stash.saved : after
 
   const kinds: EntryKind[] = [...(canAdd(stash) ? (['ADD'] as const) : []), ...(canTake(stash) || kind === 'TAKE' ? (['TAKE'] as const) : [])]
   const title = entry ? t('stashes.editEntry') : kind === 'ADD' ? t('stashes.addTitleMoney', { name: stash.name }) : t('stashes.takeTitle', { name: stash.name })
@@ -325,9 +316,16 @@ function MoneyForm({
                   <span className="stash-stripe" style={{ width: `${bar.stripe * 100}%` }} />
                 </span>
               ) : null}
-              <p id={previewId} className={cn('stash-after', shownLine.broken && 'is-broken')} role="status">
-                {shownLine.text}
-              </p>
+              <div id={previewId} role="status">
+                <FactStrip
+                  items={[
+                    { label: t(typed === null ? 'stashes.savedLabel' : 'stashes.savedAfter'), value: money(held), tone: held.startsWith('-') ? 'negative' : undefined },
+                    stash.target !== null && { label: t('stashes.target'), value: money(stash.target) },
+                    stash.target !== null && { label: t('stashes.progress'), value: t('stashes.percent', { percent: percentOf(held, stash.target) ?? 0 }) },
+                  ]}
+                />
+                <p className="stash-after is-broken">{problem}</p>
+              </div>
             </div>
             {kept ? null : (
               <div className="tx-date-group">

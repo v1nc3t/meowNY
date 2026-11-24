@@ -24,3 +24,26 @@ export default function Facts({ items, className }: { items: readonly (FactItem 
     </dl>
   )
 }
+
+/** One column of a `FactStrip`. */
+export type StripItem = { label: string; value: ReactNode; tone?: 'negative' }
+
+/**
+ * A few values side by side, each with its label over it: the totals strip of the transactions page, for a live line in a dialog (what a
+ * payment does to a debt, what a stash holds after a change). Up to three: the first at the left, the last at the right. `tone` colours the
+ * value red (`negative`).
+ */
+export function FactStrip({ items }: { items: readonly (StripItem | false | null | undefined)[] }) {
+  return (
+    <div className="tx-total is-strip">
+      <span className="tx-sums">
+        {items.filter((item) => !!item).map((item) => (
+          <span key={item.label} className="tx-sum">
+            <span className="tx-sum-label">{item.label}</span>
+            <span className={item.tone ? 'is-expense' : undefined}>{item.value}</span>
+          </span>
+        ))}
+      </span>
+    </div>
+  )
+}

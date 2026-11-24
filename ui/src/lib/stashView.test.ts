@@ -25,8 +25,6 @@ import {
   moneyStart,
   moneySubmit,
   moneyTab,
-  nextLine,
-  nextText,
   notAfter,
   otherAccounts,
   overBooked,
@@ -319,15 +317,6 @@ test('the active stashes and the archived ones keep their order', () => {
   assert.deepEqual(archivedStashes(list).map((each) => each.id), ['2', '4'])
 })
 
-test('the line under a card: reached, overdue, what is left with a month, what is left, or nothing', () => {
-  assert.deepEqual(nextLine(stash()), { kind: 'left', left: '750.00', perMonth: '107.15', until: '2027-06-30' })
-  assert.deepEqual(nextLine(stash({ targetDate: null, perMonth: null })), { kind: 'left', left: '750.00', perMonth: null, until: null })
-  assert.deepEqual(nextLine(stash({ reached: true, left: '0.00', perMonth: null })), { kind: 'reached' })
-  assert.deepEqual(nextLine(stash({ overdue: true, perMonth: null, targetDate: '2026-06-30' })), { kind: 'overdue', since: '2026-06-30' })
-  assert.equal(nextLine(stash({ target: null, left: null, perMonth: null, targetDate: null })), null)
-  assert.deepEqual(nextLine(stash({ saved: '1440.00', reached: true, left: '0.00', perMonth: null })), { kind: 'reached' }, 'above the target is reached too')
-})
-
 test('a date in words is lower case in the person\'s language and never shifts with the time zone', () => {
   assert.equal(monthWords('2027-06-30', 'en-GB'), 'june 2027')
   assert.equal(dayWords('2026-06-30', 'en-GB'), '30 june 2026')
@@ -511,19 +500,12 @@ test('an add that brings the stash to its target is noticed once', () => {
   assert.equal(reachedNow({ reached: true }, { reached: false }), false, 'a take that brings it below')
 })
 
-test('the words of a card: saved of target with the percent, or saved alone; what is next in a line', () => {
+test('the words of a card: saved of target, or saved alone (the percent is a value of its own)', () => {
   const say = (key: string, vars: Record<string, string | number> = {}) => `${key}${Object.entries(vars).map(([name, value]) => ` ${name}=${value}`).join('')}`
   const plain = (amount: string) => amount
-  assert.equal(figures(stash(), plain, say as never), 'stashes.of saved=450.00 target=1200.00 · stashes.percent percent=37')
+  assert.equal(figures(stash(), plain, say as never), 'stashes.of saved=450.00 target=1200.00')
   assert.equal(figures(stash({ target: null, percent: null }), plain, say as never), 'stashes.saved amount=450.00')
-  assert.equal(figures(stash({ saved: '-5.00', percent: 0 }), plain, say as never), 'stashes.of saved=-5.00 target=1200.00 · stashes.percent percent=0', 'below 0, as it is')
-  assert.deepEqual(nextText({ kind: 'left', left: '750.00', perMonth: '107.15', until: '2027-06-30' }, plain, say as never, 'en-GB'), {
-    text: 'stashes.left amount=750.00 · stashes.perMonth amount=107.15 date=june 2027',
-    warning: false,
-  })
-  assert.deepEqual(nextText({ kind: 'left', left: '750.00', perMonth: null, until: null }, plain, say as never, 'en-GB'), { text: 'stashes.left amount=750.00', warning: false })
-  assert.deepEqual(nextText({ kind: 'reached' }, plain, say as never, 'en-GB'), { text: 'stashes.reached', warning: false })
-  assert.deepEqual(nextText({ kind: 'overdue', since: '2026-06-30' }, plain, say as never, 'en-GB'), { text: 'stashes.overdue date=30 june 2026', warning: true })
+  assert.equal(figures(stash({ saved: '-5.00', percent: 0 }), plain, say as never), 'stashes.of saved=-5.00 target=1200.00', 'below 0, as it is')
 })
 
 // -- deposits (docs/loans-deposits-design.md, sections 5.3 and 5.5) ---------------------------------------------------------------------------------

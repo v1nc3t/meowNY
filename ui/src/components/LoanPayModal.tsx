@@ -12,6 +12,7 @@ import { fromMinor, moneyIn } from '../lib/money'
 import { saveChoice, storedId } from '../lib/sticky'
 import DatePicker from './DatePicker'
 import Dropdown from './Dropdown'
+import { FactStrip } from './Facts'
 import Modal, { modalFormId } from './Modal'
 
 /** Where the account a payment came from, and its category, are kept for the next payment. */
@@ -22,7 +23,7 @@ const LAST_CATEGORY = 'loans.category'
  * Pays a credit, a loan or a mortgage (docs/loans-deposits-design.md, sections 5.4 and 5.6): one payment, split in two by the app. The interest part
  * is an expense from the paying account, in a category, and the rest, the principal, a transfer that lowers the debt. It opens with the account the last
  * payment came from (else the main account), the installment as the amount, a month of interest as the interest (never more than the amount, and it
- * follows the amount until it is typed), the last category used, and today. Under the amounts: the principal, and what is still owed after it. Done is
+ * follows the amount until it is typed), the last category used, and today. Under the amounts: a strip with the principal, what is still owed after it, and the state of the debt. Done is
  * off while the amount is wrong, the interest is above the amount, or there is interest and no category. The states are those of
  * docs/stash-design.md, section 5.3: errors go back to editing with a toast, and a second submit while saving is ignored. The core checks it all again.
  */
@@ -94,9 +95,12 @@ function PayForm({
 
   const money = moneyIn(liability.currency, locale)
   const check = checkPay(fields)
-  // the line under the amounts is there while only the category is missing
+  // the strip under the amounts is there while only the category is missing; with the interest over the payment it has nothing to say
+  const interestOver = !check.ok && check.reason === 'overAmount'
   const principal = payPrincipal(fields)
   const after = principal === null ? null : payAfter(liability.balance, principal)
+  const preview = !interestOver && principal !== null && after ? { principal, owed: after.owed, state: after.state } : null
+  const none = <span className="cell-none">—</span>
   // the category is asked for only when there is interest to book
   const interestless = check.ok && check.interest === 0n
   const name = accountName(liability, t)
@@ -148,21 +152,22 @@ function PayForm({
             inputMode="decimal"
             autoComplete="off"
             placeholder="0.00"
-            aria-invalid={(!check.ok && (check.reason === 'interest' || check.reason === 'overAmount')) || undefined}
+            aria-invalid={(!check.ok && (check.reason === 'interest' || interestOver)) || undefined}
             value={fields.interest}
             onChange={(event) => setFields((current) => withInterest(current, event.target.value))}
           />
         </label>
         {/* always there, so the dialog does not change height as the amounts become right and wrong */}
-        <p className={!check.ok && check.reason === 'overAmount' ? 'stash-after is-broken' : 'stash-after'} role="status">
-          {!check.ok && check.reason === 'overAmount'
-            ? t('loans.interestOver')
-            : after && principal !== null
-              ? [t('loans.principal', { amount: money(fromMinor(principal)) }), t('loans.owedAfter', { amount: money(fromMinor(after.owed)) }), after.state === 'OWING' ? '' : t(`loans.state.${after.state}`)]
-                  .filter(Boolean)
-                  .join(' · ')
-              : ''}
-        </p>
+        <div role="status">
+          <FactStrip
+            items={[
+              { label: t('loans.principal'), value: preview ? money(fromMinor(preview.principal)) : none },
+              { label: t('loans.owedAfter'), value: preview ? money(fromMinor(preview.owed)) : none },
+              { label: t('loans.stateLabel'), value: preview ? t(`loans.state.${preview.state}`) : none },
+            ]}
+          />
+          <p className="stash-after is-broken">{interestOver ? t('loans.interestOver') : ''}</p>
+        </div>
         {interestless ? null : (
           <Dropdown
             label={t('loans.category')}

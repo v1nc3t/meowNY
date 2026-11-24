@@ -299,6 +299,11 @@ label.export-chip:has(input:disabled) {
   font-size: 0.75rem;
 }
 
+.export-preview-meta b {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
 .export-frame {
   display: flex;
   flex-direction: column;

@@ -30,16 +30,15 @@ export function MeterBar({ fill, reached, over = false }: { fill: number; reache
   )
 }
 
-/** A small card of a stash that links to its page: its name, its numbers and a bar. On an account's page and on the dashboard. */
+/** A small card of a stash that links to its page: its name and its percent in a line, its numbers under them, and a bar. On an account's page and on the dashboard. */
 export function StashMini({ stash, locale }: { stash: Stash; locale: string }) {
   const t = useT()
   const money = stashMoney(stash, locale)
   return (
     <Link className="stash-mini" to={`/app/stashes/${stash.id}`}>
       <span className="stash-mini-text">
-        <span className="stash-mini-name" title={stash.name}>
-          {stash.name}
-        </span>
+        <span className="stash-mini-name">{stash.name}</span>
+        {stash.percent === null ? null : <span className="stash-mini-percent">{t('stashes.percent', { percent: stash.percent })}</span>}
         <span className={cn('stash-mini-figures', stash.saved.startsWith('-') && 'is-below')}>{figures(stash, money, t)}</span>
       </span>
       <StashBar saved={stash.saved} target={stash.target} />
