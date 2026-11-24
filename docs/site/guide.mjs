@@ -233,7 +233,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Open **recurring** and press **add recurring transaction** (or press `n`; on the phone, the **+** at the top).',
+          'Open **recurring** and press **add recurring transaction** (or press `n`; on the phone, choose it in the round **add** button\'s menu).',
           'Choose the **expense** or the **income** tab (or press `Alt+1` or `Alt+2`).',
           'Type a name and choose a category; the list holds the categories of that kind. Type an amount, or leave it empty for a bill with no fixed amount: it shows **varies** and asks for the amount when you pay it.',
           'Choose the account. An expense asks for it with more than one account; an income always asks, under **into account**. The list holds the accounts in your currency only.',
@@ -277,7 +277,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Open **accounts** (or press `g` then `a`) and press **add account** (or press `n`).',
+          'Open **accounts** (or press `g` then `a`) and press **add account** (or press `n`; on the phone, choose it in the round **add** button\'s menu).',
           'Type a name and choose the type: **checking**, **savings**, **cash** or **credit card**.',
           'Leave the **currency** as it is, or type another, such as RON ([an account in another currency](#account-currency)).',
           'Add an **account number** if you like: an IBAN, or anything that helps you tell it apart.',
@@ -297,7 +297,7 @@ const SECTIONS = [
           'Under it, step through the months (the arrows, or `[` and `]`; `t` is this month). The month you choose sets everything below.',
           'Two lists show where the month went: **spent by category** and **came in by category**, each with its total and a bar for every category. They sit side by side, and one over the other on the phone. Transfers, and a split bill a friend paid, are not in them.',
           'Then the statement. Each line is something that moved the account, the newest first, with the **balance after** it. A transaction\'s line leads to the transaction, a friend\'s line to their history. A transfer\'s line has the pencil and the bin.',
-          'The title row has **add expense** and **add income**. **transfer** (with two accounts or more), **edit** and **book interest** are in the **⋯** menu. The add buttons and **transfer** open the add dialog on their tab with this account already chosen. An archived account has none: you can only look at it, and **restore** it. On the phone only **add expense** is in the title row, and the rest is in the **⋯** menu.',
+          'The title row has **add expense** and **add income**. **transfer** (with two accounts or more), **edit** and **book interest** are in the **⋯** menu. The add buttons and **transfer** open the add dialog on their tab with this account already chosen. An archived account has none: you can only look at it, and **restore** it. On the phone **add expense** is a line of the round **add** button\'s menu, and the rest is in the **⋯** menu.',
           'Press **back** to return to the list.',
         ],
       },
@@ -425,7 +425,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Open **stashes** and press **new stash** (or press `n`). Leave the switch on **goal**; for a deposit, see [term deposits](#deposit).',
+          'Open **stashes** and press **new stash** (or press `n`; on the phone, choose it in the round **add** button\'s menu). Leave the switch on **goal**; for a deposit, see [term deposits](#deposit).',
           'Type a name, up to 50 characters. Two stashes that are not archived cannot share a name.',
           'Choose the **account** the stash lives in. It is always asked, also with one account. A stash opened from an account\'s page starts with that account.',
           'Optional: type a **target**, how much you want to save. Empty means no target. For an account in another currency, the target is in that currency.',
@@ -454,7 +454,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Press **+** or **−** on a row (on the phone, tap the row and press the add or take-out button). On a stash\'s page, press **add money** (or `n`) or **take out**. The dialog has two tabs, **add** and **take out**, and `Alt+1` and `Alt+2` choose one. Changing tab keeps the amount, the date and the note.',
+          'Press **+** or **−** on a row (on the phone, tap the row and press the add or take-out button). On a stash\'s page, press **add money** (or `n`) or **take out**; on the phone, **add money** is a line of the round **add** button\'s menu and **take out** is in the **⋯** menu. The dialog has two tabs, **add** and **take out**, and `Alt+1` and `Alt+2` choose one. Changing tab keeps the amount, the date and the note.',
           'Type the **amount**, or press a chip under it: **the rest** (what is left to the target), **a month** (what the target date asks of this month), **all free** (everything that is free) for an add; **all** or **half** of what is saved for a take. Only the chips that make sense for the stash are shown.',
           'Look at the bar under the chips. The solid part is what the stash holds now, the striped part what this adds or takes, and the line says what it would hold: **after this: 550.00 of 1200.00 · 45%**. If the amount breaks a limit ([what is free](#stash-free)), the line says why in red and **done** stays off.',
           'Check the date. It starts at today and cannot be after today. Add a **note** if you like, up to 200 characters.',
@@ -511,7 +511,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Open **stashes**, press **new stash** and switch to **deposit**.',
+          'Open **stashes**, press **new stash** (on the phone, in the round **add** button\'s menu) and switch to **deposit**.',
           'Type a name and choose the account. Type the **interest rate** and its **period** (per month or per year).',
           'Check the **start date** (today) and the **maturity** (a year later). The maturity must be after the start. A target is optional.',
           'Press **done**, then **+** on its row to put the money in. A deposit takes money only while it runs.',
@@ -542,7 +542,7 @@ const SECTIONS = [
         t: 'ol',
         items: [
           'Open **documents**.',
-          'Press **add file**, or drag files onto the window. On the phone, **take photo** is in the **⋯** menu.',
+          'Press **add file**, or drag files onto the window. On the phone, **add file** is a line of the round **add** button\'s menu, and **take photo** is in the **⋯** menu.',
           'Click a row (tap it on the phone) to see its details: its type, its size, where its file is, and what it is attached to. The pencil changes its name and date.',
         ],
       },
@@ -604,7 +604,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Open **debts** and press **lend** (money you gave, or press `n`) or **borrow** (money you got; on the phone it is in the **⋯** menu). If a friend is open, the entry starts with them.',
+          'Open **debts** and press **lend** (money you gave, or press `n`; on the phone, a line of the round **add** button\'s menu) or **borrow** (money you got; on the phone it is in the **⋯** menu). If a friend is open, the entry starts with them.',
           'Choose the friend (or **add friend**), and type the amount and the date. Add a note if you like; it can run over several lines.',
           'Press **done**.',
         ],
@@ -627,7 +627,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Open **debts**, choose the **debts** tab and press **new debt**.',
+          'Open **debts**, choose the **debts** tab and press **new debt** (on the phone, in the round **add** button\'s menu).',
           'Type a name, and choose **credit**, **loan** or **mortgage**.',
           'Type what is **owed** (without a minus) and since when.',
           'Optional: type the **interest rate** and its **period**, and the **installment** you pay each time.',
@@ -639,7 +639,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Press **pay** on its row, or on its page.',
+          'Press **pay** on its row, or on its page (on the phone, in the round **add** button\'s menu).',
           'Choose the account to **pay from**. The amount starts as the installment, and the **interest** as the interest of a month on what is owed.',
           'Check both against your bank. With interest, choose the **interest category** (an expense category). The dialog shows the **principal** (the payment minus the interest) and what is **owed after**.',
           'Press **done**. meowNY makes a transfer of the principal into the debt, and an expense of the interest in the account you paid from.',
@@ -747,8 +747,8 @@ const SECTIONS = [
         t: 'ul',
         items: [
           'The logo at the left of a page\'s title opens the menu: every page (dashboard, transactions, accounts, stashes, categories, recurring, debts, documents, sync and settings) and **lock**. A swipe to the right from the left edge of the screen opens it too. Choosing a page, a tap beside the menu or a swipe to the left closes it.',
-          'A page has one main button at the top (the **+** that adds to its list) and a **⋯** button for the rest: second actions, and switches such as **show archived**. A **?** beside a title explains the page.',
-          'The round **add** button adds a transaction, a category or a friend, or scans a bill code.',
+          'A page has a **⋯** button at the top for its second actions and for switches such as **show archived**. A **?** beside a title explains the page.',
+          'The round **add** button (on every page but settings and sync) has the page\'s main action first (**add account**, **new stash**, **add recurring transaction**, **lend**, **add file** and the like), then **add transaction**, **add category**, **add friend** and **scan a bill**. A page whose main action is one of those does not repeat it.',
           'Tap a row to open it: it shows its facts, one to a line, and its buttons (edit, delete and the like). Documents: **take photo** (in the **⋯** menu), and **keep on phone** for a file that is on the computer.',
           'Export, backups, the recovery key, pairing and the command line are on the computer only.',
           'Debt reminders ring on the phone at the time you chose, also when the app is closed.',

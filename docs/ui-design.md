@@ -32,8 +32,9 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
    Details are a list of label → value pairs (`Facts`), then the row's buttons. Never a run of words joined by dots.
 5. **A quiet top of the page.** A page starts with `PageHeader`: its title, at most two buttons (the main action filled, one more
    plain), and a "more" button (`MoreMenu`, the "⋯" icon) that holds the rest: second actions (scan, paste a code, add friend,
-   notifications), and switches such as "show removed friends" or "show archived". On the phone only the main action is a button in
-   the header (an icon button); the other one goes into the "⋯" menu, in front of the page's own items. Filters and search stay where
+   notifications), and switches such as "show removed friends" or "show archived". On the phone the second button goes into the "⋯"
+   menu, in front of the page's own items, and the main action is not a header button either: where the round add button is shown, it
+   is the first line of that button's menu (rule in section 4). Filters and search stay where
    the list needs them, in one line: a search field and a filter button that opens the filters. The month or year a page shows is one
    compact control in the header (`PeriodNav`).
 6. **Fewer words on buttons.** A button whose icon says it all is an icon button with an `aria-label` (edit, delete, archive, restore,
@@ -57,8 +58,11 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
 - **Swipes.** A swipe to the right that starts at the left edge of the screen (the first 24 px) opens the drawer (`AppLayout`,
   `opensMenu` in `lib/swipe.ts`), and a swipe to the left inside it closes it (`PhoneMenu`, `closesMenu`). The swipe from page to page
   (it followed the bottom tabs) is gone; the pages' own swipes (the budget tabs) stay.
-- The round add button (`QuickAdd`) stays, as it is. Transactions and categories, which it adds to, have no main button of their own
-  on the phone; the other pages keep theirs.
+- **One add button.** The round add button (`QuickAdd`) is on every page but settings and sync. Its menu starts with the main action
+  of the page shown (add account, new stash, add recurring transaction, lend, add file…), which `PageHeader` hands over
+  (`hooks/quickAdd.ts`), then add transaction, add category, add friend and scan a bill; a page whose main action is one of those lines
+  does not repeat it (transactions and categories have none of their own). So the page's top line has no "+" on the phone, and a
+  phone has one add button, not two. Settings and sync have no round button, and keep a main action, if they have one, in the header.
 
 ## 5. The phone rows (`TapRow`)
 
@@ -77,7 +81,7 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
 
 | Piece | What |
 |---|---|
-| `PageHeader` | `title`, `actions` (≤ 2; on a phone only the main one shows, the other goes into the menu), `more` (items for `MoreMenu`), optional `aside` (a total such as "in accounts €13,308.93"), `help` (a `HelpButton` beside the title), `back` (a button to the list a page came from) and `children` (the period control); renders the logo menu button on a phone; sticky on a phone |
+| `PageHeader` | `title`, `actions` (≤ 2; on a phone the main one is the first line of the round add button's menu, or stays a header button where there is none, and the other goes into the "⋯" menu), `more` (items for `MoreMenu`), optional `aside` (a total such as "in accounts €13,308.93"), `help` (a `HelpButton` beside the title), `back` (a button to the list a page came from) and `children` (the period control); renders the logo menu button on a phone; sticky on a phone |
 | `MoreMenu` | the "⋯" icon button and its menu: `role="menu"`, items are buttons or switches (`role="menuitemcheckbox"`), arrow keys move, Escape closes and gives the focus back, a click outside closes |
 | `HelpButton` | "?" icon button with `aria-label` "help", opens a popover (on a phone: a small dialog) with a title and a few lines; a dialog (`Modal`) has it through its `help` prop |
 | `PeriodNav` | "‹ nov 2026 ›": a month or a year with arrows, a popover to choose one, and "current" while another one is shown; `MonthNav` and `YearNav` are it with a kind |
