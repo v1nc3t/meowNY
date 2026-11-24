@@ -41,7 +41,7 @@
   overflow: visible;
 }
 
-/* A pixel arrow on the right, three rows of 2px blocks (6, 4 and 2 wide... a stepped triangle); it turns over while the list is
+/* A pixel arrow on the right, three rows of blocks (6, 4 and 2 units wide... a stepped triangle); it turns over while the list is
    open, in two steps, like a sprite. */
 .pick-button::after,
 .pick-toggle::after {
@@ -49,13 +49,13 @@
   position: absolute;
   top: 50%;
   right: 0.75rem;
-  width: 10px;
-  height: 6px;
-  margin-top: -3px;
+  width: 0.625rem;
+  height: 0.375rem;
+  margin-top: -0.1875rem;
   background:
-    linear-gradient(currentColor 0 0) 0 0 / 10px 2px no-repeat,
-    linear-gradient(currentColor 0 0) 2px 2px / 6px 2px no-repeat,
-    linear-gradient(currentColor 0 0) 4px 4px / 2px 2px no-repeat;
+    linear-gradient(currentColor 0 0) 0 0 / 0.625rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) 0.125rem 0.125rem / 0.375rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) 0.25rem 0.25rem / 0.125rem 0.125rem no-repeat;
   opacity: 0.6;
   transition: transform var(--t-fast) steps(2, end);
 }
@@ -67,7 +67,7 @@
 
 .pick-button[aria-expanded='true'] {
   border-color: var(--ring);
-  box-shadow: 0 0 0 1px var(--ring);
+  box-shadow: 0 0 0 var(--hairline) var(--ring);
 }
 
 /* The list opens in a popover: a small flat card with a row for each choice. */
@@ -108,7 +108,7 @@
 
 .pick-list > li.pick-group:not(:first-child) {
   margin-top: 0.25rem;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
 }
 
 .pick-list button {
@@ -149,8 +149,8 @@
   right: 0.75rem;
   width: 0.3125rem;
   height: 0.5625rem;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
+  border-right: var(--hairline-2) solid currentColor;
+  border-bottom: var(--hairline-2) solid currentColor;
   transform: translateY(-65%) rotate(45deg);
 }
 
@@ -344,7 +344,7 @@ body:has(dialog[open]) {
 }
 
 .section-tabs > button:focus-visible {
-  outline-offset: -2px;
+  outline-offset: calc(var(--hairline-2) * -1);
 }
 
 .modal .section-tabs > button {
@@ -367,10 +367,11 @@ body:has(dialog[open]) {
   margin: 0;
 }
 
-/* Dates as dropdowns: day, month and year side by side. A label sits above, like other fields. */
+/* Dates as dropdowns: day, month and year side by side (the year goes to a line of its own only when the three do not fit, at a large text
+   size on a phone). A label sits above, like other fields. */
 .date-picker {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 0.375rem;
 }
 
@@ -408,7 +409,7 @@ body:has(dialog[open]) {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.375rem 0;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
 }
 
 .shortcut-row dt {

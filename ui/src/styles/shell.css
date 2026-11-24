@@ -51,15 +51,15 @@
   display: none;
 }
 
-/* The pixel icons of the sidebar, at their own 12px grid. */
+/* The pixel icons of the sidebar, at their own 12 by 12 grid. */
 .nav-icon {
-  width: 12px;
-  height: 12px;
+  width: var(--icon);
+  height: var(--icon);
   flex: 0 0 auto;
 }
 
-/* Closing changes the width only: the icons keep their places (an icon sits 14px in from the edge of the column's 40px, so it is in the
-   middle when the sidebar is 64px wide). The names and the logo stay where they are and fade out, while the narrowing column cuts
+/* Closing changes the width only: the icons keep their places (an icon sits 0.875rem in from the edge of the column's 2.5rem, so it is in the
+   middle when the sidebar is 4rem wide). The names and the logo stay where they are and fade out, while the narrowing column cuts
    them off; after that they are hidden, so the keyboard skips them. */
 .app-logo,
 .nav-label {
@@ -122,7 +122,7 @@
   color: var(--foreground);
   font-weight: 600;
   /* The page you are on is marked in the green of the accents. */
-  box-shadow: inset 2px 0 0 var(--primary);
+  box-shadow: inset var(--hairline-2) 0 0 var(--primary);
 }
 
 .sidebar-footer {
@@ -143,7 +143,7 @@
   gap: 0.25rem 1.5rem;
   margin: 0;
   padding: 0.5rem 0 0.25rem;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
   font-size: 0.8125rem;
   color: var(--muted-foreground);
 }
@@ -256,7 +256,7 @@ body:has(.app-shell.is-locked) {
     gap: 0.75rem;
     padding: 0.75rem 1rem;
     border-right: none;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--hairline) solid var(--border);
   }
 
   /* A window this narrow has no sidebar to close: whatever was saved, the names show. */

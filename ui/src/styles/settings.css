@@ -24,17 +24,17 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(2.5rem + env(safe-area-inset-bottom, 0rem));
 }
 
-/* The card is the one pixel frame of the app, like a game's title screen: a 2px line in the text colour with its corner pixels left
+/* The card is the one pixel frame of the app, like a game's title screen: a thin line (--hairline-2) in the text colour with its corner pixels left
    out, on a hard shadow (box-shadows, no border), here for every password screen. */
 .gate > form,
 .gate > .panel {
   display: flex;
   flex-direction: column;
   width: min(100%, 24rem);
-  margin: 2px 6px 6px 2px;
+  margin: var(--hairline-2) 0.375rem 0.375rem var(--hairline-2);
   padding: 1.5rem;
   gap: 1rem;
   color: var(--card-foreground);
@@ -42,12 +42,12 @@
   border: 0;
   border-radius: var(--radius-xl);
   box-shadow:
-    0 -2px 0 var(--foreground),
-    0 2px 0 var(--foreground),
-    -2px 0 0 var(--foreground),
-    2px 0 0 var(--foreground),
-    6px 4px 0 var(--press-shadow),
-    4px 6px 0 var(--press-shadow);
+    0 calc(var(--hairline-2) * -1) 0 var(--foreground),
+    0 var(--hairline-2) 0 var(--foreground),
+    calc(var(--hairline-2) * -1) 0 0 var(--foreground),
+    var(--hairline-2) 0 0 var(--foreground),
+    0.375rem 0.25rem 0 var(--press-shadow),
+    0.25rem 0.375rem 0 var(--press-shadow);
 }
 
 .gate .brand-mark {
@@ -66,7 +66,7 @@
 .gate h1 {
   margin: 0;
   font-size: var(--pixel-md);
-  line-height: 33px;
+  line-height: 1.5;
 }
 
 /* The buttons of a screen are as wide as the card. */
@@ -91,7 +91,7 @@
 }
 
 html.is-phone .gate:has(> .app-footer) {
-  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0rem));
 }
 
 .gate > .app-footer {
@@ -119,7 +119,7 @@ html.is-phone .gate:has(> .app-footer) {
 .decrypting-line {
   width: 14rem;
   max-width: 100%;
-  height: 2px;
+  height: var(--hairline-2);
   overflow: hidden;
   background: var(--border);
 }
@@ -215,7 +215,7 @@ html.is-phone .gate:has(> .app-footer) {
   letter-spacing: 0.08em;
   color: var(--foreground);
   background: var(--muted);
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-md);
   overflow-wrap: anywhere;
   user-select: all;
@@ -326,7 +326,7 @@ html.is-phone .gate:has(> .app-footer) {
 .settings-nav-item[aria-current='page'] {
   font-weight: 600;
   color: var(--foreground);
-  box-shadow: inset 2px 0 0 var(--primary);
+  box-shadow: inset var(--hairline-2) 0 0 var(--primary);
 }
 
 .settings-section {
@@ -373,7 +373,7 @@ html.is-phone .gate:has(> .app-footer) {
 /* The rows: a line above the first, and one under each. */
 .settings-rows {
   width: 100%;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
 }
 
 .settings-row {
@@ -385,7 +385,7 @@ html.is-phone .gate:has(> .app-footer) {
   width: 100%;
   min-height: 3.5rem;
   padding: 0.875rem 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--hairline) solid var(--border);
 }
 
 /* A section with no room for a name beside its control (a narrow window with the sidebar open): the name goes above the control, which
@@ -490,7 +490,7 @@ html.is-phone .gate:has(> .app-footer) {
   min-width: 2.25rem;
   height: 1.25rem;
   background: var(--input);
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-md);
   transition: background-color 0.15s, border-color 0.15s;
 }
@@ -498,10 +498,10 @@ html.is-phone .gate:has(> .app-footer) {
 .settings-rows input.settings-switch[type='checkbox']::before {
   content: '';
   position: absolute;
-  top: 1px;
-  left: 1px;
-  width: calc(1.25rem - 4px);
-  height: calc(1.25rem - 4px);
+  top: var(--hairline);
+  left: var(--hairline);
+  width: calc(1.25rem - var(--hairline) * 4);
+  height: calc(1.25rem - var(--hairline) * 4);
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--muted-foreground);
@@ -524,7 +524,7 @@ html.is-phone .gate:has(> .app-footer) {
 }
 
 /* The text size slider: a flat track and a square knob in the main colour, like the switch. The app runs in WebKit and Chromium web views.
-   Its 2px margin of its own is gone, so the track runs from edge to edge of the fields above it. */
+   Its small margin of its own is gone, so the track runs from edge to edge of the fields above it. */
 .settings-rows input.settings-range {
   appearance: none;
   margin-inline: 0;
@@ -536,7 +536,7 @@ html.is-phone .gate:has(> .app-footer) {
 }
 
 .settings-range::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 0.25rem;
   background: var(--input);
 }
 
@@ -544,7 +544,7 @@ html.is-phone .gate:has(> .app-footer) {
   appearance: none;
   width: 1rem;
   height: 1rem;
-  margin-top: calc(2px - 0.5rem);
+  margin-top: -0.375rem;
   background: var(--primary);
   border: 0;
   border-radius: 0;
@@ -573,9 +573,9 @@ html.is-phone .gate:has(> .app-footer) {
 /* What cannot be undone: a red outline round the form. Its edge (the padding and the line) takes room from the name column, so the fields
    inside start where the fields of the rows outside it do. */
 .settings-danger {
-  --label-col: calc(clamp(14rem, 30cqw, 26rem) - 1rem - 1px);
+  --label-col: calc(clamp(14rem, 30cqw, 26rem) - 1rem - var(--hairline));
   padding: 1rem;
-  border: 1px solid var(--destructive);
+  border: var(--hairline) solid var(--destructive);
   border-radius: var(--radius-lg);
 }
 
@@ -734,7 +734,7 @@ ul.card-list.token-table > li.list-head {
     overflow-x: auto;
     white-space: nowrap;
     background: var(--background);
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--hairline) solid var(--border);
     scrollbar-width: thin;
   }
 
@@ -744,7 +744,7 @@ ul.card-list.token-table > li.list-head {
 
   /* In a row of tabs the mark is a line under the one you are on. */
   .settings-nav-item[aria-current='page'] {
-    box-shadow: inset 0 -2px 0 var(--primary);
+    box-shadow: inset 0 calc(var(--hairline-2) * -1) 0 var(--primary);
   }
 }
 
@@ -786,7 +786,7 @@ ul.card-list.token-table > li.list-head {
   overflow: hidden;
   color: var(--card-foreground);
   background: var(--card);
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-xl);
 }
 
@@ -800,7 +800,7 @@ ul.card-list.token-table > li.list-head {
   font-size: 0.9375rem;
   color: var(--foreground);
   text-decoration: none;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
 }
 
 .settings-list-item:first-child {
@@ -854,7 +854,7 @@ ul.card-list.token-table > li.list-head {
 .sync-panel {
   width: 100%;
   padding: 1.25rem;
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-lg);
 }
 
@@ -906,7 +906,7 @@ html.is-phone .sync-panel {
   align-self: flex-start;
   margin: 0;
   padding: 0.75rem 1.5rem;
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-md);
   background: var(--muted);
   font-family: var(--font);
@@ -952,7 +952,7 @@ html.is-scanning #root {
   flex-direction: column;
   align-items: center;
   gap: 1rem;
-  padding: 1.25rem 1rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  padding: 1.25rem 1rem calc(1.25rem + env(safe-area-inset-bottom, 0rem));
   background: rgba(0, 0, 0, 0.8); /* fixed: the camera view is dark whatever the theme */
   visibility: visible;
   text-align: center;
@@ -963,21 +963,21 @@ html.is-scanning #root {
    visible height (the address-bar-free `dvh`). */
 html.is-phone .gate {
   min-height: 100dvh;
-  padding-top: calc(10dvh + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+  padding-top: calc(10dvh + env(safe-area-inset-top, 0rem));
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0rem));
 }
 
 html.is-phone .gate > .decrypting:not(.is-below) {
-  min-height: calc(100dvh - 10dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  min-height: calc(100dvh - 10dvh - 2rem - env(safe-area-inset-top, 0rem) - env(safe-area-inset-bottom, 0rem));
 }
 
-/* The card of a password screen is as wide as the boxes of the other pages: its frame and shadow take the 8px of its margins, so they
-   end on the page's 14px sides (at 390px; at 360px it is already as wide as the screen allows). */
+/* The card of a password screen is as wide as the boxes of the other pages: its frame and shadow take the 0.5rem of its margins, so they
+   end on the page's 0.875rem sides (on a phone of the usual width; on a narrower one it is already as wide as the screen allows). */
 html.is-phone .gate > :is(form:not(.onboard-form), .panel:not(.onboard-welcome)) {
-  width: calc(100% - 8px);
+  width: calc(100% - 0.5rem);
 }
 
-/* The show button fills the 44px field. */
+/* The show button fills the field. */
 html.is-phone .field-input button {
   top: 0;
   right: 0;
@@ -1028,7 +1028,7 @@ fieldset.conflict {
   margin: 0;
   padding: 0.75rem 0 0;
   border: 0;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
 }
 
 .conflict legend {
@@ -1070,7 +1070,7 @@ fieldset.conflict {
 .conflict-version[aria-pressed='true'] {
   background: var(--accent);
   border-color: var(--ring);
-  box-shadow: 0 0 0 1px var(--ring);
+  box-shadow: 0 0 0 var(--hairline) var(--ring);
 }
 
 .conflict-version[aria-pressed='true'] .conflict-who::before {
@@ -1091,7 +1091,7 @@ fieldset.conflict {
 }
 
 .conflict-field > span:first-child {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--muted-foreground);
 }
 

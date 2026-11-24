@@ -16,7 +16,7 @@ import { recurring, type Dues, type Recurring } from '../api/recurring'
 import { stats, type BudgetVsActual, type Commitments, type PlannedVsPaid, type TopCategory, type YearPoint } from '../api/stats'
 import { useToday, type Today } from '../api/today'
 import { transactions } from '../api/transactions'
-import { compact, PAD, useWidth } from '../lib/chart'
+import { AXIS_FONT, compact, PAD, useWidth } from '../lib/chart'
 import { formatMoney, formatPercent, toMinor } from '../lib/money'
 import { useSticky } from '../lib/sticky'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
@@ -396,7 +396,9 @@ function Bar({ percent, over, near, label }: { percent: number; over?: boolean; 
 function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; month: string; onPick: (month: string) => void; settings: MoneySettings }) {
   const t = useT()
   const { language } = useI18n()
-  const [ref, width] = useWidth()
+  const [ref, measured, unit] = useWidth()
+  // The chart is drawn in chart units (lib/chart.ts) and scaled by its viewBox.
+  const width = measured / unit
   const [hover, setHover] = useState<number | null>(null)
 
   const income = year.map((p) => Number(p.income))
@@ -410,7 +412,8 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
   const slot = plotW / 12
   const x = (i: number) => PAD.left + (i + 0.5) * slot
   // A narrow chart (a phone) has no room for names, and one letter is not enough to tell June from July: the month numbers.
-  const short = (i: number) => (slot < 30 ? String(i + 1) : (names[i] ?? '').slice(0, 3))
+  // With less room still (a large text size) only every second number.
+  const short = (i: number) => (slot < 30 ? (slot < 20 && i % 2 === 1 ? '' : String(i + 1)) : (names[i] ?? '').slice(0, 3))
 
   // Lines: 0 at the bottom, a round amount at the top.
   const lineH = width < 500 ? 150 : 200
@@ -491,7 +494,7 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
       </div>
       {width > 0 && !blank ? (
         <>
-          <svg className="dash-line" width={width} height={lineH} aria-hidden="true" onMouseLeave={() => setHover(null)}>
+          <svg className="dash-line" viewBox={`0 0 ${width} ${lineH}`} width={measured} height={lineH * unit} fontSize={AXIS_FONT} aria-hidden="true" onMouseLeave={() => setHover(null)}>
             {ticks.map((v) => (
               <g key={v}>
                 <line className="grid" x1={PAD.left} x2={width - PAD.right} y1={ly(v)} y2={ly(v)} />
@@ -516,7 +519,7 @@ function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; mont
             ))}
             {hits(lineH)}
           </svg>
-          <svg className="dash-line" width={width} height={barH} aria-hidden="true" onMouseLeave={() => setHover(null)}>
+          <svg className="dash-line" viewBox={`0 0 ${width} ${barH}`} width={measured} height={barH * unit} fontSize={AXIS_FONT} aria-hidden="true" onMouseLeave={() => setHover(null)}>
             <line className="grid" x1={PAD.left} x2={width - PAD.right} y1={by(0)} y2={by(0)} />
             <text className="axis" x={PAD.left - 6} y={by(0) + 3} textAnchor="end">
               0

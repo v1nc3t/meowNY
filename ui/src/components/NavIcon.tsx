@@ -1,5 +1,5 @@
-// The pixel icons of the app: each one is drawn on a 12 by 12 grid, '#' for a pixel that is on. Shown at 12px (or 24px), each of its
-// pixels is a whole pixel (or a 2 by 2 block) of the screen, and crispEdges keeps them sharp.
+// The pixel icons of the app: each one is drawn on a 12 by 12 grid, '#' for a pixel that is on. Shown at --icon (0.875rem, or twice
+// that), each of its pixels is about a pixel of the screen (or a 2 by 2 block), and crispEdges keeps them sharp.
 const ICONS: Record<string, string[]> = {
   dashboard: [
     '............',

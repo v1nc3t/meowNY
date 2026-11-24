@@ -5,7 +5,7 @@ import { monthNames } from '../api/months'
 import type { MoneySettings } from '../hooks/useMoneySettings'
 import { useToast } from '../hooks/toast'
 import { useI18n } from '../i18n/context'
-import { compact, PAD, useWidth } from '../lib/chart'
+import { AXIS_FONT, compact, PAD, useWidth } from '../lib/chart'
 import { formatMoney } from '../lib/money'
 import { niceCeil } from '../pages/dashboardMath'
 
@@ -48,7 +48,9 @@ export default function BalanceChart({
 }) {
   const { t, language } = useI18n()
   const say = useToast()
-  const [ref, width] = useWidth()
+  const [ref, measured, unit] = useWidth()
+  // The chart is drawn in chart units (lib/chart.ts) and scaled by its viewBox.
+  const width = measured / unit
   const [hover, setHover] = useState<number | null>(null)
   const [loaded, setLoaded] = useState<{ year: string; points: HistoryPoint[] } | null>(null)
   const year = month.slice(0, 4)
@@ -82,7 +84,8 @@ export default function BalanceChart({
   const slot = plotW / 12
   const x = (i: number) => PAD.left + (i + 0.5) * slot
   // A narrow chart (a phone) has no room for names: the month numbers.
-  const short = (i: number) => (slot < 30 ? String(i + 1) : (names[i] ?? '').slice(0, 3))
+  // With less room still (a large text size) only every second number.
+  const short = (i: number) => (slot < 30 ? (slot < 20 && i % 2 === 1 ? '' : String(i + 1)) : (names[i] ?? '').slice(0, 3))
 
   // Round amounts on the axis, with 0 always among them: a balance can be below it.
   const height = width < 500 ? 150 : 200
@@ -132,7 +135,7 @@ export default function BalanceChart({
         </span>
       </div>
       {width > 0 && !blank ? (
-        <svg className="dash-line" width={width} height={height} aria-hidden="true" onMouseLeave={() => setHover(null)}>
+        <svg className="dash-line" viewBox={`0 0 ${width} ${height}`} width={measured} height={height * unit} fontSize={AXIS_FONT} aria-hidden="true" onMouseLeave={() => setHover(null)}>
           {ticks.map((value) => (
             <g key={value}>
               <line className="grid" x1={PAD.left} x2={width - PAD.right} y1={y(value)} y2={y(value)} />

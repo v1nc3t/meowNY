@@ -9,7 +9,7 @@
 .card-list.acct-list {
   --act: calc(2 * var(--control-sm) + 0.25rem);
   --cols: minmax(8rem, 1fr) 13ch 12ch 11ch 12ch 13ch var(--act);
-  --grip-room: calc(12px + 0.5rem);
+  --grip-room: calc(var(--icon) + 0.5rem);
 }
 
 ul.card-list.acct-list > li.card-item,
@@ -65,8 +65,8 @@ ul.card-list.acct-list > li.card-item {
 }
 
 .acct-list .row-grip {
-  width: 12px;
-  height: 12px;
+  width: var(--icon);
+  height: var(--icon);
   flex: none;
   margin-left: -0.625rem;
   margin-right: 0.625rem;

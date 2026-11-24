@@ -1,8 +1,8 @@
 /* Design tokens: colours for the light and dark themes, radii and shadows, and the root text settings. Plain hex and rgb only, because the Linux and Android web views differ in what newer colour syntax they know. */
 
 /* The pixel font of the brand name, page titles and the headlines of the first start and the lock screen (Departure Mono, SIL Open Font
-   License: assets/fonts/OFL.txt). It is drawn on an 11px grid, so it is set in multiples of 11px, where every pixel of a letter is a
-   whole pixel of the screen. */
+   License: assets/fonts/OFL.txt). It is drawn on an 11 by 11 grid, so it is set at 22/16 or 33/16 rem (--pixel-md, --pixel-lg), where every
+   pixel of a letter is 2/16 or 3/16 rem, and all of it grows with the text size. */
 @font-face {
   font-family: 'Departure Mono';
   src: url('../assets/fonts/DepartureMono-Regular.woff2') format('woff2');
@@ -16,16 +16,22 @@
      row of a table are --control-sm, so a row stays low; on the phone every control is --control-phone, still an easy tap. */
   --control: 2rem;
   --control-sm: 1.75rem;
-  --control-phone: 40px;
+  --control-phone: 2.875rem;
 
-  /* One font for text, buttons, fields, labels and section titles; the pixel font (above) only for the brand and the page titles, at 22px and more. */
+  /* One font for text, buttons, fields, labels and section titles; the pixel font (above) only for the brand and the page titles, at 1.375rem and more. */
   --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   --font-pixel: 'Departure Mono', var(--font);
-  --pixel-md: 22px;
-  --pixel-lg: 33px;
+  --pixel-md: 1.375rem;
+  --pixel-lg: 2.0625rem;
+  /* The pixel icons (components/NavIcon.tsx) are drawn on a 12 by 12 grid, so their box is 12 grid units. */
+  --icon: 0.875rem;
+  /* Thin lines: a border, a divider, a focus ring. A line is never thinner than 1 (or 2) pixel of the screen, so it does not vanish or blur
+     at a small text size, and it grows with the text size past that. These two are the only lengths in pixels in the style sheets. */
+  --hairline: max(1px, 0.0625rem);
+  --hairline-2: max(2px, 0.125rem);
   /* Room that a scrolling area keeps around its content, so a scroll bar never covers the edge of a button
-     and a focus ring at the edge is not cut off: the ring is 2px wide and 2px away (base.css), in pixels, like this. */
-  --edge: 4px;
+     and a focus ring at the edge is not cut off: the ring is --hairline-2 wide and --hairline-2 away (base.css), so the room is twice that. */
+  --edge: calc(var(--hairline-2) * 2);
   --room: 0.875rem;
 
   /* Calm and square, with pixel touches: square corners everywhere, and shadows with no blur and no spread. Only the solid green button
@@ -36,11 +42,11 @@
   --radius-xl: 0;
   --shadow-xs: 0 0 #0000;
   --shadow-sm: 0 0 #0000;
-  --shadow-press: 2px 2px 0 var(--press-shadow);
-  --shadow-md: 2px 2px 0 var(--press-shadow);
-  --shadow-lg: 4px 4px 0 var(--press-shadow);
+  --shadow-press: 0.125rem 0.125rem 0 var(--press-shadow);
+  --shadow-md: 0.125rem 0.125rem 0 var(--press-shadow);
+  --shadow-lg: 0.25rem 0.25rem 0 var(--press-shadow);
   /* Boxes (lists, cards, fields, buttons, dialogs) have thin lines. */
-  --border-width: 1px;
+  --border-width: var(--hairline);
   /* Motion answers an action, briefly. Small changes of state snap in steps, like a sprite. base.css turns it all off when the system
      asks for less motion. */
   --ease-snap: cubic-bezier(0.2, 0.9, 0.3, 1);
@@ -104,8 +110,9 @@
   line-height: 1.5;
   /* Everything is in rem, so this one value scales spacing, text and controls with the window.
      It starts from the browser's own font size, so the person's text-size setting still counts.
-     --text-scale is the text size chosen in the settings (lib/textSize.ts). */
-  font-size: calc(clamp(0.875rem, 0.8rem + 0.3vw, 1.0625rem) * var(--text-scale, 1));
+     --text-scale is the text size chosen in the settings (lib/textSize.ts).
+     0.875 of the browser's size on a phone (the least that keeps body text and tap targets comfortable), 0.92 at a 1280 wide window, 0.9375 from 1500. */
+  font-size: calc(clamp(0.875rem, 0.8rem + 0.15vw, 0.9375rem) * var(--text-scale, 1));
   /* Amounts line up in columns everywhere. */
   font-variant-numeric: tabular-nums;
   color: var(--foreground);
