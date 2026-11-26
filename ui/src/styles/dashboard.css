@@ -4,8 +4,8 @@
 .dash {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding-bottom: 1.5rem;
+  gap: var(--page-gap);
+  padding-bottom: var(--space-5);
 }
 
 .dash ul {
@@ -21,13 +21,13 @@
 .dash-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
-  gap: 1rem;
+  gap: var(--page-gap);
   align-items: start;
 }
 
 .dash-empty {
   margin: 0;
-  padding: 0.75rem 0;
+  padding: var(--space-3) 0;
   font-size: 0.8125rem;
   text-align: center;
   color: var(--muted-foreground);
@@ -47,7 +47,7 @@
 .dash-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1rem 1.5rem;
+  gap: var(--space-4) var(--space-5);
 }
 
 @container (max-width: 34rem) {
@@ -467,7 +467,7 @@
 .dash-budgets {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--group-gap);
 }
 
 .dash-budget-group {
@@ -719,7 +719,7 @@
 .dash-col {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--page-gap);
   min-width: 0;
 }
 

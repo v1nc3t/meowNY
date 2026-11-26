@@ -2,11 +2,11 @@
 
 /* Debts (phase 10). Panes with several parts stack them with an even space between. */
 :is(.tx-pane.pane-stack, .debts-half) > * + * {
-  margin-top: 1rem;
+  margin-top: var(--page-gap);
 }
 
 :is(.tx-pane.pane-stack, .debts-half) > .debts-heading {
-  margin: 1.5rem 0 0;
+  margin: var(--group-gap) 0 0;
   font-family: var(--font);
   font-size: 1.0625rem;
   font-weight: 700;
@@ -14,7 +14,7 @@
 }
 
 :is(.tx-pane.pane-stack, .debts-half) > .debts-heading + * {
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
 }
 
 /* The debts page: the friends, then under them the debts of all friends or the history of the one chosen, each the whole width of the page,
@@ -28,7 +28,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 1.5rem;
+  gap: var(--group-gap);
 }
 
 .debts-half {
@@ -42,7 +42,7 @@
 
 /* A friend's page: the title sits the page's usual 1rem under the row of back and mark as paid, not the 0.5rem of a heading and its text. */
 html.is-phone .debts-name + .debts-heading {
-  margin-top: 1rem;
+  margin-top: var(--page-gap);
 }
 
 .debts-pager {

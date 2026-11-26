@@ -180,7 +180,7 @@
 .app-main > main {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 2.5rem 2rem 2rem;
+  padding: var(--space-6) var(--page-pad-x);
 }
 
 .app-shell.is-locked {
@@ -200,7 +200,7 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  padding-bottom: 1rem;
+  padding-bottom: var(--space-4);
 }
 
 .app-shell.is-locked .tx-page {
@@ -219,7 +219,7 @@ body:has(.app-shell.is-locked) {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1rem;
+  gap: var(--page-gap);
   min-width: 0;
   max-width: 100%;
 }
@@ -288,7 +288,7 @@ body:has(.app-shell.is-locked) {
   }
 
   .app-main > main {
-    padding: 1.75rem 1rem 2rem;
+    padding: var(--space-5) var(--space-4) var(--space-6);
   }
 
   .app-shell.is-locked,

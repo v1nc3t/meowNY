@@ -54,6 +54,11 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
 8. **Same on every page.** The same components and the same spacing everywhere; nothing page-local that looks like them.
 9. **Cut text shows itself.** Text that is cut with "…" shows the whole text in a small box when you rest the pointer on it, and
    slides to show the rest. On the phone, press and hold the cut text to see it.
+10. **One spacing scale.** The rhythm of a page (its padding, the gaps between its parts, groups, table cells, cards, dialogs and fields) is made of the
+   `--space-1…7` tokens of `tokens.css` (0.25, 0.5, 0.75, 1, 1.5, 2, 3 rem), not of a length of its own. Four roles are named: `--page-gap` between the header, the tabs, the filter line and the list (the same on every page), `--group-gap` between
+   groups and sections, `--page-pad-x` at the sides of the page, `--row-min` the height of a table row (one line, with room above and below). The phone
+   steps `--page-gap` and `--group-gap` down once, so a screen holds more content than padding. Settings follow the same pieces: a section is a group
+   heading, one box of rows (the name small and grey at the left, one control at the right), and its buttons under the box at the right, the main one last.
 
 ## 4. The phone shell
 

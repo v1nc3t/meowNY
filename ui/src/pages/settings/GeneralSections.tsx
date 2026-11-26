@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { errorText, vault, type LockPrefs } from '../../vault/api'
 import { currencyLabel } from '../../api/currencies'
-import { formatExample, localeOptions, zoneOptions } from '../../api/locales'
+import { formatExamples, localeOptions, zoneOptions } from '../../api/locales'
 import { useI18n } from '../../i18n/context'
 import { languageOptions } from '../../i18n/languages'
 import Dropdown from '../../components/Dropdown'
@@ -39,6 +39,7 @@ export function RegionSection({
   const [chosenLanguage, setChosenLanguage] = useState(settings.language)
   const [locale, setLocale] = useState(settings.locale)
   const [timezone, setTimezone] = useState(settings.timezone)
+  const example = formatExamples(locale, settings.currency)
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -59,8 +60,15 @@ export function RegionSection({
         <Field>
           <Dropdown label={t('settings.language')} value={chosenLanguage} options={languageOptions} onChange={setChosenLanguage} />
         </Field>
-        <Row label={t('settings.format')} hint={formatExample(locale, settings.currency)}>
+        <Row label={t('settings.format')}>
           <Dropdown compact label={t('settings.format')} value={locale} options={localeOptions(locale)} onChange={setLocale} />
+        </Row>
+        {/* what the choice looks like, one value to a row */}
+        <Row label={t('tx.amount')}>
+          <span className="settings-value">{example.amount}</span>
+        </Row>
+        <Row label={t('report.date')}>
+          <span className="settings-value">{example.date}</span>
         </Row>
         <Field>
           <Dropdown label={t('settings.timezone')} value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
@@ -115,7 +123,7 @@ export function AppearanceSection() {
           }}
         />
       </Field>
-      <Row label={t('settings.textSize')} hint={`${textSize}%`}>
+      <Row label={t('settings.textSize')}>
         <input
           ref={rangeRef}
           type="range"
@@ -128,6 +136,7 @@ export function AppearanceSection() {
           value={textSize}
           onChange={(event) => setTextSize(Number(event.target.value))}
         />
+        <span className="settings-value is-figure">{textSize}%</span>
       </Row>
     </Rows>
   )
@@ -175,10 +184,10 @@ export function AppLockSection({ prefs, phone, onSaved, say }: { prefs: LockPref
         )}
       </Rows>
       <Actions>
-        <Button type="submit">{t('common.save')}</Button>
         <Button variant="outline" onClick={() => void vault.lock().then(() => window.location.reload())}>
           {t('settings.lockNow')}
         </Button>
+        <Button type="submit">{t('common.save')}</Button>
       </Actions>
     </form>
   )

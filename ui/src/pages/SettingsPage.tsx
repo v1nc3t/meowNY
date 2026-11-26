@@ -7,6 +7,7 @@ import AppFooter from '../components/AppFooter'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import CommandApiBlock from '../components/CommandApiBlock'
 import HelpButton from '../components/HelpButton'
+import Icon from '../components/NavIcon'
 import PhoneSyncBlock from '../components/PhoneSyncBlock'
 import { cn } from '../components/ui/cn'
 import type { Settings } from '../vault/rules'
@@ -155,9 +156,7 @@ export default function SettingsPage() {
               {sections.map((section) => (
                 <Link key={section.id} className="settings-list-item" to={{ search: `?section=${section.id}` }}>
                   <span>{t(section.title)}</span>
-                  <span className="settings-chevron" aria-hidden="true">
-                    ›
-                  </span>
+                  <Icon name="chevron-down" className="settings-chevron" />
                 </Link>
               ))}
             </nav>
@@ -165,9 +164,10 @@ export default function SettingsPage() {
         ) : (
           <nav className="settings-nav" aria-label={t('settings.title')}>
             {sections.map((section) => (
+              // a row of the sidebar's look (shell.css): quiet text, the one you are on bold with a green mark
               <Link
                 key={section.id}
-                className="settings-nav-item"
+                className={cn('nav-item', section.id === currentId && 'active')}
                 to={{ search: `?section=${section.id}` }}
                 replace
                 aria-current={section.id === currentId ? 'page' : undefined}
@@ -182,7 +182,7 @@ export default function SettingsPage() {
           <div className="settings-section">
             {phone ? null : (
               <header className="settings-section-head">
-                <h2>{t(current.title)}</h2>
+                <h2 className="acct-group">{t(current.title)}</h2>
                 {helpFor(current.id) ? <HelpButton>{helpFor(current.id)}</HelpButton> : null}
               </header>
             )}

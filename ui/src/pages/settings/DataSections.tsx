@@ -212,14 +212,14 @@ export function BackupSection({ settings, say }: { settings: Settings; say: Say 
           </Field>
         </Rows>
         <Actions>
-          <Button type="submit" disabled={busy}>
-            {t('settings.scheduleStart')}
-          </Button>
           {schedule && (
             <Button variant="outline" onClick={() => void onStopSchedule()}>
               {t('settings.scheduleStop')}
             </Button>
           )}
+          <Button type="submit" disabled={busy}>
+            {t('settings.scheduleStart')}
+          </Button>
         </Actions>
       </form>
 

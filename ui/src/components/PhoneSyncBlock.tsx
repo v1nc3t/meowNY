@@ -143,10 +143,10 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
             </Field>
           </Rows>
           <Actions>
-            <Button onClick={() => void begin(true)}>{t('sync.add')}</Button>
             <Button variant="outline" disabled={!devices || devices.length === 0} onClick={() => void begin(false)}>
               {t('sync.start')}
             </Button>
+            <Button onClick={() => void begin(true)}>{t('sync.add')}</Button>
           </Actions>
         </div>
       ) : (

@@ -11,7 +11,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.375rem;
+  gap: var(--space-2);
   width: auto;
   flex: 0 0 auto;
   min-width: 0;
@@ -253,10 +253,10 @@ body:has(dialog[open]) {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 1rem;
+  gap: var(--space-4);
   max-height: calc(100svh - 2rem);
   /* No padding at the bottom: it is the padding of the buttons, so that they end at the edge of the dialog (see below). */
-  padding: 1.5rem 1.5rem 0;
+  padding: var(--space-5) var(--space-5) 0;
   scroll-padding-bottom: calc(var(--room) + 2rem + var(--foot-btn));
   overflow: auto;
   border-radius: var(--radius-lg);
@@ -282,8 +282,8 @@ body:has(dialog[open]) {
   position: sticky;
   bottom: 0;
   z-index: 1;
-  margin: -0.5rem -1.5rem 0;
-  padding: calc(0.5rem - var(--border-width)) 1.5rem 1.5rem;
+  margin: calc(var(--space-2) * -1) calc(var(--space-5) * -1) 0;
+  padding: calc(var(--space-2) - var(--border-width)) var(--space-5) var(--space-5);
   border-top: var(--border-width) solid transparent;
   background: var(--background);
 }
@@ -323,7 +323,7 @@ body:has(dialog[open]) {
 .entry-panel {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .modal form,
@@ -337,7 +337,7 @@ body:has(dialog[open]) {
 .date-picker {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem;
+  gap: var(--space-2);
 }
 
 .date-picker .pick.field {

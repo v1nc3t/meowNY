@@ -34,7 +34,7 @@ ul.card-list.acct-list > li.card-item .acct-free.is-over {
 
 /* The total of a group, under its accounts: in the balance column, set off by a solid line; not a row to open or to drag. */
 ul.card-list.acct-list > li.card-item.acct-subtotal {
-  min-height: 2.25rem;
+  min-height: var(--row-min);
   cursor: default;
   border-top: var(--border-width) solid var(--border);
 }
@@ -261,7 +261,7 @@ ul.card-list.loans-table > li.card-item[data-archived] {
 /* The groups of the list: a small heading over each run of accounts (the ones with no group come last). Each run is a list of its own
    with the same columns, so the amounts line up from one to the next. A long name ends in an ellipsis; the whole of it is the title. */
 .acct-group {
-  margin: 1.25rem 0 0;
+  margin: var(--group-gap) 0 0;
   overflow: hidden;
   font-size: 0.8125rem;
   font-weight: 600;
@@ -276,7 +276,7 @@ ul.card-list.loans-table > li.card-item[data-archived] {
 }
 
 .accounts-page .pane-stack > .acct-group + .card-list {
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
 }
 
 /* The name of an account in a desktop row, and the mark after it (an eye with a slash: the net worth leaves it out): the name keeps its

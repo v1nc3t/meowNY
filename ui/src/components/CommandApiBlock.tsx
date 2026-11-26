@@ -20,7 +20,7 @@ import Facts from './Facts'
 import { Row, Table } from './RowParts'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
-import { Actions, Field, Rows, SwitchRow } from '../pages/settings/layout'
+import { Actions, Field, Rows, Subtitle, SwitchRow } from '../pages/settings/layout'
 
 /**
  * Settings block for the command API: the on/off switch and the access tokens the CLI needs.
@@ -97,7 +97,6 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
 
   return (
     <div className="settings-stack">
-
       {status && (
         <Rows>
           <SwitchRow
@@ -110,7 +109,7 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
         </Rows>
       )}
 
-      <h3 className="settings-subtitle">{t('cli.tokens')}</h3>
+      <Subtitle>{t('cli.tokens')}</Subtitle>
       {tokens && tokens.length === 0 && <p className="hint">{t('cli.noTokens')}</p>}
       {tokens && tokens.length > 0 && (
         <Table

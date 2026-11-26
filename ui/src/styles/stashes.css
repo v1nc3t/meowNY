@@ -151,7 +151,7 @@ ul.card-list.stash-list .stash-when {
 
 /* The total under the rows: what they hold and their targets, set off by a solid line; not a row to open. */
 ul.card-list.stash-list > li.card-item.stash-total {
-  min-height: 2.25rem;
+  min-height: var(--row-min);
   cursor: default;
   border-top: var(--border-width) solid var(--border);
 }
@@ -608,7 +608,7 @@ ul.card-list.stash-history > li.card-item {
 .acct-stashes {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .acct-stashes > .debts-heading {

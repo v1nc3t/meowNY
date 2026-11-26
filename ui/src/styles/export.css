@@ -1,14 +1,10 @@
 /* Export page, laid out like a print dialog: the options in one panel on the left, what the file will contain under them, and the preview
    of the file in the rest of the width. In a narrow window it is one column: the options, then the summary, then the preview. */
 
-.export-page .page-header {
-  margin-bottom: 0.5rem;
-}
-
 .export-layout {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--page-gap);
   min-width: 0;
 }
 
@@ -34,8 +30,8 @@
 .export-group {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem;
+  gap: var(--space-3);
+  padding: var(--space-4);
 }
 
 .export-group-head {
