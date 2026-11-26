@@ -28,6 +28,23 @@ export function useWidth() {
   return [ref, width, unit] as const
 }
 
+/** The size of an element in pixels, kept up to date as it resizes, and how many pixels one chart unit is. For a chart that fills the room it is given. */
+export function useSize() {
+  const ref = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState({ width: 0, height: 0, unit: 1 })
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) => {
+      const unit = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16
+      setSize({ width: Math.floor(entry.contentRect.width), height: Math.floor(entry.contentRect.height), unit })
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+  return [ref, size] as const
+}
+
 /** A short number such as 12K, for the axis. */
 export function compact(value: number, locale: string): string {
   try {

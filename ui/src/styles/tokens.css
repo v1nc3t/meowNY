@@ -33,6 +33,8 @@
   --group-gap: var(--space-5);
   --page-pad-x: clamp(var(--space-6), 3vw, var(--space-7));
   --row-min: 2.75rem;
+  /* The dashboard's grid (components/dashboard): a widget is a whole number of rows, each this tall, with --page-gap between. */
+  --dash-row: 9rem;
 
   /* One font for text, buttons, fields, labels and section titles; the pixel font (above) only for the brand and the page titles, at 1.375rem and more. */
   --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;

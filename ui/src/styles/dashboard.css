@@ -1,4 +1,4 @@
-/* The dashboard page: stat cards, charts, legends and the recurring summary. */
+/* What the widgets of the dashboard hold: figures, bars, charts, legends and the budget table. The grid and the frame are dashboard-grid.css. */
 
 /* Dashboard. Scoped under .dash so the global ul, li and section rules above do not apply. */
 .dash {
@@ -18,13 +18,6 @@
   gap: 0;
 }
 
-.dash-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
-  gap: var(--page-gap);
-  align-items: start;
-}
-
 .dash-empty {
   margin: 0;
   padding: var(--space-3) 0;
@@ -37,13 +30,7 @@
   color: var(--muted-foreground);
 }
 
-/* Headline numbers: four across, two across when the card is narrow. The debts card measures its own width too, or its two
-   amounts would each get a quarter of it. */
-.dash-top,
-.dash-debts {
-  container-type: inline-size;
-}
-
+/* Headline numbers: four across, two across when the widget is narrow. A widget measures its own width (`.dash-widget-body`). */
 .dash-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -238,13 +225,13 @@
 
 .line-expense { stroke: var(--c-expense); }
 
+.line-savings { stroke: var(--c-savings); }
+
 .dot-income { fill: var(--c-income); }
 
 .dot-expense { fill: var(--c-expense); }
 
-.save-pos { fill: var(--c-savings); fill-opacity: 0.75; }
-
-.save-neg { fill: var(--c-expense); fill-opacity: 0.75; }
+.dot-savings { fill: var(--c-savings); }
 
 .dash-line .dim { opacity: 0.45; }
 
@@ -298,81 +285,21 @@
 
 .key-savings > .year-label::before { background: var(--c-savings); }
 
-/* Spending donut */
-.dash-donut {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1.25rem 1.5rem;
-}
+ 
 
-.donut-wrap {
-  position: relative;
-  flex: none;
-  width: clamp(8rem, 30%, 11rem);
-  aspect-ratio: 1;
-  margin: 0 auto;
-}
+ 
 
-.donut {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
+ 
 
-.donut path {
-  fill: var(--seg);
-  transition: opacity 0.15s;
-}
+ 
 
-.donut .dim {
-  opacity: 0.3;
-}
+ 
 
-.donut-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.125rem;
-  padding: 22%;
-  text-align: center;
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
-  pointer-events: none;
-}
+ 
 
-.donut-center b {
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: var(--foreground);
-}
+ 
 
-.donut-center span {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.seg-0 { --seg: var(--seg-0); } .seg-bg-0 { background: var(--seg-0); }
-
-.seg-1 { --seg: var(--seg-1); } .seg-bg-1 { background: var(--seg-1); }
-
-.seg-2 { --seg: var(--seg-2); } .seg-bg-2 { background: var(--seg-2); }
-
-.seg-3 { --seg: var(--seg-3); } .seg-bg-3 { background: var(--seg-3); }
-
-.seg-4 { --seg: var(--seg-4); } .seg-bg-4 { background: var(--seg-4); }
-
-.seg-5 { --seg: var(--seg-5); } .seg-bg-5 { background: var(--seg-5); }
-
-.seg-6 { --seg: var(--seg-6); } .seg-bg-6 { background: var(--seg-6); }
-
-.seg-7 { --seg: var(--seg-7); } .seg-bg-7 { background: var(--seg-7); }
+ 
 
 /* The legend of the donut goes beside it only when it has 22rem: a name of 8rem, the share and the amount of 15 characters (small print). */
 .dash-legend {
@@ -402,13 +329,6 @@
   }
 }
 
-.swatch {
-  flex: none;
-  width: 0.625rem;
-  height: 0.625rem;
-  border-radius: 0;
-}
-
 .legend-name {
   flex: 1;
   min-width: 0;
@@ -428,17 +348,6 @@
   text-align: right;
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
-}
-
-/* Who a recurring item is split with: its own column, small and quiet, cut with an ellipsis. */
-.legend-with {
-  flex: 0 1 40%;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 0.75rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted-foreground);
 }
 
 .legend-amount {
@@ -588,158 +497,13 @@
   display: none;
 }
 
-/* Recurring items */
-.dash-rec {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  container-type: inline-size;
-}
-
-.dash-rec-rows {
-  display: flex;
-  flex-direction: column;
-  font-size: 0.8125rem;
-}
-
-.dash .dash-rec-rows li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 0 1rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-sm);
-}
-
-/* The rows share one set of columns, so "per month" and "paid" line up from row to row and under their headings, whatever
-   the amounts are. (Without subgrid each row sizes its own columns, which is the fallback above.) */
-@supports (grid-template-columns: subgrid) {
-  .dash-rec-rows {
-    display: grid;
-    grid-template-columns: minmax(6rem, 1fr) max-content max-content;
-    column-gap: 1rem;
-  }
-
-  .dash-rec-rows.has-diff {
-    grid-template-columns: minmax(6rem, 1fr) max-content max-content max-content;
-  }
-
-  .dash .dash-rec-rows li {
-    grid-template-columns: subgrid;
-    grid-column: 1 / -1;
-  }
-}
-
-.dash .dash-rec-rows.has-diff li {
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-}
-
-@supports (grid-template-columns: subgrid) {
-  .dash .dash-rec-rows.has-diff li {
-    grid-template-columns: subgrid;
-  }
-}
-
-@media (hover: hover) {
-  .dash .dash-rec-rows li:not(.dash-rec-head):hover {
-    background: var(--accent);
-  }
-}
-
-.dash .dash-rec-rows .dash-rec-head {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--muted-foreground);
-  text-align: right;
-}
-
-/* The words over the columns wrap in the width of the amounts under them, so a long one ("diesen monat bezahlt") does not widen the
-   column and leave the name less room. */
-.dash .dash-rec-rows .dash-rec-head > span {
-  width: 0;
-  min-width: 100%;
-}
-
-.dash-rec-rows .legend-amount {
-  min-width: 4.5rem;
-}
-
-/* A narrow card (a phone, or a large text size): a name has a line of its own over its amounts, and the amounts keep their columns
-   under the words that head them, so no column is pushed out of the card. */
-@container (max-width: 20rem) {
-  .dash-rec-rows,
-  .dash-rec-rows.has-diff {
-    grid-template-columns: minmax(0, 1fr) max-content max-content;
-    column-gap: 0.5rem;
-  }
-
-  .dash-rec-rows.has-diff {
-    grid-template-columns: minmax(0, 1fr) max-content max-content max-content;
-  }
-
-  .dash-rec-rows .legend-amount {
-    min-width: 0;
-  }
-
-  .dash .dash-rec-rows li:not(.dash-rec-head) > .legend-name {
-    grid-column: 1 / -1;
-  }
-
-  .dash .dash-rec-rows li > :nth-child(2) {
-    grid-column: 2;
-  }
-
-  .dash .dash-rec-rows li > :nth-child(3) {
-    grid-column: 3;
-  }
-
-  .dash .dash-rec-rows li > :nth-child(4) {
-    grid-column: 4;
-  }
-}
-
 .dash-bars .legend-amount {
   min-width: 0;
 }
 
-.dash-rec-rows .legend-name {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.swatch-income { background: var(--c-income); }
-
-.swatch-expense { background: var(--c-expense); }
-
 .rec-paid { color: var(--success); }
 
 .dash .rec-over { color: var(--c-expense); }
-
-.dash-col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--page-gap);
-  min-width: 0;
-}
-
-.dash .rec-diff {
-  min-width: 4rem;
-  font-size: 0.75rem;
-}
-
-/* Dashboard on a phone: a bigger donut. */
-html.is-phone .donut-wrap {
-  width: min(86%, 17rem);
-}
-
-html.is-phone .donut-center b {
-  font-size: 1.25rem;
-}
-
-html.is-phone .donut-center {
-  font-size: 0.8125rem;
-}
 
 /* The period control (components/PeriodNav.tsx): "‹ nov 2026 ›", the middle a button that opens the choice of month and year, and "current" at the
    end only while another period is shown. The popover is drawn over the page, in the body (or in a dialog). */

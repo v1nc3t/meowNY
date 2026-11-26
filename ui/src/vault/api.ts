@@ -1,6 +1,7 @@
 import { listen } from '@tauri-apps/api/event'
 import { z } from 'zod'
 import { call, errorText, inDesktopApp, ApiError, type ErrorCode } from '../api/invoke'
+import { forgetLayouts } from '../lib/dashboardStorage'
 import { forgetChoices } from '../lib/sticky'
 import type { Settings } from './rules'
 
@@ -54,6 +55,7 @@ const done = <T>(promise: Promise<T>) => promise.then(() => undefined)
 /** All data is new (erased, created or restored): what the lists remembered about the old data (a category) means nothing now. */
 const fresh = <T>(answer: T) => {
   forgetChoices()
+  forgetLayouts()
   return answer
 }
 

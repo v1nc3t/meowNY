@@ -15,6 +15,7 @@
 @import './styles/controls.css';
 @import './styles/page-chrome.css';
 @import './styles/dashboard.css';
+@import './styles/dashboard-grid.css';
 @import './styles/money.css';
 @import './styles/debts-docs.css';
 @import './styles/accounts.css';

@@ -1,42 +1,25 @@
 import { useEffect, useState, type KeyboardEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { debts, type Summary } from '../api/debts'
-import { errorText } from '../api/invoke'
-import { monthNames, shiftMonth } from '../api/months'
-import { accounts as accountsApi, type AccountsSummary } from '../api/accounts'
-import { stashes as stashesApi, type Stash, type Summary as StashSummary } from '../api/stashes'
-import Facts from '../components/Facts'
-import PageHeader from '../components/PageHeader'
-import { StashMini } from '../components/StashParts'
-import YearNav from '../components/YearNav'
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from '../components/ui/card'
-import { EmptyState, Illustration, type PictureName } from '../components/ui/Pixel'
-import RecurringDashboard, { SOON_DAYS } from '../components/RecurringDashboard'
-import { recurring, type Dues, type Recurring } from '../api/recurring'
-import { stats, type BudgetVsActual, type Commitments, type PlannedVsPaid, type TopCategory, type YearPoint } from '../api/stats'
+import { Link } from 'react-router-dom'
+import { shiftMonth } from '../api/months'
 import { useToday, type Today } from '../api/today'
 import { transactions } from '../api/transactions'
-import { AXIS_FONT, compact, PAD, useWidth } from '../lib/chart'
-import { formatMoney, formatPercent, toMinor } from '../lib/money'
-import { useSticky } from '../lib/sticky'
+import ConfirmModal from '../components/ConfirmModal'
+import CatalogDialog from '../components/dashboard/CatalogDialog'
+import DashboardGrid from '../components/dashboard/DashboardGrid'
+import EditBar from '../components/dashboard/EditBar'
+import SettingsDialog from '../components/dashboard/SettingsDialog'
+import PageHeader from '../components/PageHeader'
+import { Illustration, type PictureName } from '../components/ui/Pixel'
+import YearNav from '../components/YearNav'
+import { newWidgetId, useDashboardLayout } from '../hooks/useDashboardLayout'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
-import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { useI18n, useT } from '../i18n/context'
 import type { MessageKey } from '../i18n/en'
 import { useShortcut } from '../keys/registry'
-import { activeStashes } from '../lib/stashView'
-import { changePercent, niceCeil, savingsRateText, slicePath, usedPercent } from './dashboardMath'
-
-const TOP_CATEGORIES = 7
-
-type MonthData = {
-  bva: BudgetVsActual
-  year: YearPoint[]
-  top: TopCategory[]
-  commitments: Commitments
-  paid: PlannedVsPaid[]
-}
+import { addWidget, setWidgetSettings } from '../lib/dashboardLayout'
+import { SPECS } from '../lib/dashboardWidgets'
+import { useSticky } from '../lib/sticky'
 
 export default function DashboardPage() {
   const { settings, error } = useMoneySettings()
@@ -46,22 +29,21 @@ export default function DashboardPage() {
   return <DashboardView settings={settings} now={now} />
 }
 
+/**
+ * The dashboard: a grid of widgets the person arranges (docs/dashboard-design.md). The period control in the header steps the month that "this
+ * month" and "this year" follow; "customize dashboard" in the "more" menu turns the widgets into things to drag, size, set and remove.
+ */
 function DashboardView({ settings, now }: { settings: MoneySettings; now: Today }) {
-  const t = useT()
+  const { t } = useI18n()
+  const profile = useProfile()
   const [month, setMonth] = useSticky('dashboard.month', () => now.month)
-  const [data, setData] = useState<MonthData | null>(null)
-  // who owes what, over all time: it does not follow the month
-  const [owed, setOwed] = useState<Summary | null>(null)
-  // what the accounts hold and net worth, today: they do not follow the month either
-  const [worth, setWorth] = useState<AccountsSummary | null>(null)
-  // the stashes: how many, what they hold, and the first three; only asked for the list once there are some. They do not follow the month either
-  const [stashed, setStashed] = useState<{ summary: StashSummary; first: Stash[] } | null>(null)
-  // the recurring items that are overdue or due soon, and all of them (for those that are split): they do not follow the month either
-  const [recurringNow, setRecurringNow] = useState<{ dues: Dues; items: Recurring[] } | null>(null)
+  const { layout, update, reset } = useDashboardLayout(profile)
+  const [editing, setEditing] = useState(false)
+  const [catalog, setCatalog] = useState(false)
+  const [asking, setAsking] = useState(false)
+  const [settingsOf, setSettingsOf] = useState<string | null>(null)
   // Whether nothing at all has been recorded yet (no transaction in any month): then the first steps show. Unknown at first.
   const [fresh, setFresh] = useState<boolean | null>(null)
-  const say = useToast()
-  const navigate = useNavigate()
 
   useEffect(() => {
     let cancelled = false
@@ -76,233 +58,74 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
     }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    void debts.summary().then(
-      (summary) => {
-        if (!cancelled) setOwed(summary)
-      },
-      () => undefined,
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    void accountsApi.summary().then(
-      (summary) => {
-        if (!cancelled) setWorth(summary)
-      },
-      () => undefined,
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    void stashesApi.summary().then(
-      async (summary) => {
-        const first = summary.stashes > 0 ? activeStashes(await stashesApi.list()).slice(0, 3) : []
-        if (!cancelled) setStashed({ summary, first })
-      },
-      () => undefined,
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    void Promise.all([recurring.dues(SOON_DAYS), recurring.list()]).then(
-      ([dues, items]) => {
-        if (!cancelled) setRecurringNow({ dues, items })
-      },
-      () => undefined,
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    void Promise.all([
-      stats.budgetVsActual(month),
-      stats.yearTrend(month.slice(0, 4)),
-      stats.topCategories(month, 'EXPENSE', TOP_CATEGORIES),
-      stats.recurringCommitments(),
-      stats.recurringPlannedVsPaid(month),
-    ]).then(
-      ([bva, year, top, commitments, paid]) => {
-        if (!cancelled) setData({ bva, year, top, commitments, paid })
-      },
-      (failure) => {
-        if (!cancelled) say(errorText(failure), 'error')
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [month, say])
-
   // Keyboard: [ and ] step through months, t jumps to this month.
   useShortcut('prev', () => setMonth((current) => shiftMonth(current, -1)))
   useShortcut('next', () => setMonth((current) => shiftMonth(current, 1)))
   useShortcut('today', () => setMonth(now.month))
 
-  const index = data ? data.year.findIndex((p) => p.month === month) : -1
-  const point = data?.year[index]
-  const previous = index > 0 ? data?.year[index - 1] : undefined
-  const expenseTotal = data?.bva.totals.find((o) => o.type === 'EXPENSE')?.actual ?? '0.00'
-  // Months after this one have not happened yet, so the charts stop here.
-  const year = data?.year.filter((p) => p.month <= now.month) ?? []
+  // Escape leaves edit mode, unless it was for a dialog, a menu or a pop-up opened from a widget.
+  function onKeyDown(event: KeyboardEvent) {
+    if (!editing || event.key !== 'Escape' || event.defaultPrevented) return
+    if (event.target instanceof Element && event.target.closest('[role="dialog"], [role="menu"], [data-slot="popover-content"], dialog')) return
+    setEditing(false)
+  }
+
+  const widget = settingsOf ? layout.widgets.find((each) => each.id === settingsOf) : undefined
 
   return (
-    <section className="tx-page">
-      <PageHeader title={t('dashboard.title')} />
-      {data && point ? (
-        <div className="tx-pane wide dash">
-          {fresh ? <FirstSteps /> : null}
-          <Card className="dash-top">
-            <CardHeader>
-              <CardAction>
-                <YearNav month={month} thisMonth={now.month} onChange={setMonth} />
-              </CardAction>
-            </CardHeader>
-            <div className="dash-stats">
-              <Stat label={t('common.income')} value={point.income} before={previous?.income} good="up" settings={settings} />
-              <Stat label={t('common.expense')} value={point.expense} before={previous?.expense} good="down" settings={settings} />
-              <Stat label={t('dashboard.savings')} value={point.savings} before={previous?.savings} good="up" settings={settings} />
-              <div className="dash-stat">
-                <span className="dash-stat-label">{t('dashboard.savingsRate')}</span>
-                <span className="dash-stat-line">
-                  <span className="dash-stat-value">{savingsRateText(point.savingsRate, settings.locale)}</span>
-                </span>
-                <Bar percent={point.savingsRate ?? 0} />
-              </div>
-            </div>
-            <YearCharts year={year} month={month} onPick={setMonth} settings={settings} />
-          </Card>
-          <div className="dash-grid">
-            <div className="dash-col">
-              {/* Only once accounts are in use: someone with the one account and no opening balance sees nothing new. */}
-              {worth?.inUse ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      <Link to="/app/accounts">{t('accounts.netWorth')}</Link>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Facts
-                      className="dash-facts is-sum"
-                      items={[
-                        { label: t('accounts.inAccounts'), value: formatMoney(worth.inAccounts, settings.currency, settings.locale) },
-                        toMinor(worth.debts) ? { label: t('loans.title'), value: formatMoney(worth.debts, settings.currency, settings.locale) } : null,
-                        toMinor(worth.friends) ? { label: t('accounts.friends'), value: formatMoney(worth.friends, settings.currency, settings.locale) } : null,
-                        { label: t('accounts.netWorth'), value: <b>{formatMoney(worth.netWorth, settings.currency, settings.locale)}</b> },
-                      ]}
-                    />
-                  </CardContent>
-                </Card>
-              ) : null}
-              {/* Only once there is a stash: the total set aside, and the first three with a small bar each. */}
-              {stashed && stashed.summary.stashes > 0 ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      <Link to="/app/stashes">{t('nav.stashes')}</Link>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="dash-stashes">
-                    <Facts
-                      className="dash-facts"
-                      items={[
-                        { label: t('stashes.total'), value: <b>{formatMoney(stashed.summary.saved, settings.currency, settings.locale)}</b> },
-                        { label: t('stashes.reached'), value: `${stashed.summary.reached} / ${stashed.summary.stashes}` },
-                      ]}
-                    />
-                    {stashed.first.map((stash) => (
-                      <StashMini key={stash.id} stash={stash} locale={settings.locale} />
-                    ))}
-                  </CardContent>
-                </Card>
-              ) : null}
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    <Link to="/app/transactions">{t('dashboard.spending')}</Link>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Spending
-                    top={data.top}
-                    total={expenseTotal}
-                    settings={settings}
-                    onAdd={fresh === false ? () => navigate('/app/transactions', { state: { add: true } }) : undefined}
-                  />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    <Link to="/app/recurring">{t('nav.recurring')}</Link>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <RecurringTable commitments={data.commitments} paid={data.paid} income={point.income} settings={settings} />
-                </CardContent>
-              </Card>
-              {owed ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      <Link to="/app/debts">{t('debts.title')}</Link>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="dash-debts">
-                    {owed.people.length === 0 ? (
-                      <p className="dash-empty">{t('debts.nobody')}</p>
-                    ) : (
-                      <div className="dash-stats">
-                        <div className="dash-stat">
-                          <span className="dash-stat-label">{t('debts.owedToYou')}</span>
-                          <span className="dash-stat-line">
-                            <span className="dash-stat-value">{formatMoney(owed.owedToYou, settings.currency, settings.locale)}</span>
-                          </span>
-                        </div>
-                        <div className="dash-stat">
-                          <span className="dash-stat-label">{t('debts.youOwe')}</span>
-                          <span className="dash-stat-line">
-                            <span className="dash-stat-value">{formatMoney(owed.youOwe, settings.currency, settings.locale)}</span>
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ) : null}
-            </div>
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <Link to="/app/categories">{t('nav.budgets')}</Link>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <BudgetBars bva={data.bva} settings={settings} />
-              </CardContent>
-            </Card>
-          </div>
-          {recurringNow ? (
-            <RecurringDashboard dues={recurringNow.dues} items={recurringNow.items} today={now.date} currency={settings.currency} locale={settings.locale} />
-          ) : null}
-        </div>
+    <section className="tx-page" onKeyDown={onKeyDown}>
+      <PageHeader
+        title={t('dashboard.title')}
+        more={[
+          { label: t('dashboard.customize'), icon: 'pencil', onSelect: () => setEditing(true) },
+          { label: t('dashboard.resetLayout'), icon: 'recurring', onSelect: () => setAsking(true) },
+        ]}
+      >
+        <YearNav month={month} thisMonth={now.month} onChange={setMonth} />
+      </PageHeader>
+      <div className="tx-pane wide dash">
+        {editing ? <EditBar onAdd={() => setCatalog(true)} onReset={() => setAsking(true)} onDone={() => setEditing(false)} /> : null}
+        {fresh ? <FirstSteps /> : null}
+        <DashboardGrid
+          layout={layout}
+          profile={profile}
+          editing={editing}
+          context={{ money: settings, today: now, month, setMonth, phone: profile === 'phone' }}
+          onChange={update}
+          onSettings={setSettingsOf}
+        />
+      </div>
+      {catalog ? (
+        <CatalogDialog
+          profile={profile}
+          onClose={() => setCatalog(false)}
+          onChoose={(type) => {
+            update((current) => addWidget(current, type, profile, newWidgetId(current)))
+            setCatalog(false)
+          }}
+        />
+      ) : null}
+      {widget ? (
+        <SettingsDialog
+          widget={widget}
+          name={widget.settings.title ?? t(SPECS[widget.type].name)}
+          onClose={() => setSettingsOf(null)}
+          onSave={(next) => {
+            update((current) => setWidgetSettings(current, widget.id, next))
+            setSettingsOf(null)
+          }}
+        />
+      ) : null}
+      {asking ? (
+        <ConfirmModal
+          title={t('dashboard.resetTitle')}
+          text={t('dashboard.resetText')}
+          onClose={() => setAsking(false)}
+          onConfirm={() => {
+            reset()
+            setAsking(false)
+          }}
+        />
       ) : null}
     </section>
   )
@@ -342,400 +165,5 @@ function FirstSteps() {
         ))}
       </ul>
     </section>
-  )
-}
-
-/** A headline number with its change from the month before, in green when the change is good and red when it is bad. */
-function Stat({
-  label,
-  value,
-  before,
-  good,
-  settings,
-}: {
-  label: string
-  value: string
-  before: string | undefined
-  good: 'up' | 'down'
-  settings: MoneySettings
-}) {
-  const change = changePercent(value, before)
-  const tone = change === null || Math.abs(change) < 0.05 ? '' : (change > 0) === (good === 'up') ? ' is-good' : ' is-bad'
-  return (
-    <div className="dash-stat">
-      <span className="dash-stat-label">{label}</span>
-      <span className="dash-stat-line">
-        <span className="dash-stat-value">{formatMoney(value, settings.currency, settings.locale)}</span>
-        {change === null ? null : (
-          <span className={`dash-delta${tone}`}>
-            {change > 0 ? '▲' : change < 0 ? '▼' : ''} {formatPercent(Math.abs(Math.round(change * 10) / 10), settings.locale)}
-          </span>
-        )}
-      </span>
-    </div>
-  )
-}
-
-/** A plain bar: `percent` of the track is filled, with the number beside it when `label` is given. `near` turns it gold, `over` red. */
-function Bar({ percent, over, near, label }: { percent: number; over?: boolean; near?: boolean; label?: string }) {
-  return (
-    <span className="bar-row">
-      <span className="bar" aria-hidden="true">
-        <span className={over ? 'bar-fill bar-over' : near ? 'bar-fill bar-near' : 'bar-fill'} style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
-      </span>
-      {label === undefined ? null : <span className="bar-label">{label}</span>}
-    </span>
-  )
-}
-
-/**
- * The year so far: income and expenses as lines, savings as bars underneath. Both are drawn at
- * the width they get. Hovering a month shows its numbers; clicking it opens that month. The keyboard has the chart as one stop: Left and
- * Right (Home, End) move through the months, Enter opens the one it is on.
- */
-function YearCharts({ year, month, onPick, settings }: { year: YearPoint[]; month: string; onPick: (month: string) => void; settings: MoneySettings }) {
-  const t = useT()
-  const { language } = useI18n()
-  const [ref, measured, unit] = useWidth()
-  // The chart is drawn in chart units (lib/chart.ts) and scaled by its viewBox.
-  const width = measured / unit
-  const [hover, setHover] = useState<number | null>(null)
-
-  const income = year.map((p) => Number(p.income))
-  const expense = year.map((p) => Number(p.expense))
-  const savings = year.map((p) => Number(p.savings))
-  const names = monthNames(language)
-  const shown = hover ?? year.findIndex((p) => p.month === month)
-  const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
-
-  const plotW = Math.max(0, width - PAD.left - PAD.right)
-  const slot = plotW / 12
-  const x = (i: number) => PAD.left + (i + 0.5) * slot
-  // A narrow chart (a phone) has no room for names, and one letter is not enough to tell June from July: the month numbers.
-  // With less room still (a large text size) only every second number.
-  const short = (i: number) => (slot < 30 ? (slot < 20 && i % 2 === 1 ? '' : String(i + 1)) : (names[i] ?? '').slice(0, 3))
-
-  // Lines: 0 at the bottom, a round amount at the top.
-  const lineH = width < 500 ? 150 : 200
-  const step = niceCeil(Math.max(0, ...income, ...expense) / 4)
-  const top = step * 4
-  const ly = (v: number) => PAD.top + (1 - v / top) * (lineH - PAD.top - PAD.bottom)
-  const path = (values: number[]) => values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${ly(v)}`).join('')
-  const ticks = [0, 1, 2, 3, 4].map((n) => n * step)
-
-  // Savings: bars up from zero when positive, down when negative.
-  const barH = 90
-  const hi = Math.max(0, ...savings)
-  const lo = Math.min(0, ...savings)
-  const span = hi - lo || 1
-  const by = (v: number) => 16 + ((hi - v) / span) * (barH - 22)
-  const barW = Math.max(2, Math.min(28, slot * 0.55))
-
-  function onKeyDown(event: KeyboardEvent) {
-    const to = { ArrowLeft: shown - 1, ArrowRight: shown + 1, Home: 0, End: year.length - 1 }[event.key]
-    if (to !== undefined) setHover(Math.max(0, Math.min(year.length - 1, to)))
-    else if (event.key === 'Enter' && shown >= 0) onPick(year[shown].month)
-    else return
-    event.preventDefault()
-  }
-
-  const hits = (h: number) =>
-    year.map((p, i) => (
-      <rect
-        key={p.month}
-        className="hit"
-        x={x(i) - slot / 2}
-        y={0}
-        width={slot}
-        height={h}
-        onMouseEnter={() => setHover(i)}
-        onClick={() => onPick(p.month)}
-      />
-    ))
-
-  const p = shown >= 0 ? year[shown] : undefined
-  const blank = !year.some((point) => Number(point.income) > 0 || Number(point.expense) > 0)
-  // A slider reads out its value as text, so a screen reader says the month and its numbers when an arrow moves it.
-  const slider = blank
-    ? {}
-    : {
-        role: 'slider',
-        tabIndex: 0,
-        'aria-label': t('dashboard.yearChart'),
-        'aria-valuemin': 1,
-        'aria-valuemax': year.length,
-        'aria-valuenow': shown + 1,
-        'aria-valuetext': p
-          ? `${names[shown]}, ${t('common.income')} ${money(p.income)}, ${t('common.expense')} ${money(p.expense)}, ${t('dashboard.savings')} ${money(p.savings)}`
-          : undefined,
-        onKeyDown,
-        onBlur: () => setHover(null),
-      }
-  return (
-    <div className="dash-year" ref={ref} {...slider}>
-      {blank ? <p className="dash-empty">{t('dashboard.emptyYear')}</p> : null}
-      <div className={blank ? 'year-readout is-blank' : 'year-readout'}>
-        <span className="year-month">
-          <span className="year-label">{month.slice(0, 4)}</span>
-          <b>{p ? names[shown] : ''}</b>
-        </span>
-        <span className="year-key key-income">
-          <span className="year-label">{t('common.income')}</span>
-          <b>{p ? money(p.income) : '-'}</b>
-        </span>
-        <span className="year-key key-expense">
-          <span className="year-label">{t('common.expense')}</span>
-          <b>{p ? money(p.expense) : '-'}</b>
-        </span>
-        <span className="year-key key-savings">
-          <span className="year-label">{t('dashboard.savings')}</span>
-          <b>{p ? money(p.savings) : '-'}</b>
-        </span>
-      </div>
-      {width > 0 && !blank ? (
-        <>
-          <svg className="dash-line" viewBox={`0 0 ${width} ${lineH}`} width={measured} height={lineH * unit} fontSize={AXIS_FONT} aria-hidden="true" onMouseLeave={() => setHover(null)}>
-            {ticks.map((v) => (
-              <g key={v}>
-                <line className="grid" x1={PAD.left} x2={width - PAD.right} y1={ly(v)} y2={ly(v)} />
-                <text className="axis" x={PAD.left - 6} y={ly(v) + 3} textAnchor="end">
-                  {v === 0 ? '0' : compact(v, settings.locale)}
-                </text>
-              </g>
-            ))}
-            {names.map((_, i) => (
-              <text key={i} className={i === shown ? 'axis axis-on' : 'axis'} x={x(i)} y={lineH - 6} textAnchor="middle">
-                {short(i)}
-              </text>
-            ))}
-            {shown >= 0 ? <line className="cursor" x1={x(shown)} x2={x(shown)} y1={PAD.top} y2={lineH - PAD.bottom} /> : null}
-            <path className="line-income" d={path(income)} />
-            <path className="line-expense" d={path(expense)} />
-            {year.map((point, i) => (
-              <g key={point.month}>
-                <circle className="dot-income" cx={x(i)} cy={ly(income[i])} r={i === shown ? 4.5 : 3} />
-                <circle className="dot-expense" cx={x(i)} cy={ly(expense[i])} r={i === shown ? 4.5 : 3} />
-              </g>
-            ))}
-            {hits(lineH)}
-          </svg>
-          <svg className="dash-line" viewBox={`0 0 ${width} ${barH}`} width={measured} height={barH * unit} fontSize={AXIS_FONT} aria-hidden="true" onMouseLeave={() => setHover(null)}>
-            <line className="grid" x1={PAD.left} x2={width - PAD.right} y1={by(0)} y2={by(0)} />
-            <text className="axis" x={PAD.left - 6} y={by(0) + 3} textAnchor="end">
-              0
-            </text>
-            <text className="axis" x={PAD.left} y={8}>
-              {t('dashboard.savings')}
-            </text>
-            {year.map((point, i) => {
-              const v = savings[i]
-              return (
-                <rect
-                  key={point.month}
-                  className={`${v < 0 ? 'save-neg' : 'save-pos'}${hover !== null && i !== shown ? ' dim' : ''}`}
-                  x={x(i) - barW / 2}
-                  y={Math.min(by(v), by(0))}
-                  width={barW}
-                  height={Math.max(1, Math.abs(by(v) - by(0)))}
-                />
-              )
-            })}
-            {hits(barH)}
-          </svg>
-        </>
-      ) : null}
-    </div>
-  )
-}
-
-// How far a slice runs under the next one (a fraction of the way round), so that no thin gap shows between two slices.
-const DONUT_OVERLAP = 0.0015
-
-/**
- * Expenses by category as a donut and a list. Hovering a list row or a slice highlights both. A month with nothing in it offers to
- * add a transaction (`onAdd`), unless the first steps already do.
- */
-function Spending({ top, total, settings, onAdd }: { top: TopCategory[]; total: string; settings: MoneySettings; onAdd?: () => void }) {
-  const t = useT()
-  const [hover, setHover] = useState<number | null>(null)
-  const sum = Number(total)
-  if (!(sum > 0)) {
-    if (onAdd) return <EmptyState text={t('dashboard.empty')} action={{ label: t('tx.add'), onClick: onAdd }} />
-    return <p className="dash-empty">{t('dashboard.empty')}</p>
-  }
-  const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
-  const items = top.map((c, i) => ({ key: i, name: c.name, amount: c.actual, value: Number(c.actual) }))
-  const rest = sum - items.reduce((left, item) => left + item.value, 0)
-  if (rest > 0.005) items.push({ key: items.length, name: t('dashboard.other'), amount: rest.toFixed(2), value: rest })
-  const starts = items.map((_, i) => items.slice(0, i).reduce((left, item) => left + item.value, 0))
-  const focus = hover === null ? null : items[hover]
-  return (
-    <div className="dash-donut">
-      <div className="donut-wrap">
-        <svg className="donut" viewBox="0 0 100 100" aria-hidden="true">
-          {items.map((item, at) => {
-            // The slice is a shape with two straight edges (not a dash of a circle, whose ends came out deformed when a slice was thin).
-            // Each runs a hair under the next one, which is drawn after it and covers it; the last stops where it should (it would cover
-            // the start of the first). While a slice is hovered the others are see-through, so where two overlapped a lighter line would
-            // show: there they end where they end.
-            const from = starts[item.key] / sum
-            const to = Math.min((starts[item.key] + item.value) / sum, 1)
-            const next = items[at + 1]
-            const run = next === undefined || hover !== null ? 0 : Math.min(DONUT_OVERLAP, next.value / sum)
-            return (
-              <path
-                key={item.key}
-                className={`seg-${item.key}${hover !== null && hover !== item.key ? ' dim' : ''}`}
-                d={slicePath(from, Math.min(to + run, 1))}
-                fillRule="evenodd"
-                onMouseEnter={() => setHover(item.key)}
-                onMouseLeave={() => setHover(null)}
-              />
-            )
-          })}
-        </svg>
-        <span className="donut-center">
-          <b>{money(focus ? focus.amount : total)}</b>
-          <span>{focus ? focus.name : t('common.expense')}</span>
-        </span>
-      </div>
-      <ul className="dash-legend">
-        {items.map((item) => (
-          <li
-            key={item.key}
-            className={hover === item.key ? 'on' : undefined}
-            onMouseEnter={() => setHover(item.key)}
-            onMouseLeave={() => setHover(null)}
-          >
-            <span className={`swatch seg-bg-${item.key}`} aria-hidden="true" />
-            <span className="legend-name">{item.name}</span>
-            <span className="legend-pct">{formatPercent(Math.round((item.value / sum) * 1000) / 10, settings.locale)}</span>
-            <span className="legend-amount">{money(item.amount)}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-/**
- * Budget against actual, in two groups (expenses, then income): the monthly budget first, then one row per category that has a budget
- * or any activity. Each row says in words what was spent or earned and of which budget.
- */
-function BudgetBars({ bva, settings }: { bva: BudgetVsActual; settings: MoneySettings }) {
-  const t = useT()
-  const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
-  const groups = (['EXPENSE', 'INCOME'] as const)
-    .map((type) => ({
-      type,
-      rows: [
-        ...bva.totals
-          .filter((o) => o.type === type && o.budgeted !== null)
-          .map((o) => ({ key: `total-${type}`, name: t('budgets.total'), budgeted: o.budgeted, actual: o.actual, pct: usedPercent(o.actual, o.budgeted), total: true })),
-        ...bva.categories
-          .filter((c) => c.type === type && (c.budgeted !== null || toMinor(c.actual) !== 0n))
-          .map((c) => ({ key: String(c.categoryId), name: c.name, budgeted: c.budgeted, actual: c.actual, pct: c.pctUsed, total: false })),
-      ],
-    }))
-    .filter((group) => group.rows.length > 0)
-  if (groups.length === 0) return <p className="dash-empty">{t('dashboard.empty')}</p>
-  return (
-    <div className="dash-budgets">
-      {groups.map((group) => (
-        <section key={group.type} className={group.type === 'EXPENSE' ? 'dash-budget-group is-expense' : 'dash-budget-group is-income'}>
-          <h3 className="dash-group-title">
-            {/* the income's budgets are on the categories page, the income side */}
-            {group.type === 'INCOME' ? <Link to="/app/categories?tab=income">{t('budgets.income')}</Link> : t('budgets.expenses')}
-          </h3>
-          <ul className="dash-bars">
-            <li className="dash-bars-head" aria-hidden="true">
-              <span />
-              <span>{t(group.type === 'EXPENSE' ? 'budgets.colSpent' : 'budgets.colEarned')}</span>
-              <span className="dash-bar-budget">{t('budgets.colBudget')}</span>
-              <span>{t('budgets.colUsed')}</span>
-            </li>
-            {group.rows.map((r) => {
-              const over = group.type === 'EXPENSE' && r.pct !== null && r.pct > 100
-              // Nearly used up: 90 % of an expense budget or more, but not over it.
-              const near = group.type === 'EXPENSE' && r.pct !== null && r.pct >= 90 && !over
-              return (
-                <li key={r.key} className={r.total ? 'dash-total' : undefined}>
-                  <span className="legend-name" title={r.name}>
-                    {r.name}
-                  </span>
-                  <span className="legend-amount">{money(r.actual)}</span>
-                  <span className="legend-amount dash-bar-budget muted">{r.budgeted === null ? '-' : money(r.budgeted)}</span>
-                  <span className="dash-bar-meter">
-                    {r.budgeted === null ? null : <Bar percent={r.pct ?? 0} over={over} near={near} label={r.pct === null ? '-' : formatPercent(r.pct, settings.locale)} />}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-        </section>
-      ))}
-    </div>
-  )
-}
-
-/**
- * Active recurring items: what each costs in an average month and what was paid for it this
- * month. The bar is the share of this month's income that recurring expenses take.
- */
-function RecurringTable({
-  commitments,
-  paid,
-  income,
-  settings,
-}: {
-  commitments: Commitments
-  paid: PlannedVsPaid[]
-  income: string
-  settings: MoneySettings
-}) {
-  const t = useT()
-  if (commitments.items.length === 0) return <p className="dash-empty">{t('dashboard.noRecurring')}</p>
-  const money = (amount: string) => formatMoney(amount, settings.currency, settings.locale)
-  const byId = new Map(paid.map((p) => [p.recurringId, p]))
-  const share = usedPercent(commitments.expense, income)
-  // Each row's paid amount and, when it differs from the plan, how much.
-  const rows = commitments.items.map((item) => {
-    const paidRow = byId.get(item.id)
-    const diff = paidRow?.difference ?? null
-    const more = diff !== null && (toMinor(diff) ?? 0n) > 0n
-    const difference = diff !== null && diff !== '0.00' ? `${diff.startsWith('-') ? '' : '+'}${money(diff)}` : ''
-    return { item, paid: paidRow, more, difference }
-  })
-  const anyDiff = rows.some((row) => row.difference !== '')
-  return (
-    <div className="dash-rec">
-      <Facts
-        className="dash-facts"
-        items={[
-          { label: t('common.expense'), value: <b>{money(commitments.expense)}</b> },
-          toMinor(commitments.income) ? { label: t('common.income'), value: <b>{money(commitments.income)}</b> } : null,
-        ]}
-      />
-      {share === null ? null : <Bar percent={share} over={share > 100} label={formatPercent(share, settings.locale)} />}
-      <ul className={anyDiff ? 'dash-rec-rows has-diff' : 'dash-rec-rows'}>
-        <li className="dash-rec-head" aria-hidden="true">
-          <span />
-          <span>{t('dashboard.perMonth')}</span>
-          <span>{t('dashboard.paid')}</span>
-          {anyDiff ? <span /> : null}
-        </li>
-        {rows.map(({ item, paid: p, more, difference }) => (
-          <li key={item.id}>
-            <span className="legend-name">
-              <span className={`swatch ${item.type === 'INCOME' ? 'swatch-income' : 'swatch-expense'}`} aria-hidden="true" /> {item.name}
-            </span>
-            <span className="legend-amount">{item.perMonth === null ? t('rec.varies') : money(item.perMonth)}</span>
-            <span className={`legend-amount${p ? (more ? ' rec-over' : ' rec-paid') : ' muted'}`}>{p ? money(p.paid) : '-'}</span>
-            {/* the difference from the plan has a column of its own, so the amounts stay in one line down their columns */}
-            {anyDiff ? <span className={`legend-amount rec-diff${more ? ' rec-over' : ' rec-paid'}`}>{difference}</span> : null}
-          </li>
-        ))}
-      </ul>
-    </div>
   )
 }
