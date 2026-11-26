@@ -19,7 +19,7 @@ import AccountModal from './AccountModal'
 import LoanPayModal from './LoanPayModal'
 import Facts from './Facts'
 import { IconAction, ListGroup, NameMark, PanelActions, Row, Table, TapRow } from './RowParts'
-import Badge from './ui/Badge'
+import { Badge } from './ui/badge'
 
 /** The dialog that is open: a new debt, or the payment of one. */
 type Dialog = { kind: 'new' } | { kind: 'pay'; liability: Account } | null

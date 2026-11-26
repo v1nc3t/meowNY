@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { errorText, vault } from './api'
 import { useNotice } from '../hooks/useNotice'
 import { useT } from '../i18n/context'
-import Button from '../components/ui/Button'
+import { Button } from '../components/ui/button'
 
 /**
  * Shows a recovery key. The app does not keep it, so this is the only time it can be read.

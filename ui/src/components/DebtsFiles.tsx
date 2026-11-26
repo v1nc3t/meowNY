@@ -6,7 +6,7 @@ import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useI18n } from '../i18n/context'
 import DebtsFilePreview from './DebtsFilePreview'
 import Pick, { PickOption } from './Pick'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 const FORMATS = [
   { value: 'TEXT', name: 'TXT' },

@@ -8,7 +8,7 @@ import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useT } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
 import { place } from '../lib/placeList'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /** How many transactions the list shows at a time. */
 const SHOWN = 8

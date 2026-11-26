@@ -3,7 +3,7 @@ import { documents, type Doc } from '../api/documents'
 import { errorText } from '../api/invoke'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * On the phone, a file that stays on the computer cannot be previewed. This is the one button in place of the preview that turns "keep on phone" on

@@ -6,7 +6,7 @@ import { byDay, dayHeading } from '../lib/dayHeading'
 import { toggleRow } from '../lib/toggleRow'
 import Facts, { type FactItem } from './Facts'
 import Icon from './NavIcon'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 import { buttonClass, cn } from './ui/cn'
 
 /**

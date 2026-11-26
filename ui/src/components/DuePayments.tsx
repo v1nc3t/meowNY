@@ -6,7 +6,7 @@ import { useT } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
 import Facts from './Facts'
 import { IconAction, ListGroup, NameMark, PanelActions, Row, Table, TapRow } from './RowParts'
-import Badge from './ui/Badge'
+import { Badge } from './ui/badge'
 
 /**
  * The recurring payments that are overdue and not paid or skipped, one row for each occurrence that was missed, the oldest first; an

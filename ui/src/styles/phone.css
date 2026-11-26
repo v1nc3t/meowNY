@@ -231,7 +231,7 @@ html.is-phone .period-nav {
 }
 
 html.is-phone .period-nav > .ui-btn-ghost {
-  --btn-edge: var(--input);
+  border-color: var(--input);
   border-radius: 0;
 }
 
@@ -262,7 +262,7 @@ html.is-phone .period-nav > .period-current {
 }
 
 /* In the card of a chart the control starts at the card's left edge, on a line of its own, whichever page the card is on. */
-html.is-phone .ui-card-action:has(> .period-nav) {
+html.is-phone [data-slot='card-action']:has(> .period-nav) {
   grid-column: 1 / -1;
   justify-self: start;
   max-width: 100%;
@@ -299,60 +299,8 @@ html.is-phone .settings-layout > :is(.settings-list, .settings-section) {
   animation: fade-in var(--t-med) steps(4, jump-start);
 }
 
-/* The menu behind the logo (components/PhoneMenu.tsx): a modal dialog that slides in from the left over the page, min(80vw, 21.5rem) wide
-   and as tall as the screen, on the colour of the desktop's sidebar, over a dimmed page. It takes 200 ms to slide in or out (PhoneMenu.tsx
-   waits as long before it takes the dialog away); with less motion it does not move (base.css turns every animation off). */
-.phone-menu {
-  position: fixed;
-  inset: 0 auto 0 0;
-  width: min(80vw, 21.5rem);
-  max-width: none;
-  height: 100dvh;
-  max-height: none;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  color: var(--foreground);
-  background: var(--sidebar);
-  border: 0;
-  border-right: var(--border-width) solid var(--border);
-}
-
-.phone-menu[open] {
-  animation: menu-in 200ms ease-out;
-}
-
-.phone-menu::backdrop {
-  background: var(--overlay);
-  animation: fade-in 200ms ease-out;
-}
-
-.phone-menu.is-closing {
-  animation: menu-out 200ms ease-in forwards;
-}
-
-.phone-menu.is-closing::backdrop {
-  animation: fade-out 200ms ease-in forwards;
-}
-
-@keyframes menu-in {
-  from {
-    transform: translateX(-100%);
-  }
-}
-
-@keyframes menu-out {
-  to {
-    transform: translateX(-100%);
-  }
-}
-
-@keyframes fade-out {
-  to {
-    opacity: 0;
-  }
-}
-
+/* The menu behind the logo (components/PhoneMenu.tsx) is the shadcn Sheet (components/ui/sheet.tsx): the panel over a dimmed page. What follows is
+   what is in it. */
 .phone-menu-panel {
   display: flex;
   flex-direction: column;

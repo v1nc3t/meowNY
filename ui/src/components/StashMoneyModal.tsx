@@ -48,7 +48,7 @@ import Dropdown from './Dropdown'
 import { FactStrip } from './Facts'
 import Modal, { modalFormId } from './Modal'
 import SectionTabs from './SectionTabs'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 import Icon from './NavIcon'
 import { cn } from './ui/cn'
 

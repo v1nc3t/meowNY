@@ -1,13 +1,22 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { useRef, type ReactNode } from 'react'
 import { useFootLine } from '../hooks/useFootLine'
 import { useReturnFocus } from '../hooks/useReturnFocus'
 import { useT } from '../i18n/context'
 import HelpButton from './HelpButton'
-import Button from './ui/Button'
+import { Button } from './ui/button'
+import { cn } from './ui/cn'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog'
 
 export const modalFormId = 'modal-form'
 
+/** What takes the focus when a dialog opens: a field that names itself (a question), else the first field; with none, the panel itself, so that no button opens outlined. */
+function focusFirst(dialog: HTMLElement | null) {
+  const first = dialog?.querySelector<HTMLElement>('[data-autofocus]') ?? dialog?.querySelector<HTMLElement>('input, select, textarea')
+  ;(first ?? dialog?.querySelector<HTMLElement>('.modal-panel'))?.focus()
+}
+
+// A dialog of the app on the shadcn Dialog (components/ui/dialog.tsx). Escape is answered here, not by the Dialog: the lists inside it (drop-downs, a
+// date's pop-up) take Escape for themselves first, by stopping it on its way up.
 // formId: give a second modal opened on top of another its own form id, so its done button submits its own form.
 export default function Modal({
   title,
@@ -45,61 +54,51 @@ export default function Modal({
 }) {
   const t = useT()
   const ref = useRef<HTMLDialogElement>(null)
-  const titleId = useId()
+  const footLine = useFootLine()
 
-  // before the effect below: the dialog takes the focus there
+  // before the dialog takes the focus
   useReturnFocus()
-  useFootLine(ref)
 
-  useEffect(() => {
-    const dialog = ref.current
-    if (!dialog) return
-    dialog.showModal()
-    // A dialog can name what takes the focus (a question); otherwise the first field. With none, the panel itself takes it, so that no
-    // button opens outlined.
-    const first = dialog.querySelector<HTMLElement>('[data-autofocus]') ?? dialog.querySelector<HTMLElement>('input, select, textarea')
-    ;(first ?? dialog.querySelector<HTMLElement>('.modal-panel'))?.focus()
-  }, [])
-
-  // In the body, not where it is used: a size container (the debts and budgets halves) holds a fixed box, and a web view may keep even
-  // a modal dialog inside it, at the top of the container instead of the middle of the screen.
-  return createPortal(
-    <dialog
-      ref={ref}
-      className={wide ? 'modal modal-look' : 'modal'}
-      aria-labelledby={titleId}
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape') return
-        event.preventDefault()
-        onClose()
-      }}
-      onCancel={(event) => {
-        event.preventDefault()
-        onClose()
-      }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose()
-      }}
-    >
-      <div className="modal-panel" tabIndex={-1}>
-        <div className="modal-head">
-          <h2 id={titleId}>{title}</h2>
-          {help ? <HelpButton>{help}</HelpButton> : null}
-        </div>
-        {children}
-        <div className="modal-actions">
-          {leading ? <div className="modal-lead">{leading}</div> : null}
-          <Button variant="outline" onClick={onClose}>
-            {cancelLabel ?? t('common.cancel')}
-          </Button>
-          {readOnly ? null : (
-            <Button type="submit" variant={danger ? 'destructive' : 'default'} form={formId} disabled={pending}>
-              {doneLabel ?? t('common.done')}
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        ref={ref}
+        className={cn('modal', wide && 'modal-look')}
+        aria-describedby={undefined}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          focusFirst(ref.current)
+        }}
+        // `useReturnFocus` puts the focus back
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => event.preventDefault()}
+        onKeyDown={(event) => {
+          // not the Escape of a menu or a pop-up that is drawn outside the dialog and sits in its tree
+          if (event.key !== 'Escape' || !event.currentTarget.contains(event.target as Node)) return
+          event.preventDefault()
+          onClose()
+        }}
+      >
+        <div ref={footLine} className="modal-panel" tabIndex={-1}>
+          <DialogHeader className="modal-head">
+            <DialogTitle>{title}</DialogTitle>
+            {help ? <HelpButton>{help}</HelpButton> : null}
+          </DialogHeader>
+          {children}
+          <DialogFooter className="modal-actions">
+            {leading ? <div className="modal-lead">{leading}</div> : null}
+            <Button variant="outline" onClick={onClose}>
+              {cancelLabel ?? t('common.cancel')}
             </Button>
-          )}
+            {readOnly ? null : (
+              <Button type="submit" variant={danger ? 'destructive' : 'default'} form={formId} disabled={pending}>
+                {doneLabel ?? t('common.done')}
+              </Button>
+            )}
+          </DialogFooter>
         </div>
-      </div>
-    </dialog>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   )
 }

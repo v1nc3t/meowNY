@@ -10,7 +10,7 @@ import { rowKey, toInput, withMode, type SplitDraft, type SplitRow } from '../li
 import Dropdown from './Dropdown'
 import Icon from './NavIcon'
 import PersonCombo from './PersonCombo'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * Who shares a bill and how: the person (always first), friends and guests, and a mode that says how the numbers are typed. Every

@@ -2,7 +2,7 @@ import { useEffect, useState, type AnimationEvent, type CSSProperties } from 're
 import { createPortal } from 'react-dom'
 import { dismissToast, useToasts, type ToastItem } from '../hooks/toast'
 import { useT } from '../i18n/context'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /** The place the toasts are drawn in: the open dialog on top, else the page. A modal dialog sits in the browser's top layer, so a toast
  * on the page would be hidden behind it (and could not be clicked); inside the dialog it shows above it. */

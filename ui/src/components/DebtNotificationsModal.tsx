@@ -11,7 +11,7 @@ import { Rows } from '../pages/settings/layout'
 import Modal from './Modal'
 import { IconAction, TapRow } from './RowParts'
 import SectionTabs from './SectionTabs'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 type Tab = 'list' | 'settings'
 

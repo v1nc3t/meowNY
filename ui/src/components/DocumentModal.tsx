@@ -10,7 +10,7 @@ import DatePicker from './DatePicker'
 import DocumentDetails from './DocumentDetails'
 import Modal from './Modal'
 import PreviewModal from './PreviewModal'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 const FORM_ID = 'document-form'
 const WARNING_FORM_ID = 'document-open-form'

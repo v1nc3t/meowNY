@@ -19,7 +19,7 @@ import ConfirmModal from './ConfirmModal'
 import EntryModal from './EntryModal'
 import { DayGroups, IconAction, NoteSection, PanelActions, Row, Table, TapRow, type PanelAction } from './RowParts'
 import SettleModal from './SettleModal'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 import { buttonClass } from './ui/cn'
 
 type Dialog =

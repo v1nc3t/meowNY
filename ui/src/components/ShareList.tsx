@@ -1,7 +1,7 @@
 import type { Share } from '../api/accounts'
 import { useT } from '../i18n/context'
 import { barWidth } from '../lib/accountsView'
-import { Card, CardAction, CardHeader, CardTitle } from './ui/Card'
+import { Card, CardAction, CardHeader, CardTitle } from './ui/card'
 
 /**
  * What one account spent, or took in, by category over a period: the total in the corner, then a row for each category with its amount

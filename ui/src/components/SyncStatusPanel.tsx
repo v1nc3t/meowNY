@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { useT } from '../i18n/context'
 import { UpdateLink } from './AppFooter'
 import QrCode from './QrCode'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 import { Logo } from './ui/Pixel'
 import ReviewModal from './ReviewModal'
 

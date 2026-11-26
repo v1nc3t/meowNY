@@ -1,13 +1,12 @@
-import { useEffect, type RefObject } from 'react'
+import { useCallback } from 'react'
 
 /**
- * For a dialog: marks its panel `data-scrolled` while the body runs on under the buttons at the foot (the line over the buttons shows
- * then, controls.css), and not at the end of the body or when all of it fits.
+ * For a dialog's panel (put the result in its `ref`): marks it `data-scrolled` while the body runs on under the buttons at the foot (the line
+ * over the buttons shows then, controls.css), and not at the end of the body or when all of it fits.
  */
-export function useFootLine(dialog: RefObject<HTMLElement | null>): void {
-  useEffect(() => {
-    const panel = dialog.current?.querySelector<HTMLElement>('.modal-panel')
-    if (!panel) return
+export function useFootLine(): (panel: HTMLElement | null) => (() => void) | undefined {
+  return useCallback((panel: HTMLElement | null) => {
+    if (!panel) return undefined
     const mark = () => panel.toggleAttribute('data-scrolled', panel.scrollTop + panel.clientHeight < panel.scrollHeight - 1)
     mark()
     panel.addEventListener('scroll', mark, { passive: true })
@@ -21,5 +20,5 @@ export function useFootLine(dialog: RefObject<HTMLElement | null>): void {
       resized.disconnect()
       changed.disconnect()
     }
-  }, [dialog])
+  }, [])
 }

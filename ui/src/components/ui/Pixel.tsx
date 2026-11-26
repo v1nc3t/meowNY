@@ -1,4 +1,4 @@
-import Button from './Button'
+import { Button } from './button'
 
 /**
  * The pixel art of the app: the logo (the coin cat of scripts/logo.py, served as /favicon.svg), a dozing cat for a list with nothing

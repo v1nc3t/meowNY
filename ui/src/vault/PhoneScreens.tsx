@@ -10,7 +10,7 @@ import { atLeast, closeKeyboard, useRefocus } from './unlockFlow'
 import PasswordField from './PasswordField'
 import { defaultSettings, phonePassphraseProblem } from './rules'
 import AppFooter from '../components/AppFooter'
-import Button from '../components/ui/Button'
+import { Button } from '../components/ui/button'
 import { Illustration, Logo, type PictureName } from '../components/ui/Pixel'
 import type { MessageKey } from '../i18n/en'
 

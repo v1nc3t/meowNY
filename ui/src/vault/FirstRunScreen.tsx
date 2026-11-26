@@ -15,7 +15,7 @@ import PasswordField from './PasswordField'
 import RecoveryKeyPanel from './RecoveryKeyPanel'
 import RestoreFromBackup from './RestoreFromBackup'
 import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } from './rules'
-import Button from '../components/ui/Button'
+import { Button } from '../components/ui/button'
 import { Illustration, Logo, type PictureName } from '../components/ui/Pixel'
 
 /** What the app does, on the first screen. */

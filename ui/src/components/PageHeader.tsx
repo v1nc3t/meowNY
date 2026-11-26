@@ -9,7 +9,7 @@ import { tip } from '../keys/tip'
 import HelpButton from './HelpButton'
 import MoreMenu, { type MoreItem } from './MoreMenu'
 import Icon from './NavIcon'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 import { buttonClass } from './ui/cn'
 import { Logo } from './ui/Pixel'
 

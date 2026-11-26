@@ -9,7 +9,7 @@ import { formatDate, formatMoney } from '../lib/money'
 import { saveSenderName, senderName } from '../lib/senderName'
 import Modal, { modalFormId } from './Modal'
 import QrCode from './QrCode'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * The code of one friend's part of one bill, or of the next payment of a recurring item: a QR code a friend scans and the same text to copy

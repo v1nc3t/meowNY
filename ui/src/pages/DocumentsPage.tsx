@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import PageHeader from '../components/PageHeader'
-import Badge from '../components/ui/Badge'
+import { Badge } from '../components/ui/badge'
 import ConfirmModal from '../components/ConfirmModal'
 import DocumentDetails from '../components/DocumentDetails'
 import DocumentLinksModal from '../components/DocumentLinksModal'

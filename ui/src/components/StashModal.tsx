@@ -17,7 +17,7 @@ import Facts from './Facts'
 import Icon from './NavIcon'
 import Modal, { modalFormId } from './Modal'
 import SectionTabs from './SectionTabs'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * A new stash, or one being changed: its name, the account it lives in (always asked, even with one account; a stash that is made already only

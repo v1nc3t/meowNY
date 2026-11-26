@@ -18,8 +18,8 @@ import { useOpenRow } from '../hooks/useOpenRow'
 import Dropdown from './Dropdown'
 import Facts from './Facts'
 import { Row, Table } from './RowParts'
-import Badge from './ui/Badge'
-import Button from './ui/Button'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
 import { Actions, Field, Rows, SwitchRow } from '../pages/settings/layout'
 
 /**

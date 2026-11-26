@@ -3,7 +3,7 @@ import type { Dues, Recurring } from '../api/recurring'
 import { useT } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
 import { sharedItems, sharedWith } from '../lib/recurringView'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/Card'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 
 /** How many days ahead "due soon" looks. */
 export const SOON_DAYS = 7

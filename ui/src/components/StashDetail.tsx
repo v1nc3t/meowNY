@@ -15,7 +15,7 @@ import Facts from './Facts'
 import { DayGroups, IconAction, PanelActions, Row, Table, TapRow, type PanelAction } from './RowParts'
 import { StashBar } from './StashParts'
 import YearNav from './YearNav'
-import { Card, CardAction, CardHeader } from './ui/Card'
+import { Card, CardAction, CardHeader } from './ui/card'
 import { cn } from './ui/cn'
 
 /** What a stash held at the end of each month of a year, for the chart (it draws a balance: the same points under another name). */

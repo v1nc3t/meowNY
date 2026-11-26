@@ -49,7 +49,7 @@
 }
 
 .tx-filter-button[aria-expanded='true'] {
-  --btn-fill: var(--accent);
+  background: var(--accent);
 }
 
 .tx-filter-button > .count-badge {

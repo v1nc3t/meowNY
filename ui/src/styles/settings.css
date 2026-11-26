@@ -246,7 +246,7 @@ html.is-phone .gate:has(> .app-footer) {
   break-inside: avoid;
 }
 
-.settings-block .ui-card-content {
+.settings-block [data-slot='card-content'] {
   display: flex;
   flex-direction: column;
   gap: 1rem;

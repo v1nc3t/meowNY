@@ -65,7 +65,7 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
   backdrop): the logo and the word "meowny" at its top, then every page with its icon in the desktop sidebar's order (dashboard,
   transactions, accounts, stashes, categories, recurring, debts, documents, sync, settings — export is not on a phone), the current one
   marked as in the desktop sidebar, and lock at the bottom. It is a modal `<dialog>`: the focus stays inside, Escape, a tap on the
-  backdrop, a swipe to the left, or choosing a page closes it, and the focus goes back to the logo. It slides in 200 ms and does not
+  backdrop, a swipe to the left, or choosing a page closes it, and the focus goes back to the logo. It slides in about 110 ms and does not
   move with `prefers-reduced-motion`.
 - **Swipes.** A swipe to the right that starts at the left edge of the screen (the first 24 px) opens the drawer (`AppLayout`,
   `opensMenu` in `lib/swipe.ts`), and a swipe to the left inside it closes it (`PhoneMenu`, `closesMenu`). The swipe from page to page
@@ -101,6 +101,19 @@ character stays: the pixel logo and titles, the mono font, the green accent, lig
 | `PhoneMenu` | the drawer of section 4 |
 | `TapRow` | as in section 5; with `PanelActions`, `ListGroup`, `DayGroups` and `NameMark` |
 | `Table`, `Row` | the desktop list: a `Table` (`tidy`: one line to a cell) of `Row`s with their icon buttons and the chevron that opens the row's panel |
+
+## 6a. The stack
+
+- **shadcn/ui** on Tailwind v4 and Radix: `ui/src/components/ui/` (button, badge, card, dialog, sheet, dropdown-menu, popover, tabs).
+  Styled pixel: radius 0, hairline borders, the hard offset shadow, the pixel font for titles only.
+- The house pieces wrap them and keep their props: `Modal` → Dialog, `PhoneMenu` → Sheet, `MoreMenu` → DropdownMenu,
+  `HelpButton` → Popover, `SectionTabs` → Tabs.
+- `ui/src/styles/tokens.css` stays the source of colours and sizes; `tailwind.css` maps Tailwind's theme to it.
+- No Tailwind preflight: `base.css` is the reset. Tailwind classes are read only from the files named by `@source` in
+  `ui/src/index.css`: add a file there before you use Tailwind classes in it.
+- Icons are the pixel icons of `NavIcon.tsx`. Do not add an icon library (`components.json` names one only because the CLI
+  needs a value).
+- Sizes in rem/em only; px only in `--hairline` and `--hairline-2`.
 
 ## 7. Not in this work
 

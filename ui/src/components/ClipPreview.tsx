@@ -14,7 +14,7 @@ import KeepToPreview from './KeepToPreview'
 import Icon from './NavIcon'
 import Modal from './Modal'
 import PreviewModal from './PreviewModal'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 const FILTER = { transaction: 'transactionId', recurring: 'recurringTransactionId', ledger_entry: 'ledgerEntryId' } as const
 

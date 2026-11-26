@@ -7,7 +7,7 @@ import { useT } from '../i18n/context'
 import type { MessageKey } from '../i18n/en'
 import { formatMoney } from '../lib/money'
 import Modal, { modalFormId } from './Modal'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 type Side = 'desktop' | 'phone'
 

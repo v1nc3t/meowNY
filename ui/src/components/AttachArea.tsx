@@ -10,7 +10,7 @@ import { canPreview } from '../lib/documents'
 import DocumentModal from './DocumentModal'
 import Icon from './NavIcon'
 import PreviewModal from './PreviewModal'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * The documents of one item, in the dialog that edits it. `bare` is for a dialog whose "attach documents" switch already names the part: no title

@@ -4,7 +4,7 @@ import { monthNames, shiftMonth, yearChoices } from '../api/months'
 import { usePopup } from '../hooks/usePopup'
 import { useI18n } from '../i18n/context'
 import { tip } from '../keys/tip'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 import { cn } from './ui/cn'
 
 /**

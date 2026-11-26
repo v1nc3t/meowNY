@@ -8,7 +8,7 @@ import { formatSize } from '../lib/bytes'
 import { fileState, fileStateText, typeText } from '../lib/documents'
 import { formatDate } from '../lib/money'
 import Facts, { type FactItem } from './Facts'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * What a document is, in the details dialog and in the panel of its row: its kind and size and where its file is (and what else the page adds,

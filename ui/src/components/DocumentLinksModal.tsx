@@ -8,7 +8,7 @@ import { useT } from '../i18n/context'
 import { linkLabel, whereIs } from '../lib/documents'
 import { formatDate } from '../lib/money'
 import Modal from './Modal'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * What one document is attached to: each transaction, recurring item or debt entry, as a line to choose. Choosing one goes to its page,

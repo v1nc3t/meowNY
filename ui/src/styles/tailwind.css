@@ -1,0 +1,130 @@
+/* Tailwind's side of the design: what the shadcn/ui components in components/ui/ read. The colours, the font, the radii and the shadows are
+   the app's own tokens (tokens.css stays the one source), so a component takes the light and dark themes, the mono font and the square
+   corners from there. */
+
+/* Dark is what tokens.css calls dark: a chosen dark theme, or the system's while no theme is chosen. */
+@custom-variant dark {
+  &:where(:root[data-theme='dark'], :root[data-theme='dark'] *) {
+    @slot;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme='light']), :root:not([data-theme='light']) *) {
+      @slot;
+    }
+  }
+}
+
+/* The state of a Radix part, as the shadcn components write it. */
+@custom-variant data-open (&:where([data-state='open']));
+@custom-variant data-closed (&:where([data-state='closed']));
+@custom-variant data-checked (&:where([data-state='checked']));
+@custom-variant data-active (&:where([data-state='active']));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-solid: var(--destructive-solid);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font);
+  --font-mono: var(--font);
+}
+
+/* Square everywhere (the --radius tokens of tokens.css are 0 already; these are Tailwind's own names for them). */
+@theme {
+  --radius-*: initial;
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+}
+
+/* The state of a part of the page, for a class that only a phone has (html.is-phone: shell and profile). */
+@custom-variant phone (&:where(html.is-phone *));
+
+/* The app's own looks, as classes for the components: thin lines (--hairline is never under one pixel), the pixel font of titles, the
+   hard shadows of tokens.css, the chosen tab's green line, and a focus ring that sits inside its box. */
+@utility border-hair {
+  border-style: solid;
+  border-width: var(--hairline);
+}
+
+@utility font-pixel {
+  font-family: var(--font-pixel);
+  font-size: var(--pixel-md);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+@utility shadow-press {
+  box-shadow: var(--shadow-press);
+}
+
+@utility shadow-pop {
+  box-shadow: var(--shadow-md);
+}
+
+@utility shadow-float {
+  box-shadow: var(--shadow-lg);
+}
+
+@utility tab-mark {
+  box-shadow: inset 0 calc(var(--hairline-2) * -1) 0 var(--primary);
+}
+
+@utility outline-inset {
+  outline-offset: calc(var(--hairline-2) * -1);
+}
+
+/* The motion of the components: short, and in steps like a sprite where it is small. base.css has panel-in, dialog-in and fade-in. */
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes sheet-out-left {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes sheet-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes sheet-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}

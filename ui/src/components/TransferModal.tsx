@@ -21,7 +21,7 @@ import { rememberAccount, transferOptions } from '../lib/accountsView'
 import Icon from './NavIcon'
 import Modal, { modalFormId } from './Modal'
 import TransferInputs from './TransferInputs'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * Money moved from one of the person's accounts to another: a new transfer, or one being changed. Choosing in one list the account the

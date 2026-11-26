@@ -27,7 +27,7 @@ import DatePicker from './DatePicker'
 import Dropdown from './Dropdown'
 import Icon from './NavIcon'
 import Modal, { modalFormId } from './Modal'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * A new account, or one being changed: its name, type, its currency (the app's until another is typed, and then the rate, written as the sentence

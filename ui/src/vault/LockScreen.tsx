@@ -11,7 +11,7 @@ import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import AppFooter, { UpdateLink } from '../components/AppFooter'
-import Button from '../components/ui/Button'
+import { Button } from '../components/ui/button'
 import { Logo } from '../components/ui/Pixel'
 
 export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {

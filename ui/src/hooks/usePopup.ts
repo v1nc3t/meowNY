@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Keyboar
 import { placePopup } from '../lib/placeList'
 
 /**
- * What a button that opens a small popup under it needs (the menu of `MoreMenu`, the popover of `HelpButton`): whether it is open, the
+ * What a button that opens a small popup under it needs (the pop-up of `PeriodNav`; the "more" menu and the help popover are shadcn components): whether it is open, the
  * refs of the button and the popup, the popup's place, and the keys of the popup. Escape closes it and gives the focus back to the button;
  * Tab closes it too, and goes on from the button. A press outside closes it. `host` is where to draw the popup: the dialog the button is
  * in, or the body (a modal dialog leaves everything outside it inert).

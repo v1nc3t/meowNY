@@ -8,7 +8,7 @@ import { noteOf } from '../lib/balance'
 import { formatDate, formatMoney } from '../lib/money'
 import Facts from './Facts'
 import { DayGroups, IconAction, NoteSection, PanelActions, Row, Table, TapRow, type PanelAction } from './RowParts'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * The debts of all friends, newest first, a page at a time: what changed with each friend. A friend's name leads to the friend's history.

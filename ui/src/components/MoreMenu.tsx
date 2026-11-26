@@ -1,11 +1,8 @@
-import { useEffect, useId, useRef, type KeyboardEvent } from 'react'
-import { createPortal } from 'react-dom'
-import { usePopup } from '../hooks/usePopup'
+import { useRef } from 'react'
 import { useT } from '../i18n/context'
-import { menuTarget } from '../lib/menuNav'
 import Icon from './NavIcon'
-import Button from './ui/Button'
-import { cn } from './ui/cn'
+import { Button } from './ui/button'
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
 
 /**
  * One line of a `MoreMenu`: an action (it runs `onSelect` and the menu closes), or a switch (`kind: 'toggle'`: it shows a check mark while
@@ -16,104 +13,65 @@ export type MoreItem =
   | { kind: 'toggle'; label: string; checked: boolean; onChange: (checked: boolean) => void }
 
 /**
- * The "more" button (the three dots) and its menu: what a page keeps out of its top line (second actions, switches such as "show
- * archived"). The menu is under the button at its right edge. Enter, Space and the down arrow open it on its first item (up on its last);
- * the arrows go round its items, Home and End go to the ends, Escape closes it and gives the focus back to the button, Tab closes it and
- * goes on, and so does a press outside. It is drawn over the page (in the body), so no parent clips it.
+ * The "more" button (the three dots) and its menu, a shadcn DropdownMenu: what a page keeps out of its top line (second actions, switches
+ * such as "show archived"). The menu is under the button at its right edge. Enter, Space and the down arrow open it; the arrows go round its
+ * items, Home and End go to the ends, Escape closes it and gives the focus back to the button, and so does a press outside. It is drawn over the
+ * page (in the body), so no parent clips it.
  */
 export default function MoreMenu({ items }: { items: MoreItem[] }) {
   const t = useT()
-  const id = useId()
-  const { open, host, openPopup, close, buttonRef, popupRef, onKeyDown } = usePopup('end')
-  // the item to focus once the menu is there: the first, or the last (up arrow on the button)
-  const first = useRef<'first' | 'last'>('first')
-
-  useEffect(() => {
-    if (!open) return
-    const enabled = popupRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled)')
-    enabled?.[first.current === 'last' ? enabled.length - 1 : 0]?.focus()
-  }, [open, popupRef])
+  const button = useRef<HTMLButtonElement>(null)
+  // The chosen action runs once the menu has gone and the focus is on the button, so a dialog that the action opens remembers the button.
+  const chosen = useRef<(() => void) | null>(null)
 
   if (items.length === 0) return null
-
-  function onMenuKey(event: KeyboardEvent<HTMLDivElement>) {
-    onKeyDown(event)
-    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
-    const enabled = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled)'))
-    const to = menuTarget(event.key, enabled.indexOf(document.activeElement as HTMLElement), enabled.length)
-    if (to === null) return
-    event.preventDefault()
-    enabled[to]?.focus()
-  }
+  // In a menu with icons, the words of a switch start where the words of the actions start.
+  const iconed = items.some((item) => item.kind !== 'toggle' && item.icon)
 
   return (
-    <>
-      <Button
-        ref={buttonRef}
-        variant="ghost"
-        size="icon"
-        className="icon-btn more-button"
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button ref={button} variant="ghost" size="icon" className="icon-btn more-button" aria-label={t('common.more')}>
+          <Icon name="more" className="btn-icon" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
         aria-label={t('common.more')}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? id : undefined}
-        onClick={() => {
-          if (open) close()
-          else {
-            first.current = 'first'
-            openPopup()
-          }
-        }}
-        onKeyDown={(event) => {
-          if (open || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')) return
+        onCloseAutoFocus={(event) => {
+          const run = chosen.current
+          chosen.current = null
+          if (!run) return
           event.preventDefault()
-          first.current = event.key === 'ArrowUp' ? 'last' : 'first'
-          openPopup()
+          button.current?.focus()
+          run()
         }}
       >
-        <Icon name="more" className="btn-icon" />
-      </Button>
-      {host
-        ? createPortal(
-            <div ref={popupRef} id={id} className="more-menu" role="menu" aria-label={t('common.more')} onKeyDown={onMenuKey}>
-              {items.map((item, at) =>
-                item.kind === 'toggle' ? (
-                  <button
-                    key={at}
-                    type="button"
-                    role="menuitemcheckbox"
-                    aria-checked={item.checked}
-                    tabIndex={-1}
-                    className="more-item"
-                    onClick={() => item.onChange(!item.checked)}
-                  >
-                    <span className="more-label">{item.label}</span>
-                    <span className="more-check" aria-hidden="true">
-                      {item.checked ? <Icon name="check" className="btn-icon" /> : null}
-                    </span>
-                  </button>
-                ) : (
-                  <button
-                    key={at}
-                    type="button"
-                    role="menuitem"
-                    tabIndex={-1}
-                    disabled={item.disabled}
-                    className={cn('more-item', item.danger && 'is-danger')}
-                    onClick={() => {
-                      close()
-                      item.onSelect()
-                    }}
-                  >
-                    {item.icon ? <Icon name={item.icon} className="btn-icon" /> : null}
-                    <span className="more-label">{item.label}</span>
-                  </button>
-                ),
-              )}
-            </div>,
-            host,
-          )
-        : null}
-    </>
+        {items.map((item, at) =>
+          item.kind === 'toggle' ? (
+            <DropdownMenuCheckboxItem
+              key={at}
+              checked={item.checked}
+              onCheckedChange={item.onChange}
+              onSelect={(event) => event.preventDefault()}
+              className={iconed ? 'pl-[calc(0.75rem+var(--icon)+0.625rem)]' : undefined}
+            >
+              <span className="min-w-0 truncate">{item.label}</span>
+            </DropdownMenuCheckboxItem>
+          ) : (
+            <DropdownMenuItem
+              key={at}
+              variant={item.danger ? 'destructive' : 'default'}
+              disabled={item.disabled}
+              onSelect={() => {
+                chosen.current = item.onSelect
+              }}
+            >
+              {item.icon ? <Icon name={item.icon} className="btn-icon" /> : null}
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            </DropdownMenuItem>
+          ),
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
