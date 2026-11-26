@@ -1,15 +1,15 @@
-/* The meowNY website: the landing page, the guide, the command line reference and the develop page. One calm column of text under
-   a plain header, in the app's own colours and font: the build puts ui/src/styles/tokens.css (colours, font, light and dark) in
-   front of this file. Nothing is loaded from anywhere else, and there is no script. Four text sizes: the title, the section
-   title (1.25rem), the text (0.9375rem) and the small print (0.8125rem). */
+/* The meowNY website: the landing page, the guide, the command line reference and the develop page. A quiet, shadcn-style
+   page in the app's own tokens: the build puts ui/src/styles/tokens.css (colours, font, radius, shadows, light and dark) in
+   front of this file. Square corners, hairline borders, hard shadows with no blur. Nothing is loaded from anywhere else,
+   and there is no script. Sizes are in rem and em; only the hairline is in pixels (a token). */
 
 :root {
-  --measure: 72ch;
+  --measure: 46rem;
   --toc: 12rem;
   --gap: clamp(2rem, 6vw, 4rem);
   --gutter: clamp(1rem, 4vw, 2rem);
   --space: clamp(2.5rem, 1.5rem + 4vw, 4.5rem);
-  /* The width of the contents beside the text. Both the header and the page are this wide, in the middle of the window. */
+  /* The width of the contents beside the text. The header and the page are this wide, in the middle of the window. */
   --wrap: calc(var(--toc) + var(--gap) + var(--measure));
   --side: max(var(--gutter), (100% - var(--wrap)) / 2);
 }
@@ -21,7 +21,7 @@
 }
 
 html {
-  scroll-padding-top: 1.5rem;
+  scroll-padding-top: 2rem;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -30,15 +30,15 @@ body {
   min-height: 100svh;
   background: var(--background);
   color: var(--foreground);
-  font: 400 0.9375rem/1.75 var(--font);
+  font: 400 0.875rem/1.65 var(--font);
   overflow-wrap: break-word;
 }
 
 a {
   color: var(--foreground);
   text-decoration: underline;
-  text-decoration-color: var(--ring);
-  text-underline-offset: 4px;
+  text-decoration-color: var(--border);
+  text-underline-offset: 0.25rem;
 }
 
 a:hover {
@@ -46,8 +46,8 @@ a:hover {
 }
 
 :focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
+  outline: var(--hairline-2) solid var(--ring);
+  outline-offset: var(--hairline-2);
 }
 
 .skip {
@@ -73,7 +73,7 @@ a:hover {
   justify-content: space-between;
   gap: 0.25rem 1.5rem;
   padding: 0.75rem var(--side);
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--hairline) solid var(--border);
 }
 
 .brand {
@@ -81,14 +81,15 @@ a:hover {
   align-items: center;
   gap: 0.5rem;
   color: var(--foreground);
-  font-weight: 600;
+  font-family: var(--font-pixel);
+  font-size: 1rem;
   text-decoration: none;
 }
 
 /* Twice the logo's 16 pixel grid, so every pixel stays square. */
 .brand .logo {
-  width: 32px;
-  height: 32px;
+  width: 2rem;
+  height: 2rem;
 }
 
 .top nav {
@@ -111,8 +112,8 @@ a:hover {
 .nav-item[aria-current='page'] {
   color: var(--foreground);
   text-decoration: underline;
-  text-decoration-color: var(--ring);
-  text-underline-offset: 6px;
+  text-decoration-color: var(--foreground);
+  text-underline-offset: 0.4rem;
 }
 
 .page {
@@ -134,7 +135,7 @@ main {
   max-width: var(--measure);
 }
 
-/* A plain list of links: the contents is a sticky list beside the text on a wide screen, and a folded one above it on a narrow one. */
+/* The contents: a sticky list beside the text on a wide screen, and a folded list above it on a narrow one. */
 .toc,
 .fold {
   font-size: 0.8125rem;
@@ -188,10 +189,6 @@ main {
   cursor: pointer;
 }
 
-.fold a {
-  padding: 0.4rem 0;
-}
-
 .fold ul.commands {
   display: none;
 }
@@ -229,21 +226,26 @@ h4 {
   line-height: 1.3;
 }
 
+/* The page title is the one heading in the pixel font. */
 h1 {
   margin: 0 0 0.75rem;
-  font-size: clamp(1.5rem, 1.2rem + 1.5vw, 2rem);
+  font-family: var(--font-pixel);
+  font-size: clamp(1.375rem, 1rem + 1.5vw, 2.0625rem);
+  font-weight: 400;
   letter-spacing: -0.02em;
 }
 
 h2 {
   margin: 0 0 1rem;
-  font-size: 1.25rem;
+  padding-bottom: 0.5rem;
+  border-bottom: var(--hairline) solid var(--border);
+  font-size: 1.125rem;
   text-transform: lowercase;
 }
 
 h3 {
-  margin: 2.5rem 0 0.75rem;
-  font-size: inherit;
+  margin: 2.25rem 0 0.75rem;
+  font-size: 0.9375rem;
   text-transform: lowercase;
 }
 
@@ -286,21 +288,58 @@ figure,
   margin: 0 0 1rem;
 }
 
-ul,
-ol {
-  padding-left: 1.75rem;
+/* Numbered steps: each number sits in a small square box. */
+main ol {
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
 }
 
-ol {
+main ol > li {
+  position: relative;
+  counter-increment: step;
   padding-left: 2.25rem;
+}
+
+main ol > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0.1rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: var(--hairline) solid var(--border);
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+/* Bullets: a small square marker. */
+main ul:not(.features) {
+  padding: 0;
+  list-style: none;
+}
+
+main ul:not(.features) > li {
+  position: relative;
+  padding-left: 1.25rem;
+}
+
+main ul:not(.features) > li::before {
+  content: '';
+  position: absolute;
+  left: 0.125rem;
+  top: 0.55em;
+  width: 0.3rem;
+  height: 0.3rem;
+  background: var(--muted-foreground);
 }
 
 li {
   margin-bottom: 0.4rem;
-}
-
-li::marker {
-  color: var(--muted-foreground);
 }
 
 strong {
@@ -308,7 +347,7 @@ strong {
 }
 
 code {
-  padding: 0.1em 0.35em;
+  padding: 0.1em 0.3em;
   background: var(--muted);
   font: inherit;
   font-size: 0.9em;
@@ -320,10 +359,12 @@ code {
   color: var(--muted-foreground);
 }
 
+/* A note is an alert: a hairline box on the muted background. */
 aside.note {
   margin: 0 0 1rem;
-  padding-left: 1rem;
-  border-left: 1px solid var(--input);
+  padding: 0.75rem 1rem;
+  border: var(--hairline) solid var(--border);
+  background: var(--muted);
 }
 
 aside.note p {
@@ -349,6 +390,7 @@ footer {
 
 figure.code {
   margin: 0 0 1rem;
+  border: var(--hairline) solid var(--border);
   background: var(--muted);
 }
 
@@ -396,14 +438,14 @@ table:has(th:nth-child(3)):not(.flags) {
 th,
 td {
   padding: 0.5rem 1rem 0.5rem 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--hairline) solid var(--border);
   text-align: left;
   vertical-align: top;
 }
 
 th {
   color: var(--muted-foreground);
-  font-weight: 400;
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -427,16 +469,20 @@ table.flags td:first-child code {
   color: var(--destructive);
 }
 
-/* ---- the command line reference: one command after another ---- */
+/* ---- the command line reference: one card per command ---- */
 
 section.command {
-  margin: 0 0 3rem;
+  margin: 0 0 2rem;
+  padding: 1rem 1.25rem;
+  border: var(--hairline) solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow-md);
 }
 
 section.command:target h4 code {
   text-decoration: underline;
-  text-decoration-color: var(--ring);
-  text-underline-offset: 6px;
+  text-decoration-color: var(--foreground);
+  text-underline-offset: 0.4rem;
 }
 
 section.command > header {
@@ -481,6 +527,7 @@ section.command h4 code {
 
 /* ---- the landing page ---- */
 
+/* The button: the solid green of the app, square, with no shadow. */
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -491,10 +538,12 @@ section.command h4 code {
 .btn {
   display: inline-flex;
   align-items: center;
-  height: 2.5rem;
-  padding: 0 1.25rem;
+  height: var(--control);
+  padding: 0 0.75rem;
+  border: var(--hairline) solid var(--primary);
   background: var(--primary);
   color: var(--primary-foreground);
+  font-size: 0.8125rem;
   text-decoration: none;
 }
 
@@ -502,24 +551,30 @@ section.command h4 code {
   opacity: 0.9;
 }
 
+/* What it does: one card per feature, with the hard shadow. */
 ul.features {
+  display: grid;
+  gap: 0.75rem;
   padding: 0;
   list-style: none;
 }
 
 .features li {
   display: grid;
-  grid-template-columns: 14rem minmax(0, 1fr);
+  grid-template-columns: 13rem minmax(0, 1fr);
   gap: 0 1.5rem;
   margin: 0;
-  padding: 0.4rem 0;
+  padding: 0.75rem 1rem;
+  border: var(--hairline) solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow-md);
 }
 
 .features span {
   color: var(--muted-foreground);
 }
 
-/* ---- screenshots: at their own shape, never wider than the column ---- */
+/* ---- screenshots: at their own shape, never wider than the column, in a hairline frame ---- */
 
 .grid.shots {
   display: grid;
@@ -540,7 +595,9 @@ ul.features {
   display: block;
   max-width: 100%;
   height: auto;
-  border: 1px solid var(--border);
+  padding: 0.25rem;
+  border: var(--hairline) solid var(--border);
+  background: var(--card);
 }
 
 .shot figcaption {
@@ -599,7 +656,7 @@ ul.features {
 }
 
 .shot .shot-view img {
-  max-width: min(94vw, 1280px);
+  max-width: min(94vw, 80rem);
   max-height: 92vh;
   box-shadow: var(--shadow-lg);
 }
@@ -628,5 +685,6 @@ ul.features {
 
   section.command {
     break-inside: avoid;
+    box-shadow: none;
   }
 }

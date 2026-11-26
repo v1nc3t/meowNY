@@ -172,7 +172,7 @@ const SECTIONS = [
         ],
       },
       { t: 'h3', id: 'add-entry', text: 'Add an expense, an income or a transfer' },
-      { t: 'p', text: 'One dialog adds all three. It opens on the tab that fits the list you are on. `Alt+1`, `Alt+2` and `Alt+3` switch tabs and keep the amount, date and text.' },
+      { t: 'p', text: 'One dialog adds all three. `Alt+1`, `Alt+2` and `Alt+3` switch tabs and keep the amount, date and text.' },
       { t: 'p', text: '**Add an expense:**' },
       {
         t: 'ol',
@@ -241,7 +241,7 @@ const SECTIONS = [
       },
       { t: 'p', text: '**Delete** asks for which months: only this month (the category stays), this month and later, or all months.' },
       { t: 'h3', id: 'budget', text: 'Budgets' },
-      { t: 'p', text: 'A budget is set per month and category, and carries into later months. Expense and income budgets work the same.' },
+      { t: 'p', text: 'A budget is set per month and category, and carries into later months.' },
       {
         t: 'ol',
         items: [
@@ -259,7 +259,7 @@ const SECTIONS = [
         ],
       },
       { t: 'h3', id: 'income', text: 'Income categories' },
-      { t: 'p', text: 'The income side of **categories** works like the expenses side. On the phone it is the **income** tab.' },
+      { t: 'p', text: 'On the phone, the income side is the **income** tab.' },
       {
         t: 'ol',
         items: ['Open **categories** and choose the **income** tab (on the phone) or look at its income side.', 'Press **add category** (or `n`), type a name and choose **income**.', 'Type a budget if you want one, then press **done**.'],
@@ -419,7 +419,7 @@ const SECTIONS = [
         ],
       },
       { t: 'h3', id: 'account-currency', text: 'An account in another currency' },
-      { t: 'p', text: 'Budgets, statistics and net worth use one currency: yours. An account can be in another, such as a lei account next to euro accounts.' },
+      { t: 'p', text: 'Budgets, statistics and net worth use one currency: yours. An account can be in another currency.' },
       {
         t: 'ol',
         items: [
@@ -598,7 +598,7 @@ const SECTIONS = [
           'A take cannot take out more than is saved.',
           'The same limits apply when you change or delete an entry.',
           'You can still spend set-aside money. Free can then go below 0, and the account says **the stashes hold more than the account has**.',
-          'Each device checks the limits when you make an entry. After a sync, two devices can together pass one. Nothing is lost.',
+          'Each device checks the limits when you make an entry. After a sync, two devices can together pass one.',
         ],
       },
       { t: 'h3', id: 'stash-target', text: 'The target' },
@@ -706,7 +706,7 @@ const SECTIONS = [
         ],
       },
       { t: 'h3', id: 'phone-copy', text: 'Keep a copy on your phone' },
-      { t: 'p', text: 'The computer is the archive. A document goes to the phone only if you ask.' },
+      { t: 'p', text: 'A document goes to the phone only if you ask.' },
       {
         t: 'ol',
         items: ['On the computer, open **documents** and click a document\'s row.', 'Tick **keep on phone**.', 'Sync the phone ([sync](#syncing)). The files come with it.'],
@@ -727,7 +727,7 @@ const SECTIONS = [
     title: 'Debts and shared bills',
     blocks: [
       { t: 'h3', id: 'friends', text: 'Friends and the history' },
-      { t: 'p', text: 'A friend is just a name: no phone, email or contacts. Each has a ledger outside your budget. Green means the friend owes you. Red means you owe them.' },
+      { t: 'p', text: 'A friend is just a name: no phone, email or contacts. Green means the friend owes you. Red means you owe them.' },
       { t: 'p', text: '**debts** has two tabs: **friends**, and **debts** for what you owe a bank ([loans and mortgages](#loans)). The friends tab shows:' },
       {
         t: 'ul',
@@ -984,7 +984,7 @@ const SECTIONS = [
       {
         t: 'ul',
         items: [
-          'No server, no account, no telemetry. Nobody but you holds your data.',
+          'No server, no account, no telemetry.',
           'The database is encrypted (SQLCipher). Its key is stored wrapped twice: once for the keychain (and your passphrase), once for the recovery key.',
           'The app locks when idle and forgets the key. A locked app shows nothing, also to scripts.',
           'Logs and crash reports never hold amounts, descriptions, tokens or keys.',
@@ -1054,7 +1054,7 @@ const SECTIONS = [
           ['`Ctrl/Cmd+B`', 'sidebar'],
         ],
       },
-      { t: 'p', text: 'Rest the pointer on a name cut off with "…". A small box shows all of it and slides to show the rest.' },
+      { t: 'p', text: 'Rest the pointer on a name cut off with "…" to see all of it.' },
     ],
   },
   {
