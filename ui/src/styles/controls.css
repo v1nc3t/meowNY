@@ -28,7 +28,7 @@
   width: max-content;
   min-width: max-content;
   min-height: var(--control);
-  padding: 0.25rem 2.25rem 0.25rem 0.75rem;
+  padding: 0.125rem 2.25rem 0.125rem 0.75rem;
   text-align: left;
   font-family: var(--font);
   font-size: 0.8125rem;

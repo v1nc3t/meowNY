@@ -195,11 +195,11 @@ ul.card-list.acct-list.is-archived > li.card-item > .cell-name {
 }
 
 /* The debts (a credit, a loan, a mortgage) on the debts page, a tidy table (docs/ui-design.md, rule 2): the name (an archived debt says so after it),
-   its kind, owed, installment, payoff, then pay as an icon button and the chevron that opens the rest (the rate, a month of interest). Every cell is one
+   its kind, owed, installment, payoff, then pay as an icon button, the "more" menu and the chevron that opens the rest (the rate, a month of interest). Every cell is one
    line. With less room a column goes, never a line is added: the installment (under 56em), then the kind (under 46em), then the payoff (under 38em).
    An archived debt is dimmed. */
 .card-list.loans-table {
-  --cols: minmax(8rem, 2.4fr) minmax(11ch, 1fr) 14ch 14ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+  --cols: minmax(8rem, 2.4fr) minmax(11ch, 1fr) 14ch 14ch 14ch calc(3 * var(--control-sm) + 0.25rem);
 }
 
 ul.card-list.loans-table > li.card-item {
@@ -225,7 +225,7 @@ ul.card-list.loans-table > li.card-item[data-archived] {
 @container (max-width: 56em) {
   ul.card-list.loans-table > li.card-item,
   ul.card-list.loans-table > li.list-head {
-    grid-template-columns: minmax(8rem, 2.4fr) minmax(11ch, 1fr) 14ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+    grid-template-columns: minmax(8rem, 2.4fr) minmax(11ch, 1fr) 14ch 14ch calc(3 * var(--control-sm) + 0.25rem);
   }
 
   ul.card-list.loans-table .is-installment,
@@ -237,7 +237,7 @@ ul.card-list.loans-table > li.card-item[data-archived] {
 @container (max-width: 46em) {
   ul.card-list.loans-table > li.card-item,
   ul.card-list.loans-table > li.list-head {
-    grid-template-columns: minmax(6rem, 1fr) 14ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+    grid-template-columns: minmax(6rem, 1fr) 14ch 14ch calc(3 * var(--control-sm) + 0.25rem);
   }
 
   ul.card-list.loans-table .loan-kind,
@@ -249,7 +249,7 @@ ul.card-list.loans-table > li.card-item[data-archived] {
 @container (max-width: 38em) {
   ul.card-list.loans-table > li.card-item,
   ul.card-list.loans-table > li.list-head {
-    grid-template-columns: minmax(5rem, 1fr) 14ch calc(2 * var(--control-sm) + 0.25rem);
+    grid-template-columns: minmax(5rem, 1fr) 14ch calc(3 * var(--control-sm) + 0.25rem);
   }
 
   ul.card-list.loans-table .loan-col,

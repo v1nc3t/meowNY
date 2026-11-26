@@ -7,7 +7,7 @@ html.is-phone .pick-button {
   min-height: var(--control-phone);
 }
 
-/* min-height beats the heights that base.css and primitives.css give, so a tap target stays --control-phone (2.875rem) or more. */
+/* min-height beats the heights that base.css and primitives.css give, so a tap target stays --control-phone (2.5rem) or more. */
 html.is-phone input:not([type='checkbox'], [type='radio']),
 html.is-phone select,
 html.is-phone textarea {
@@ -41,9 +41,9 @@ html.is-phone .ui-btn-icon {
 /* The green button's hard shadow (--shadow-press) is outside its box, past the edge that the other controls line up on. On a phone the button
    leaves the room of the shadow in its box, so the shadow ends where the other controls end (also for a button that is 100% wide). */
 html.is-phone .ui-btn-default {
-  max-width: calc(100% - 0.125rem);
-  margin-right: 0.125rem;
-  margin-bottom: 0.125rem;
+  max-width: calc(100% - var(--hairline));
+  margin-right: var(--hairline);
+  margin-bottom: var(--hairline);
 }
 
 /* The two buttons of a dialog are as tall as each other (the green one with its shadow), so their edges line up. */
@@ -51,17 +51,17 @@ html.is-phone .modal-actions {
   align-items: stretch;
 }
 
-/* The buttons at the foot of a dialog are 3.125rem tall, and the green one keeps the room of its shadow
+/* The buttons at the foot of a dialog are 2.625rem tall, and the green one keeps the room of its shadow
    in its box (above). */
 html.is-phone .modal-panel {
-  --foot-btn: 3.25rem;
+  --foot-btn: 2.75rem;
 }
 
 html.is-phone .modal-actions > .ui-btn {
   height: auto;
 }
 
-/* The tabs' buttons are 3.125rem tall, so the track around them grows to fit. */
+/* The tabs' buttons are 2.625rem tall, so the track around them grows to fit. */
 html.is-phone .ui-tabs {
   height: auto;
 }
@@ -84,7 +84,7 @@ html.is-phone :is(.app-main a:not([class]), .app-footer a):active {
 }
 
 /* The footer (components/AppFooter.tsx) is centred: the links on one row (a second only when the words are long) with what the app is
-   under them in smaller text. The links are 3.125rem tall to tap and the small line's 1.75rem (the least a tap target may be), and the rows
+   under them in smaller text. The links are 2.625rem tall to tap and the small line's 1.75rem (the least a tap target may be), and the rows
    touch, so there is no gap between the boxes. The text of each row sits at the edge where the rows meet, so the two lines read as one
    block, not as two lines far apart, and the foot ends close under it. */
 html.is-phone .app-footer {
@@ -113,7 +113,7 @@ html.is-phone .app-footer > p {
 html.is-phone .app-footer a {
   display: flex;
   align-items: inherit;
-  min-height: 3.125rem;
+  min-height: 2.625rem;
 }
 
 html.is-phone .app-footer > p a {
@@ -175,7 +175,7 @@ html.is-phone *::-webkit-scrollbar-thumb {
   border-radius: var(--radius-lg);
   background: var(--primary);
   color: var(--primary-foreground);
-  box-shadow: var(--shadow-press);
+  box-shadow: 0.125rem 0.125rem 0 var(--press-shadow);
 }
 
 .fab:active:not(:disabled) {
@@ -283,7 +283,7 @@ html.is-phone .list-foot {
 }
 
 html.is-phone .page-numbers button {
-  min-width: 3.125rem;
+  min-width: 2.625rem;
 }
 
 /* Under the transactions the numbers share the line with the rows picker: the buttons keep their height but are narrower, so
@@ -334,7 +334,7 @@ html.is-phone .settings-layout > :is(.settings-list, .settings-section) {
 
 /* A line of the menu is the sidebar's (shell.css), taller to tap, with the icons at twice their grid. */
 .phone-menu :is(.nav-item, .exit-btn) {
-  height: 3.125rem;
+  height: 2.625rem;
   gap: 0.875rem;
   font-size: 1rem;
 }

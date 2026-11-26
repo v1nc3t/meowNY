@@ -18,7 +18,17 @@ export type MoreItem =
  * items, Home and End go to the ends, Escape closes it and gives the focus back to the button, and so does a press outside. It is drawn over the
  * page (in the body), so no parent clips it.
  */
-export default function MoreMenu({ items }: { items: MoreItem[] }) {
+export default function MoreMenu({
+  items,
+  label,
+  rowFocus = false,
+}: {
+  items: MoreItem[]
+  /** Names the button for a screen reader, when it is for one row ("more: Holiday"); the page's own says "more". */
+  label?: string
+  /** The button is where j and k stop in its row (a row with no name that is a link). */
+  rowFocus?: boolean
+}) {
   const t = useT()
   const button = useRef<HTMLButtonElement>(null)
   // The chosen action runs once the menu has gone and the focus is on the button, so a dialog that the action opens remembers the button.
@@ -31,12 +41,14 @@ export default function MoreMenu({ items }: { items: MoreItem[] }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button ref={button} variant="ghost" size="icon" className="icon-btn more-button" aria-label={t('common.more')}>
+        <Button ref={button} variant="ghost" size="icon" className="icon-btn more-button" aria-label={label ?? t('common.more')} data-row-focus={rowFocus ? true : undefined}>
           <Icon name="more" className="btn-icon" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        aria-label={t('common.more')}
+        aria-label={label ?? t('common.more')}
+        // The menu is drawn in the body, but React sends its clicks up through the row that holds the button: a row that opens on a click must not.
+        onClick={(event) => event.stopPropagation()}
         onCloseAutoFocus={(event) => {
           const run = chosen.current
           chosen.current = null

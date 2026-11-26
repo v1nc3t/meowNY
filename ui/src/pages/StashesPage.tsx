@@ -11,7 +11,7 @@ import Pick, { PickOption } from '../components/Pick'
 import StashDetail from '../components/StashDetail'
 import StashModal from '../components/StashModal'
 import StashMoneyModal from '../components/StashMoneyModal'
-import { IconAction, ListGroup, NameMark, PanelActions, Row, Table, TapRow, type PanelAction } from '../components/RowParts'
+import { IconAction, ListGroup, NameMark, PanelActions, Row, RowMore, Table, TapRow, type PanelAction } from '../components/RowParts'
 import { MeterBar } from '../components/StashParts'
 import TransferModal from '../components/TransferModal'
 import { Badge } from '../components/ui/badge'
@@ -31,7 +31,7 @@ import { accountById, accountLabel, assetAccounts, several } from '../lib/accoun
 import { formatDate, formatMoney, fromMinor } from '../lib/money'
 import { applyOrder } from '../lib/reorder'
 import { saveChoice, storedChoice, storedId } from '../lib/sticky'
-import { activeStashes, archivedStashes, canAdd, canBookReturn, canClose, canTake, held, isBreak, KIND_FILTERS, listTotal, rowMark, rowMeter, rowStatus, stashFacts, stashMoney, type KindFilter, type MoneyMode, type RowMeter } from '../lib/stashView'
+import { activeStashes, archivedStashes, canAdd, canBookReturn, canClose, canTake, held, isBreak, KIND_FILTERS, listTotal, matchesStatus, rowMark, rowMeter, rowStatus, STATUS_FILTERS, stashFacts, stashMoney, type KindFilter, type MoneyMode, type RowMeter, type StatusFilter } from '../lib/stashView'
 
 /** The dialog that is open. A transfer being looked at is read first, so the dialog opens with its row. */
 type Dialog =
@@ -338,11 +338,11 @@ function StashesView({ settings, now }: { settings: MoneySettings; now: Today })
 }
 
 /**
- * The list: the account and the kind to look at (a compact line, with more than one of either), the stashes in the person's order as a table (held and
- * dragged, or Alt and the arrows, when no filter is chosen: with a filter the order of the list is not the order of what is shown), then the archived
- * ones apart and greyed, when the switch in the header's "more" menu is on. On the phone the rows are `TapRow`s that open to the facts and the buttons
- * (add, take out, return, open, edit, archive). A click on a desktop row opens the stash; the + and - of a row add and take out without leaving the
- * list. docs/loans-deposits-design.md, section 10.
+ * The list: the account, the kind and the status to look at (a compact line; the account and the kind only with more than one of either), the stashes in the
+ * person's order as a table (held and dragged, or Alt and the arrows, when no filter is chosen: with a filter the order of the list is not the order of what is
+ * shown), then the archived ones apart and greyed, when the switch in the header's "more" menu is on. On the phone the rows are `TapRow`s that open to the facts
+ * and the buttons (add, take out, return, open, edit, archive). A click on a desktop row opens the stash; the quick button of a row (+, return, restore) adds
+ * money without leaving the list, and its "more" menu has everything else. docs/loans-deposits-design.md, section 10.
  */
 function StashList({
   list,
@@ -383,6 +383,8 @@ function StashList({
   const [accountId, setAccountId] = useState(() => storedId('stashes.account'))
   const [kindMenu, setKindMenu] = useState(false)
   const [kind, setKind] = useState<KindFilter>(() => storedChoice('stashes.kind', KIND_FILTERS, ''))
+  const [statusMenu, setStatusMenu] = useState(false)
+  const [status, setStatus] = useState<StatusFilter>(() => storedChoice('stashes.status', STATUS_FILTERS, ''))
   // a row was just dropped in a new place: the click that ends the drag must not open the stash
   const dropped = useRef(false)
   const multi = several(accounts)
@@ -400,12 +402,12 @@ function StashList({
   // the kinds are a filter only while there are goals and deposits both
   const mixed = list.some((stash) => stash.kind === 'GOAL') && list.some((stash) => stash.kind === 'DEPOSIT')
   const kindFilter = mixed ? kind : ''
-  const inView = (stash: Stash) => (filter === '' || stash.accountId === filter) && (kindFilter === '' || stash.kind === kindFilter)
+  const inView = (stash: Stash) => (filter === '' || stash.accountId === filter) && (kindFilter === '' || stash.kind === kindFilter) && matchesStatus(stash, status)
   const shownActive = active.filter(inView)
   const shownArchived = archived.filter(inView)
   const total = listTotal(shownActive)
   // with a filter the order of the list is not the order of what is shown, so it cannot be changed
-  const reorderable = !phone && filter === '' && kindFilter === ''
+  const reorderable = !phone && filter === '' && kindFilter === '' && status === ''
 
   async function onReorder(ids: string[]) {
     dropped.current = true
@@ -431,6 +433,21 @@ function StashList({
     saveChoice('stashes.kind', value)
     setKind(value)
     setKindMenu(false)
+  }
+  const pickStatus = (value: StatusFilter) => {
+    saveChoice('stashes.status', value)
+    setStatus(value)
+    setStatusMenu(false)
+  }
+  const statusWords: Record<StatusFilter, string> = {
+    '': t('stashes.allStatuses'),
+    SAVING: t('stashes.saving'),
+    REACHED: t('stashes.reached'),
+    OVERDUE: t('stashes.overdueWord'),
+    RUNNING: t('stashes.state.RUNNING'),
+    MATURED: t('stashes.state.MATURED'),
+    BOOKED: t('stashes.state.BOOKED'),
+    BROKEN: t('stashes.state.BROKEN'),
   }
   const kindWords: Record<KindFilter, string> = { '': t('stashes.allKinds'), GOAL: t('stashes.goals'), DEPOSIT: t('stashes.deposits') }
   const accountText = filter ? ((accountById(accounts, filter) && accountLabel(accountById(accounts, filter)!, t)) ?? '') : t('accounts.allAccounts')
@@ -471,41 +488,58 @@ function StashList({
   )
 
   /**
-   * The + and the - of a stash: each where it is allowed, an empty place where it is not, so the buttons of all rows line up. A deposit that matured has
-   * a "return" button where the + would be, and the - of one that runs is its break. A click on one does not open the row.
+   * The one quick button of a row, where the main action is: + to add money, "return" for a deposit that matured, restore for an archived stash; an empty
+   * place where there is none, so the "more" buttons of all rows line up. A click on it does not open the row. The rest is in the row's menu.
    */
-  const steps = (stash: Stash) => {
+  const quick = (stash: Stash) => {
     const press = (tab: MoneyMode) => (event: MouseEvent<HTMLElement>) => {
       event.stopPropagation()
       onMoney(stash, tab)
     }
-    return (
-      <>
-        {canBookReturn(stash) ? (
-          <Button size="sm" className="stash-return" aria-label={`${t('stashes.bookReturn')}: ${stash.name}`} onClick={press('RETURN')}>
-            {t('stashes.returnButton')}
-          </Button>
-        ) : canAdd(stash) ? (
-          <Button size="sm" className="stash-step" aria-label={`${t('stashes.addMoney')}: ${stash.name}`} onClick={press('ADD')}>
-            +
-          </Button>
-        ) : (
-          <span className="icon-slot" />
-        )}
-        {canTake(stash) ? (
-          <Button variant="outline" size="sm" className="stash-step" aria-label={`${t(isBreak(stash) ? 'stashes.breakDeposit' : 'stashes.takeOut')}: ${stash.name}`} onClick={press('TAKE')}>
-            &minus;
-          </Button>
-        ) : (
-          <span className="icon-slot" />
-        )}
-      </>
-    )
+    if (stash.archived) return <IconAction icon="export" label={`${t('stashes.restore')}: ${stash.name}`} onClick={() => onRestore(stash)} />
+    if (canBookReturn(stash)) {
+      return (
+        <Button size="sm" className="stash-step" aria-label={`${t('stashes.bookReturn')}: ${stash.name}`} title={t('stashes.bookReturn')} onClick={press('RETURN')}>
+          <Icon name="check" className="btn-icon" />
+        </Button>
+      )
+    }
+    if (canAdd(stash)) {
+      return (
+        <Button size="sm" className="stash-step" aria-label={`${t('stashes.addMoney')}: ${stash.name}`} title={t('stashes.addMoney')} onClick={press('ADD')}>
+          +
+        </Button>
+      )
+    }
+    return <span className="icon-slot" />
   }
 
-  // A desktop row, one value to a cell: name (with the grip that says the row can be held and dragged), account, what is saved, its target, the bar, the
-  // date (a goal's target date, a deposit's maturity), where it stands, then + and - (restore and delete for an archived one). With less room columns
-  // go (stashes.css). The name is the link for the keyboard (j and k stop on it).
+  /**
+   * What can be done with a stash, as the phone's open row has it and the "more" menu of a desktop row: add (or the return of a deposit that matured), take
+   * out (the break of one that runs), open, edit, archive; an archived one is opened, restored and deleted. The desktop menu has delete for the others too.
+   */
+  const actionsOf = (stash: Stash): PanelAction[] =>
+    stash.archived
+      ? [
+          { label: t('accounts.open'), icon: 'play', to: link(stash) },
+          { label: t('stashes.restore'), icon: 'export', onClick: () => onRestore(stash) },
+          { label: t('common.delete'), icon: 'trash', danger: true, onClick: () => onDelete(stash) },
+        ]
+      : [
+          ...(canBookReturn(stash)
+            ? [{ label: t('stashes.bookReturn'), icon: 'check', onClick: () => onMoney(stash, 'RETURN') }]
+            : canAdd(stash)
+              ? [{ label: t('stashes.addMoney'), icon: 'add', onClick: () => onMoney(stash, 'ADD') }]
+              : []),
+          ...(canTake(stash) ? [{ label: t(isBreak(stash) ? 'stashes.breakDeposit' : 'stashes.takeOut'), icon: 'export', onClick: () => onMoney(stash, 'TAKE') }] : []),
+          { label: t('accounts.open'), icon: 'play', to: link(stash) },
+          { label: t('common.edit'), icon: 'pencil', onClick: () => onEdit(stash) },
+          { label: t('stashes.archive'), icon: 'archive', onClick: () => onArchive(stash) },
+        ]
+
+  // A desktop row, one value to a cell: name (with the grip that says the row can be held and dragged), account, what is saved, the bar with its figure, its
+  // target, the date (a goal's target date, a deposit's maturity), where it stands, then the quick button (+, return or restore) and the "more" menu. With less
+  // room columns go (stashes.css). The name is the link for the keyboard (j and k stop on it).
   function tableRow(stash: Stash, hintId?: string) {
     const drag = reorderable && !stash.archived
     const status = rowStatus(stash, money(stash), t)
@@ -517,14 +551,10 @@ function StashList({
         data-archived={stash.archived || undefined}
         onClick={(event) => open(event, stash)}
         actions={
-          stash.archived ? (
-            <>
-              <IconAction icon="export" label={`${t('stashes.restore')}: ${stash.name}`} onClick={() => onRestore(stash)} />
-              <IconAction icon="trash" label={`${t('common.delete')}: ${stash.name}`} danger onClick={() => onDelete(stash)} />
-            </>
-          ) : (
-            steps(stash)
-          )
+          <>
+            {quick(stash)}
+            <RowMore name={stash.name} actions={[...actionsOf(stash), !stash.archived && { label: t('common.delete'), icon: 'trash', danger: true, onClick: () => onDelete(stash) }]} />
+          </>
         }
       >
         <div className="cell-name">
@@ -539,8 +569,8 @@ function StashList({
           </span>
         ) : null}
         {savedCell(stash)}
-        <span className="cell-sub-end stash-goal">{stash.target === null ? <span className="stash-none">—</span> : money(stash)(stash.target)}</span>
         {meterCell(stash, rowMeter(stash, t))}
+        <span className="cell-sub-end stash-goal">{stash.target === null ? <span className="stash-none">—</span> : money(stash)(stash.target)}</span>
         <span className={cn('cell-sub stash-when', stash.overdue && 'is-late')}>{dateOf(stash) ?? <span className="stash-none">—</span>}</span>
         <span className={cn('cell-sub stash-status', `tone-${status.tone}`)}>{status.text}</span>
       </Row>
@@ -554,21 +584,7 @@ function StashList({
     const status = rowStatus(stash, money(stash), t)
     const mark = rowMark(status)
     const meter = rowMeter(stash, t)
-    const actions: (PanelAction | false)[] = stash.archived
-      ? [
-          { label: t('accounts.open'), icon: 'play', to: link(stash) },
-          { label: t('stashes.restore'), icon: 'export', onClick: () => onRestore(stash) },
-          { label: t('common.delete'), icon: 'trash', danger: true, onClick: () => onDelete(stash) },
-        ]
-      : [
-          canBookReturn(stash)
-            ? { label: t('stashes.bookReturn'), icon: 'check', onClick: () => onMoney(stash, 'RETURN') }
-            : canAdd(stash) && { label: t('stashes.addMoney'), icon: 'add', onClick: () => onMoney(stash, 'ADD') },
-          canTake(stash) && { label: t(isBreak(stash) ? 'stashes.breakDeposit' : 'stashes.takeOut'), icon: 'export', onClick: () => onMoney(stash, 'TAKE') },
-          { label: t('accounts.open'), icon: 'play', to: link(stash) },
-          { label: t('common.edit'), icon: 'pencil', onClick: () => onEdit(stash) },
-          { label: t('stashes.archive'), icon: 'archive', onClick: () => onArchive(stash) },
-        ]
+    const actions = actionsOf(stash)
     // under the name: the bar of a goal, the state of a deposit; the mark says it already when it is news, and an archived one says nothing
     const meta = stash.archived ? undefined : stash.deposit ? (
       mark ? undefined : <span className={`tone-${status.tone}`}>{status.text}</span>
@@ -598,8 +614,8 @@ function StashList({
     t('common.name'),
     ...(showAccount ? [{ label: t('stashes.account'), className: 'head-account' }] : []),
     { label: t('stashes.savedLabel'), className: 'is-end' },
-    { label: t('stashes.target'), className: 'is-end head-target' },
     { label: t('stashes.progress'), className: 'head-meter' },
+    { label: t('stashes.target'), className: 'is-end head-target' },
     { label: t('stashes.dateHead'), className: 'head-date' },
     { label: t('stashes.status'), className: 'head-status' },
     '',
@@ -612,63 +628,77 @@ function StashList({
 
   return (
     <>
-      {multi || mixed ? (
-        <div className="toolbar wide tx-bar filter-bar">
-          {multi ? (
-            <Pick
-              compact
-              label={t('stashes.account')}
-              className="scope"
-              text={accountText}
-              title={accountText}
-              open={menu}
-              onToggle={() => setMenu((open) => !open)}
-              onClose={() => setMenu(false)}
-            >
-              <PickOption selected={filter === ''} onClick={() => pick('')}>
-                {t('accounts.allAccounts')}
+      <div className="toolbar wide tx-bar filter-bar">
+        {multi ? (
+          <Pick
+            compact
+            label={t('stashes.account')}
+            className="scope"
+            text={accountText}
+            title={accountText}
+            open={menu}
+            onToggle={() => setMenu((open) => !open)}
+            onClose={() => setMenu(false)}
+          >
+            <PickOption selected={filter === ''} onClick={() => pick('')}>
+              {t('accounts.allAccounts')}
+            </PickOption>
+            {assetAccounts(accounts).map((account) => (
+              <PickOption key={account.id} selected={filter === account.id} onClick={() => pick(account.id)}>
+                {accountLabel(account, t)}
               </PickOption>
-              {assetAccounts(accounts).map((account) => (
-                <PickOption key={account.id} selected={filter === account.id} onClick={() => pick(account.id)}>
-                  {accountLabel(account, t)}
-                </PickOption>
-              ))}
-            </Pick>
-          ) : null}
-          {mixed ? (
-            <Pick
-              compact
-              label={t('stashes.kindTabs')}
-              className="scope"
-              text={kindWords[kindFilter]}
-              open={kindMenu}
-              onToggle={() => setKindMenu((open) => !open)}
-              onClose={() => setKindMenu(false)}
-            >
-              {KIND_FILTERS.map((value) => (
-                <PickOption key={value || 'all'} selected={kindFilter === value} onClick={() => pickKind(value)}>
-                  {kindWords[value]}
-                </PickOption>
-              ))}
-            </Pick>
-          ) : null}
-        </div>
-      ) : null}
+            ))}
+          </Pick>
+        ) : null}
+        {mixed ? (
+          <Pick
+            compact
+            label={t('stashes.kindTabs')}
+            className="scope"
+            text={kindWords[kindFilter]}
+            open={kindMenu}
+            onToggle={() => setKindMenu((open) => !open)}
+            onClose={() => setKindMenu(false)}
+          >
+            {KIND_FILTERS.map((value) => (
+              <PickOption key={value || 'all'} selected={kindFilter === value} onClick={() => pickKind(value)}>
+                {kindWords[value]}
+              </PickOption>
+            ))}
+          </Pick>
+        ) : null}
+        <Pick
+          compact
+          label={t('stashes.status')}
+          className="scope"
+          text={statusWords[status]}
+          open={statusMenu}
+          onToggle={() => setStatusMenu((open) => !open)}
+          onClose={() => setStatusMenu(false)}
+        >
+          {STATUS_FILTERS.map((value) => (
+            <PickOption key={value || 'all'} selected={status === value} onClick={() => pickStatus(value)}>
+              {statusWords[value]}
+            </PickOption>
+          ))}
+        </Pick>
+      </div>
       {shownActive.length > 0 && phone ? <ListGroup className="stash-phone">{shownActive.map(tapRow)}</ListGroup> : null}
       {shownActive.length > 0 && !phone ? (
-        <Table tidy className={cn(tableClass(reorderable && 'can-reorder'), shownActive.some(canBookReturn) && 'has-return')} heads={heads} listRef={listRef}>
+        <Table tidy className={tableClass(reorderable && 'can-reorder')} heads={heads} listRef={listRef}>
           {shownActive.map((stash) => tableRow(stash, reorderable ? hintId : undefined))}
           {total ? (
             <li className="card-item stash-total">
               <span className="cell-name">{t('stashes.totalRow')}</span>
               {showAccount ? <span className="stash-account" /> : null}
               <span className="cell-amount stash-saved">{stashMoney(total, settings.locale)(total.saved)}</span>
+              <span className="stash-meter" />
               <span className="cell-sub-end stash-goal">{total.target === null ? null : stashMoney(total, settings.locale)(total.target)}</span>
             </li>
           ) : null}
         </Table>
       ) : null}
-      {shownActive.length === 0 && (active.length === 0 || filter !== '' || kindFilter !== '') ? <p className="hint">{t('stashes.noStashes')}</p> : null}
+      {shownActive.length === 0 && (active.length === 0 || filter !== '' || kindFilter !== '' || status !== '') ? <p className="hint">{t('stashes.noStashes')}</p> : null}
       {reorderable ? (
         <>
           <span id={hintId} className="sr-only">

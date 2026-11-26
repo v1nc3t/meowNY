@@ -817,8 +817,8 @@ ul.card-list.hist-list > li.card-item {
 .row-primary {
   flex: none;
   height: auto;
-  min-height: 2rem;
-  padding: 0.25rem 0.75rem;
+  min-height: var(--control);
+  padding: 0.125rem 0.75rem;
   line-height: 1.25;
   text-align: center;
   white-space: nowrap;

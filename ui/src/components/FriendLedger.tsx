@@ -17,7 +17,7 @@ import BillCodeModal from './BillCodeModal'
 import ClipPreview from './ClipPreview'
 import ConfirmModal from './ConfirmModal'
 import EntryModal from './EntryModal'
-import { DayGroups, IconAction, NoteSection, PanelActions, Row, Table, TapRow, type PanelAction } from './RowParts'
+import { DayGroups, NoteSection, PanelActions, Row, RowMore, Table, TapRow, type PanelAction } from './RowParts'
 import SettleModal from './SettleModal'
 import { Button } from './ui/button'
 import { buttonClass } from './ui/cn'
@@ -141,8 +141,20 @@ export default function FriendLedger({
   const hasCode = (line: Line) => line.kind === 'BILL' && line.transactionId !== null && !line.effect.startsWith('-')
   const showCode = (line: Line) => setDialog({ kind: 'code', transactionId: line.transactionId ?? '', amount: line.amount })
 
-  // A desktop row: what kind of line it was, the bill's name, when, how much it changed, the balance after it, then its buttons (go to the transaction; show code for a
-  // bill; edit and delete for an entry of the person's own) and the chevron of a note, which opens under the row.
+  /** What can be done with a line, in a desktop row's "more" menu and the open row of a phone: go to the transaction; show code for a bill; edit and delete for an entry of the person's own. */
+  const actionsOf = (line: Line, entry: EntryOfLine | null): PanelAction[] => [
+    ...(line.transactionId ? [{ label: t('debts.goToTransaction'), icon: 'transactions', onClick: () => goToTransaction(line) }] : []),
+    ...(hasCode(line) ? [{ label: t('code.show'), icon: 'qr', onClick: () => showCode(line) }] : []),
+    ...(entry
+      ? [
+          { label: t('common.edit'), icon: 'pencil', onClick: () => setDialog({ kind: 'entry', entry }) },
+          { label: t('common.delete'), icon: 'trash', danger: true, onClick: () => setDialog({ kind: 'delete', entry }) },
+        ]
+      : []),
+  ]
+
+  // A desktop row: what kind of line it was, the bill's name, when, how much it changed, the balance after it, then the "more" menu (go to the transaction; show
+  // code for a bill; edit and delete for an entry of the person's own) and the chevron of a note, which opens under the row.
   function tableRow(line: Line, at: number) {
     const entry = entryOfLine(line, person.id)
     const count = line.entryId ? (clips[line.entryId] ?? 0) : 0
@@ -154,26 +166,7 @@ export default function FriendLedger({
         rows={rows}
         id={key}
         item={lineItem(line)}
-        actions={
-          <>
-            {line.transactionId ? (
-              <IconAction icon="transactions" label={t('debts.goToTransaction')} data-row-focus={line.kind === 'BILL' && !hasCode(line) ? true : undefined} onClick={() => goToTransaction(line)} />
-            ) : null}
-            {line.kind === 'BILL' && line.transactionId ? (
-              <>
-                {hasCode(line) ? <IconAction icon="qr" label={t('code.show')} data-row-focus onClick={() => showCode(line)} /> : <span className="icon-slot" />}
-                {/* where an entry has delete, so that the buttons of bills and entries line up */}
-                <span className="icon-slot" />
-              </>
-            ) : null}
-            {entry ? (
-              <>
-                <IconAction icon="pencil" label={t('common.edit')} data-row-focus onClick={() => setDialog({ kind: 'entry', entry })} />
-                <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setDialog({ kind: 'delete', entry })} />
-              </>
-            ) : null}
-          </>
-        }
+        actions={<RowMore name={lineLabel(line)} actions={actionsOf(line, entry)} rowFocus />}
         panel={note ? <NoteSection note={note} /> : null}
       >
         <div className="cell-name">
@@ -199,12 +192,7 @@ export default function FriendLedger({
     const count = line.entryId ? (clips[line.entryId] ?? 0) : 0
     const note = noteOf(line)
     const key = lineKey(line, lines.indexOf(line))
-    const actions: (PanelAction | false)[] = [
-      !!line.transactionId && { label: t('debts.goToTransaction'), icon: 'transactions', onClick: () => goToTransaction(line) },
-      hasCode(line) && { label: t('code.show'), icon: 'qr', onClick: () => showCode(line) },
-      !!entry && { label: t('common.edit'), icon: 'pencil', onClick: () => setDialog({ kind: 'entry', entry }) },
-      !!entry && { label: t('common.delete'), icon: 'trash', danger: true, onClick: () => setDialog({ kind: 'delete', entry }) },
-    ]
+    const actions = actionsOf(line, entry)
     return (
       <TapRow
         key={key}

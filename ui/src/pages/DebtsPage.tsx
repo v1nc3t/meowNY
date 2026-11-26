@@ -15,7 +15,7 @@ import EntryModal from '../components/EntryModal'
 import FriendLedger from '../components/FriendLedger'
 import FriendNameModal from '../components/FriendNameModal'
 import { type FactItem } from '../components/Facts'
-import { IconAction, ListGroup, NameMark, PanelActions, Row, Table, TapRow, type PanelAction } from '../components/RowParts'
+import { IconAction, ListGroup, NameMark, PanelActions, Row, RowMore, Table, TapRow, type PanelAction } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import SettleModal from '../components/SettleModal'
 import { Badge } from '../components/ui/badge'
@@ -225,8 +225,20 @@ function DebtsView({ settings, now, tabs }: { settings: MoneySettings; now: Toda
   /** The day the reminder of a friend came, when it did and was not cleared; none for a friend who owes nothing. */
   const reminderOf = (person: Person, tone: 'owed' | 'owe' | 'even') => (dueIds.has(person.id) && tone !== 'even' ? formatDate(dueOn.get(person.id) ?? '', settings.locale) : '')
 
-  // A desktop row: name, who owes whom, the day of the reminder, the amount, then what can be done: mark as paid (or bring back), rename, and take
-  // off the list (not for one that is removed already, whose place stays empty so the icons line up). The friend whose history is on the
+  /** What can be done with a friend, in a desktop row's "more" menu and the open row of a phone: mark as paid (or bring back), the history, rename, and take off the list. */
+  const actionsOf = (person: Person, tone: 'owed' | 'owe' | 'even'): PanelAction[] => [
+    ...(person.archived
+      ? [{ label: t('debts.unarchive'), icon: 'archive', onClick: () => void bringBack(person) }]
+      : tone !== 'even'
+        ? [{ label: t('debts.settle'), icon: 'check', onClick: () => setSettling(person) }]
+        : []),
+    { label: t('debts.ledger'), icon: 'play', to: friendLink(person) },
+    { label: t('common.rename'), icon: 'pencil', onClick: () => setEditing(person) },
+    ...(person.archived ? [] : [{ label: t('debts.archive'), icon: 'trash', danger: true, onClick: () => setDeleting(person) }]),
+  ]
+
+  // A desktop row: name, who owes whom, the day of the reminder, the amount, then the one quick button, mark as paid (or bring back one that was removed; an
+  // empty place for a friend who owes nothing, so the "more" buttons line up), and the "more" menu with the rest. The friend whose history is on the
   // right is marked. The name is the link for the keyboard (j and k stop on it).
   function tableRow(person: Person) {
     const { tone, abs } = balanceView(person.balance)
@@ -247,8 +259,7 @@ function DebtsView({ settings, now, tabs }: { settings: MoneySettings; now: Toda
             ) : (
               <span className="icon-slot" />
             )}
-            <IconAction icon="pencil" label={t('common.rename')} onClick={() => setEditing(person)} />
-            {person.archived ? <span className="icon-slot" /> : <IconAction icon="trash" label={t('debts.archive')} danger onClick={() => setDeleting(person)} />}
+            <RowMore name={person.name} actions={actionsOf(person, tone)} />
           </>
         }
       >
@@ -276,12 +287,7 @@ function DebtsView({ settings, now, tabs }: { settings: MoneySettings; now: Toda
       { label: t('debts.balance'), value: money(abs), tone: factTone },
       { label: t('sync.field.reminder'), value: reminder },
     ]
-    const actions: (PanelAction | false)[] = [
-      person.archived ? { label: t('debts.unarchive'), icon: 'archive', onClick: () => void bringBack(person) } : tone !== 'even' && { label: t('debts.settle'), icon: 'check', onClick: () => setSettling(person) },
-      { label: t('debts.ledger'), icon: 'play', to: friendLink(person) },
-      { label: t('common.rename'), icon: 'pencil', onClick: () => setEditing(person) },
-      !person.archived && { label: t('debts.archive'), icon: 'trash', danger: true, onClick: () => setDeleting(person) },
-    ]
+    const actions = actionsOf(person, tone)
     return (
       <TapRow
         key={person.id}

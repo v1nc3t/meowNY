@@ -1091,6 +1091,8 @@ export const en = {
   'stashes.daysShort': '{days} d',
   'stashes.overdueWord': 'overdue',
   'stashes.allKinds': 'all kinds',
+  'stashes.allStatuses': 'all statuses',
+  'stashes.saving': 'saving',
   'stashes.goals': 'goals',
   'stashes.deposits': 'deposits',
   'stashes.totalRow': 'total',

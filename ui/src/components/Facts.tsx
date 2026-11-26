@@ -9,10 +9,24 @@ export type FactItem = { label: string; value: ReactNode; tone?: 'positive' | 'n
  * and a value that does not fit is cut with an ellipsis). The details of a row, or of a page's thing. A pair with no value (null,
  * undefined, false or an empty string) is left out, so a caller can pass optional facts inline: `{ label: 'rate', value: rate }`; so is
  * a `false` or `null` in place of a pair (`active && { label: …, value: … }`). With nothing to show it draws nothing.
+ * `wide` is the form for the page of a thing on a computer: the pairs fill the whole width of the page, each a small grey label over its value, in as
+ * many columns as fit (2 to 4), instead of one narrow column.
  */
-export default function Facts({ items, className }: { items: readonly (FactItem | false | null | undefined)[]; className?: string }) {
+export default function Facts({ items, className, wide = false }: { items: readonly (FactItem | false | null | undefined)[]; className?: string; wide?: boolean }) {
   const shown = items.filter((item): item is FactItem => !!item && item.value != null && item.value !== false && item.value !== '')
   if (shown.length === 0) return null
+  if (wide) {
+    return (
+      <dl className={cn('facts is-wide', className)}>
+        {shown.map((item) => (
+          <div key={item.label}>
+            <dt>{item.label}</dt>
+            <dd className={item.tone ? `is-${item.tone}` : undefined}>{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+    )
+  }
   return (
     <dl className={cn('facts', className)}>
       {shown.map((item) => (

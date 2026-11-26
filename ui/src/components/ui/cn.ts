@@ -12,7 +12,7 @@ export const buttonVariants = cva(
       variant: {
         // The one solid button: it stands on its hard shadow and sinks onto it when pressed (with less motion the shadow just goes).
         default:
-          'ui-btn-default border-primary bg-primary text-primary-foreground shadow-press hover:opacity-90 not-disabled:active:shadow-none motion-safe:not-disabled:active:translate-x-0.5 motion-safe:not-disabled:active:translate-y-0.5',
+          'ui-btn-default border-primary bg-primary text-primary-foreground shadow-press hover:opacity-90 not-disabled:active:shadow-none motion-safe:not-disabled:active:translate-x-(--hairline) motion-safe:not-disabled:active:translate-y-(--hairline)',
         outline:
           'border-input bg-transparent text-foreground shadow-none hover:bg-accent hover:text-accent-foreground motion-safe:not-disabled:active:scale-[0.97]',
         ghost:
@@ -22,9 +22,9 @@ export const buttonVariants = cva(
         link: 'border-transparent text-foreground shadow-none underline-offset-[0.25em] hover:underline motion-safe:not-disabled:active:scale-[0.97]',
       },
       size: {
-        default: 'h-(--control) px-4',
+        default: 'h-(--control) px-3.5',
         sm: 'h-(--control-sm) px-3',
-        lg: 'h-9 px-6',
+        lg: 'h-8 px-5',
         icon: 'ui-btn-icon size-(--control) min-w-(--control) p-0',
       },
     },

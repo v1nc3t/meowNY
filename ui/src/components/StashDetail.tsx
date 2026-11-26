@@ -130,7 +130,7 @@ export default function StashDetail({
   return (
     <>
       <StashBar saved={stash.saved} target={stash.target} large />
-      <Facts items={stashFacts(stash, accountNode, money, settings.locale, t)} className="acct-facts" />
+      <Facts items={stashFacts(stash, accountNode, money, settings.locale, t)} className={phone ? 'acct-facts' : undefined} wide={!phone} />
       {stash.notes ? <p className="acct-notes">{stash.notes}</p> : null}
       <Card className="acct-chart">
         <CardHeader>
@@ -169,7 +169,8 @@ export default function StashDetail({
       ) : null}
       {/* what its account has: the balance, what the stashes hold and what is free; red, with a warning, when they hold more than the account has */}
       <Facts
-        className="acct-facts"
+        className={phone ? 'acct-facts' : undefined}
+        wide={!phone}
         items={[
           { label: account ? accountName(account, t) : stash.account, value: account ? money(account.balance) : null },
           { label: t('accounts.setAsideHead'), value: account ? money(account.setAside) : null },

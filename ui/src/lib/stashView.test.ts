@@ -39,6 +39,7 @@ import {
   savedAfter,
   signedAmount,
   listTotal,
+  matchesStatus,
   rowMark,
   rowMeter,
   rowStatus,
@@ -726,4 +727,28 @@ test('the total row adds up what two or more stashes of one currency hold, and t
   assert.equal(listTotal([stash()]), null, 'one stash is its own total')
   assert.equal(listTotal([]), null)
   assert.equal(listTotal([stash(), stash({ currency: 'USD' })]), null, 'amounts in two currencies are not added')
+})
+
+test('the status filter: a goal is saving until it is reached (overdue too), a deposit is in its state, and "all" keeps everything', () => {
+  const goal = stash()
+  const late = stash({ overdue: true })
+  const done = stash({ reached: true, overdue: true })
+  const open = stash({ target: null, targetDate: null, percent: null, left: null, perMonth: null })
+  assert.equal(matchesStatus(goal, 'SAVING'), true)
+  assert.equal(matchesStatus(late, 'SAVING'), true, 'overdue is still saving')
+  assert.equal(matchesStatus(late, 'OVERDUE'), true)
+  assert.equal(matchesStatus(goal, 'OVERDUE'), false)
+  assert.equal(matchesStatus(done, 'REACHED'), true)
+  assert.equal(matchesStatus(done, 'SAVING'), false)
+  assert.equal(matchesStatus(done, 'OVERDUE'), false, 'a goal that was reached is not overdue')
+  assert.equal(matchesStatus(open, 'SAVING'), true, 'a goal with no target never reaches one')
+  assert.equal(matchesStatus(open, 'REACHED'), false)
+  for (const state of STATES) {
+    const deposit = term(state)
+    for (const filter of ['RUNNING', 'MATURED', 'BOOKED', 'BROKEN'] as const) assert.equal(matchesStatus(deposit, filter), filter === state, `${state} / ${filter}`)
+    for (const filter of ['SAVING', 'REACHED', 'OVERDUE'] as const) assert.equal(matchesStatus(deposit, filter), false, `a deposit is never ${filter}`)
+  }
+  assert.equal(matchesStatus(goal, 'RUNNING'), false, 'a goal is no deposit')
+  assert.equal(matchesStatus(goal, ''), true)
+  assert.equal(matchesStatus(term('BROKEN'), ''), true)
 })

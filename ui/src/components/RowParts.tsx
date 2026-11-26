@@ -1,10 +1,11 @@
 import type { ComponentProps, ReactNode, Ref } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { closeOnEscape, type OpenRows } from '../hooks/useOpenRow'
 import { useT } from '../i18n/context'
 import { byDay, dayHeading } from '../lib/dayHeading'
 import { toggleRow } from '../lib/toggleRow'
 import Facts, { type FactItem } from './Facts'
+import MoreMenu from './MoreMenu'
 import Icon from './NavIcon'
 import { Button } from './ui/button'
 import { buttonClass, cn } from './ui/cn'
@@ -143,6 +144,18 @@ export function IconAction({
       <Icon name={icon} className="btn-icon" />
     </Button>
   )
+}
+
+/**
+ * The "more" button at the end of a table row: a menu of everything that can be done with the row's thing (`PanelAction`s, as in the phone's open row),
+ * named for it ("more: Holiday") for a screen reader. A `false` or `null` is left out; with no action there is no button. `rowFocus` makes it the stop of j and
+ * k in its row, for a row whose name is not a link.
+ */
+export function RowMore({ name, actions: given, rowFocus = false }: { name: string; actions: (PanelAction | false | null | undefined)[]; rowFocus?: boolean }) {
+  const t = useT()
+  const navigate = useNavigate()
+  const items = given.filter((action) => !!action).map((action) => ({ label: action.label, icon: action.icon, danger: action.danger, onSelect: () => (action.to ? navigate(action.to) : action.onClick?.()) }))
+  return <MoreMenu items={items} label={`${t('common.more')}: ${name}`} rowFocus={rowFocus} />
 }
 
 /** The chevron that opens a row's panel; where a row has nothing to open it is an empty slot, so the buttons of all rows line up. */

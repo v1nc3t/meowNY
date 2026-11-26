@@ -535,13 +535,13 @@ const SECTIONS = [
       {
         t: 'ul',
         items: [
-          'Columns: **name**, **account**, **saved**, **target**, **progress**, **date** and **status**.',
+          'Columns: **name**, **account**, **saved**, **progress**, **target**, **date** and **status**.',
           '**progress** is a bar and a percent. For a running deposit, it is how far through its term it is.',
           '**date** is a goal\'s target date, or a deposit\'s maturity.',
           '**status** is what to save **a month**, what is **left**, **reached** (green), **overdue** (red), or a deposit\'s state.',
           'The last row adds up what they hold and their targets. **total saved** is at the top of the page.',
-          'The **account** and **kind of stash** lists above the table show one account or one kind only.',
-          'A row has **+** (add) and **−** (take out). Click elsewhere on it to open the stash.',
+          'The **account**, **kind** and **status** lists above the table narrow the list.',
+          'A row has **+** (add) and **⋯** (take out, open, edit, archive, delete). Click elsewhere on it to open the stash.',
           'Drag a row to reorder it, or focus it and press `Alt` with an arrow key.',
           'On the phone, a row shows the name, what is saved and a thin bar. A mark says **reached**, **overdue**, **matured** or **broken**.',
         ],
@@ -561,7 +561,7 @@ const SECTIONS = [
       {
         t: 'ol',
         items: [
-          'Press **+** or **−** on a row, or **add money** (or `n`) or **take out** on a stash\'s page. On the phone, **take out** is in the **⋯** menu.',
+          'Press **+** on a row (**take out** is in its **⋯**), or **add money** (or `n`) or **take out** on a stash\'s page. On the phone, **take out** is in the **⋯** menu.',
           'The dialog has two tabs, **add** and **take out** (`Alt+1`, `Alt+2`).',
           'Type the **amount**, or press a chip. For an add: **the rest** (to the target), **a month** (this month\'s share) or **all free**. For a take: **all** or **half**.',
           'Check the bar. The solid part is what the stash holds, the striped part what this changes. The line under it says what the stash would hold. If a limit breaks ([what is free](#stash-free)), it says why in red and **done** stays off.',

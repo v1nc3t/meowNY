@@ -18,7 +18,7 @@ import PageHeader from './PageHeader'
 import AccountModal from './AccountModal'
 import LoanPayModal from './LoanPayModal'
 import Facts from './Facts'
-import { IconAction, ListGroup, NameMark, PanelActions, Row, Table, TapRow } from './RowParts'
+import { IconAction, ListGroup, NameMark, PanelActions, Row, RowMore, Table, TapRow, type PanelAction } from './RowParts'
 import { Badge } from './ui/badge'
 
 /** The dialog that is open: a new debt, or the payment of one. */
@@ -77,8 +77,14 @@ export default function DebtsLoans({ settings, now, tabs }: { settings: MoneySet
   /** What a debt owes and costs, one to a line, in its own currency. */
   const factsOf = (account: Account) => loanFacts(account, moneyIn(account.currency, settings.locale), settings.locale, t)
 
-  // A desktop row: the name (a debt that was archived says so), its kind, what is owed, the installment, the payoff, then pay as an icon button
-  // and the chevron that opens the rest (the rate, a month of interest). The name is the link for the keyboard (j and k stop on it).
+  /** What can be done with a debt, in a desktop row's "more" menu and the open row of a phone: pay it (not an archived one) and open it. */
+  const actionsOf = (account: Account): PanelAction[] => [
+    ...(account.archived ? [] : [{ label: t('loans.pay'), icon: 'check', onClick: () => setDialog({ kind: 'pay', liability: account }) }]),
+    { label: t('accounts.open'), icon: 'play', to: link(account) },
+  ]
+
+  // A desktop row: the name (a debt that was archived says so), its kind, what is owed, the installment, the payoff, then pay as an icon button, the
+  // "more" menu (pay, open) and the chevron that opens the rest (the rate, a month of interest). The name is the link for the keyboard (j and k stop on it).
   function tableRow(account: Account) {
     return (
       <Row
@@ -87,8 +93,13 @@ export default function DebtsLoans({ settings, now, tabs }: { settings: MoneySet
         id={account.id}
         data-archived={account.archived || undefined}
         onClick={(event) => open(event, account)}
-        actions={account.archived ? <span className="icon-slot" /> : <IconAction icon="check" label={`${t('loans.pay')}: ${accountName(account, t)}`} className="icon-btn rec-pay" onClick={() => setDialog({ kind: 'pay', liability: account })} />}
-        panel={<Facts items={factsOf(account)} className="acct-facts" />}
+        actions={
+          <>
+            {account.archived ? <span className="icon-slot" /> : <IconAction icon="check" label={`${t('loans.pay')}: ${accountName(account, t)}`} className="icon-btn rec-pay" onClick={() => setDialog({ kind: 'pay', liability: account })} />}
+            <RowMore name={accountName(account, t)} actions={actionsOf(account)} />
+          </>
+        }
+        panel={<Facts items={factsOf(account)} wide />}
       >
         <div className="cell-name">
           <Link className="card-name" to={link(account)} title={accountName(account, t)} data-row-focus>
@@ -119,12 +130,7 @@ export default function DebtsLoans({ settings, now, tabs }: { settings: MoneySet
         meta={kindText(account)}
         facts={factsOf(account)}
       >
-        <PanelActions
-          actions={[
-            !account.archived && { label: t('loans.pay'), icon: 'check', onClick: () => setDialog({ kind: 'pay', liability: account }) },
-            { label: t('accounts.open'), icon: 'play', to: link(account) },
-          ]}
-        />
+        <PanelActions actions={actionsOf(account)} />
       </TapRow>
     )
   }

@@ -1078,6 +1078,8 @@ export const es: Messages = {
   'stashes.daysShort': '{days} d',
   'stashes.overdueWord': 'vencido',
   'stashes.allKinds': 'todos los tipos',
+  'stashes.allStatuses': 'todos los estados',
+  'stashes.saving': 'ahorrando',
   'stashes.goals': 'objetivos',
   'stashes.deposits': 'depósitos',
   'stashes.totalRow': 'en total',

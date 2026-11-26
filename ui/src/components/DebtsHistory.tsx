@@ -7,7 +7,7 @@ import { useT } from '../i18n/context'
 import { noteOf } from '../lib/balance'
 import { formatDate, formatMoney } from '../lib/money'
 import Facts from './Facts'
-import { DayGroups, IconAction, NoteSection, PanelActions, Row, Table, TapRow, type PanelAction } from './RowParts'
+import { DayGroups, NoteSection, PanelActions, Row, RowMore, Table, TapRow, type PanelAction } from './RowParts'
 import { Button } from './ui/button'
 
 /**
@@ -52,8 +52,14 @@ export default function DebtsHistory({
     return <span className={`cell-amount ${effect.startsWith('-') ? 'debt-owe' : 'debt-owed'}`}>{effectText(effect)}</span>
   }
 
-  // A desktop row: who, what kind of change, the day, the change and the balance after it, then the button that goes to its
-  // transaction and the chevron of a bill's name or a note, which opens under the row.
+  /** What can be done with a line, in a desktop row's "more" menu and the open row of a phone: go to its transaction, and to the friend (a recurring payment has none). */
+  const actionsOf = (line: HistoryLine): PanelAction[] => [
+    ...(line.transactionId ? [{ label: t('debts.goToTransaction'), icon: 'transactions', onClick: () => goToTransaction(line) }] : []),
+    ...(line.personId ? [{ label: line.friend ?? '', icon: 'account', to: `/app/debts/${line.personId}` }] : []),
+  ]
+
+  // A desktop row: who, what kind of change, the day, the change and the balance after it, then the "more" menu (go to its transaction, to the friend)
+  // and the chevron of a bill's name or a note, which opens under the row.
   function tableRow(line: HistoryLine, at: number) {
     const note = noteOf(line)
     const bill = billOf(line)
@@ -63,11 +69,11 @@ export default function DebtsHistory({
         key={key}
         rows={rows}
         id={key}
-        actions={line.transactionId ? <IconAction icon="transactions" label={t('debts.goToTransaction')} data-row-focus onClick={() => goToTransaction(line)} /> : null}
+        actions={<RowMore name={subjectText(line)} actions={actionsOf(line)} rowFocus />}
         panel={
           note || bill ? (
             <>
-              <Facts items={[{ label: t('code.what'), value: bill }]} className="acct-facts" />
+              <Facts items={[{ label: t('code.what'), value: bill }]} wide />
               {note ? <NoteSection note={note} /> : null}
             </>
           ) : null
@@ -91,10 +97,7 @@ export default function DebtsHistory({
   function tapRow(line: HistoryLine) {
     const key = keyOf(line, lines.indexOf(line))
     const note = noteOf(line)
-    const actions: (PanelAction | false)[] = [
-      !!line.transactionId && { label: t('debts.goToTransaction'), icon: 'transactions', onClick: () => goToTransaction(line) },
-      !!line.personId && { label: line.friend ?? '', icon: 'account', to: `/app/debts/${line.personId}` },
-    ]
+    const actions = actionsOf(line)
     return (
       <TapRow
         key={key}

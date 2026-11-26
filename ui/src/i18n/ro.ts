@@ -1076,6 +1076,8 @@ export const ro: Messages = {
   'stashes.daysShort': '{days} z',
   'stashes.overdueWord': 'întârziat',
   'stashes.allKinds': 'toate tipurile',
+  'stashes.allStatuses': 'toate stările',
+  'stashes.saving': 'în economisire',
   'stashes.goals': 'ținte',
   'stashes.deposits': 'depozite',
   'stashes.totalRow': 'în total',

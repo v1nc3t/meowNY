@@ -384,6 +384,29 @@ export const KIND_FILTERS = ['', 'GOAL', 'DEPOSIT'] as const
 export type KindFilter = (typeof KIND_FILTERS)[number]
 
 /**
+ * The states the list can be narrowed to: '' is all of them. A goal is SAVING while its target is not reached (an overdue goal is still saving, and a goal
+ * with no target never reaches one), REACHED once it is, OVERDUE when its date has gone by without it; a deposit is RUNNING, MATURED, BOOKED or BROKEN.
+ */
+export const STATUS_FILTERS = ['', 'SAVING', 'REACHED', 'OVERDUE', 'RUNNING', 'MATURED', 'BOOKED', 'BROKEN'] as const
+export type StatusFilter = (typeof STATUS_FILTERS)[number]
+
+/** Whether a stash is in the state the list is narrowed to. */
+export function matchesStatus(stash: Pick<Stash, 'reached' | 'overdue' | 'deposit'>, filter: StatusFilter): boolean {
+  if (filter === '') return true
+  if (stash.deposit) return stash.deposit.state === filter
+  switch (filter) {
+    case 'SAVING':
+      return !stash.reached
+    case 'REACHED':
+      return stash.reached
+    case 'OVERDUE':
+      return stash.overdue && !stash.reached
+    default:
+      return false
+  }
+}
+
+/**
  * The total row under the table: what the shown stashes hold, and the targets of those that have one. Only for two or more, all in one currency (a sum of
  * amounts in different currencies means nothing); the total saved over the list is the one in the app's currency.
  */

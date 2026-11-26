@@ -117,10 +117,10 @@ p:empty {
   align-items: center;
   justify-content: center;
   gap: 0.375rem;
-  min-height: 2rem;
+  min-height: var(--control);
   min-width: max-content;
   max-width: 100%;
-  padding: 0.25rem 0.75rem;
+  padding: 0.125rem 0.75rem;
   font-family: var(--font);
   font-size: 0.8125rem;
   font-weight: 400;
@@ -161,7 +161,7 @@ p:empty {
 
 @media (prefers-reduced-motion: no-preference) {
   :where(button[type='submit']:active:not(:disabled)) {
-    transform: translate(0.125rem, 0.125rem);
+    transform: translate(var(--hairline), var(--hairline));
   }
 }
 
@@ -188,7 +188,7 @@ p:empty {
   border: var(--border-width) solid var(--input);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-xs);
-  padding: 0.25rem 0.75rem;
+  padding: 0.125rem 0.75rem;
   font-family: var(--font);
   font-size: 0.8125rem;
   line-height: 1.5;

@@ -12,11 +12,11 @@
 }
 
 :root {
-  /* The heights of the controls: buttons, fields and dropdowns are --control tall, so a toolbar lines up; the small buttons and those in the
+  /* The heights of the controls: buttons, fields and dropdowns are --control tall, so a toolbar lines up (thin: about a line and a half of text); the small buttons and those in the
      row of a table are --control-sm, so a row stays low; on the phone every control is --control-phone, still an easy tap. */
-  --control: 2rem;
-  --control-sm: 1.75rem;
-  --control-phone: 2.875rem;
+  --control: 1.625rem;
+  --control-sm: 1.4375rem;
+  --control-phone: 2.5rem;
 
   /* One font for text, buttons, fields, labels and section titles; the pixel font (above) only for the brand and the page titles, at 1.375rem and more. */
   --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
@@ -42,7 +42,7 @@
   --radius-xl: 0;
   --shadow-xs: 0 0 #0000;
   --shadow-sm: 0 0 #0000;
-  --shadow-press: 0.125rem 0.125rem 0 var(--press-shadow);
+  --shadow-press: var(--hairline) var(--hairline) 0 var(--press-shadow);
   --shadow-md: 0.125rem 0.125rem 0 var(--press-shadow);
   --shadow-lg: 0.25rem 0.25rem 0 var(--press-shadow);
   /* Boxes (lists, cards, fields, buttons, dialogs) have thin lines. */

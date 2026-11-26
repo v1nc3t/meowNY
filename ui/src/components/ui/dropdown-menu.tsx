@@ -26,9 +26,9 @@ function DropdownMenuContent({ className, align = 'end', sideOffset = 4, ...prop
   )
 }
 
-// One line: 2rem tall (taller on a phone), the one that has the focus or the pointer filled in the quiet fill.
+// One line: 1.625rem tall (taller on a phone), the one that has the focus or the pointer filled in the quiet fill.
 const item =
-  'relative flex min-h-(--control) w-full cursor-default items-center gap-2.5 px-3 text-sm whitespace-nowrap outline-none select-none focus:bg-accent focus:text-accent-foreground focus-visible:outline-inset data-disabled:pointer-events-none data-disabled:opacity-50 phone:min-h-[3.125rem] phone:text-base'
+  'relative flex min-h-(--control) w-full cursor-default items-center gap-2.5 px-3 text-sm whitespace-nowrap outline-none select-none focus:bg-accent focus:text-accent-foreground focus-visible:outline-inset data-disabled:pointer-events-none data-disabled:opacity-50 phone:min-h-[2.625rem] phone:text-base'
 
 function DropdownMenuItem({
   className,

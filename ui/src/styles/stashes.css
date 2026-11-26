@@ -39,32 +39,24 @@
 }
 
 /* -- the list: a tidy table on the computer (RowParts), flat rows on the phone ------------------------------------------------------------- */
-/* A ledger of columns, one value to a cell: the name, the account, what is saved, the target, the bar with its figure, the date (a goal's target
-   date, a deposit's maturity), where it stands, then + and -. A tidy table has one line to a row: with less room a column goes (below), none is
-   stacked under another. A row can be held and dragged, like an account: no text selection or touch menu when it is held. The grip is there while
-   the order can be changed (no filter chosen); the head's name starts where the names do. --act is the room of the buttons: two of 1.75rem. */
+/* A ledger of columns, one value to a cell: the name, the account, what is saved, the bar with its figure (--meter: a bar of about 9rem and its
+   percent), the target, the date (a goal's target date, a deposit's maturity), where it stands, then the quick button and the "more" menu. A tidy table has
+   one line to a row: with less room a column goes (below), none is stacked under another. A row can be held and dragged, like an account: no text
+   selection or touch menu when it is held. The grip is there while the order can be changed (no filter chosen); the head's name starts where the names do.
+   --act is the room of the buttons: two of --control-sm. */
 .card-list.stash-list {
-  --act: 3.75rem;
+  --act: calc(2 * var(--control-sm) + 0.25rem);
+  --meter: 12.5rem;
   --grip-room: calc(var(--icon) + 0.5rem);
-  --cols: minmax(19ch, 3fr) minmax(15ch, 1fr) 11ch 10ch 9ch 9.5ch minmax(15ch, 1fr) var(--act);
+  --cols: minmax(19ch, 3fr) minmax(15ch, 1fr) 11ch var(--meter) 10ch 9.5ch minmax(15ch, 1fr) var(--act);
 }
 
 .card-list.stash-list.no-account {
-  --cols: minmax(19ch, 3fr) 11ch 10ch 9ch 9.5ch minmax(15ch, 1fr) var(--act);
+  --cols: minmax(19ch, 3fr) 11ch var(--meter) 10ch 9.5ch minmax(15ch, 1fr) var(--act);
 }
 
 ul.card-list.stash-list > :is(li.card-item, li.list-head) {
   column-gap: 0.75rem;
-}
-
-/* A deposit that matured has a "return" button where the + would be, a word wide (the longest, "rendimiento", has 11 characters). */
-.card-list.stash-list.has-return {
-  --act: calc(9ch + 3.25rem);
-}
-
-/* The archived ones: restore and delete, two icon buttons. */
-.card-list.stash-list.stash-archived {
-  --act: calc(2 * var(--control-sm) + 0.25rem);
 }
 
 ul.card-list.stash-list > li.card-item {
@@ -93,7 +85,10 @@ ul.card-list.stash-list.stash-archived > li.card-item > .cell-name {
   padding-left: var(--grip-room);
 }
 
-ul.card-list.stash-list .stash-goal {
+/* What is saved and the target are the same figure in the same weight (normal, tabular), so neither stands out from the other. */
+ul.card-list.stash-list :is(.stash-saved, .stash-goal) {
+  font-size: 0.875rem;
+  font-weight: 400;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -108,7 +103,7 @@ ul.card-list.stash-list .stash-when {
   opacity: 0.6;
 }
 
-/* The bar and its figure: a thin track that takes the room, the figure at its right in small grey numbers. */
+/* The bar and its figure: a track that takes the room, the percent next to it in small grey numbers. */
 .stash-meter {
   display: flex;
   align-items: center;
@@ -120,7 +115,6 @@ ul.card-list.stash-list .stash-when {
   flex: 1 1 auto;
   width: auto;
   min-width: 2rem;
-  height: 0.375rem;
 }
 
 .stash-meter-figure {
@@ -131,10 +125,10 @@ ul.card-list.stash-list .stash-when {
   color: var(--muted-foreground);
 }
 
-/* As wide as the longest figure ("100%", "365 d"), so the bars of all rows are as long as each other. */
+/* As wide as the longest figure ("100%", "365 d"), so the bars of all rows are as long as each other; the figure starts where its bar ends. */
 .stash-meter-figure {
   width: 5ch;
-  text-align: right;
+  text-align: left;
 }
 
 /* Where a stash stands: plain words to act on, quiet ones for nothing to do, green for good news, red for a warning. */
@@ -178,7 +172,7 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   padding-left: var(--grip-room);
 }
 
-/* + and -: low squares of 1.75rem, so the rows stay low. The place of one that is not offered is as wide, so the others stay in line. */
+/* The + (or return, or restore) beside the "more" button: low squares of --control-sm, so the rows stay low. The place of one that is not offered is as wide, so the others stay in line. */
 .stash-list .stash-step,
 .stash-list .cell-actions > .icon-slot {
   flex: none;
@@ -194,21 +188,13 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   line-height: 1;
 }
 
-.stash-return {
-  flex: none;
-  height: var(--control-sm);
-  padding-inline: 0.625rem;
-  font-size: 0.8125rem;
-  white-space: nowrap;
-}
-
-/* With less room a column goes, never a line is added. In this order: the date (first while the account is there), the target (then the account),
-   the bar, where it stands. The name and what is saved stay at every width. The name has most of the room that is left, and the account and the
-   status are as wide as their usual words ("Current account", "112.86 a month"). Each width is what the columns of its row add up to and a little
-   more, so no row is wider than its list at any width, and the units are the list's own, so they follow the text size. */
-@container (max-width: 69.5em) {
+/* With less room a column goes, never a line is added. In this order: the date, the account, where it stands, the target, the bar. The name and what is
+   saved stay at every width. Each width is what the columns of its row add up to (the row's padding and gaps too: with a character of 0.6em, 71 for
+   all eight) and a little more, so no row is wider than its list at any width, and the units are the list's own, so they follow the text size. Without the
+   account column the list starts one step in: it loses the date at 61.7em, where the one with an account has lost its account already. */
+@container (max-width: 71.5em) {
   ul.card-list.stash-list:where(:not(.no-account)) > :is(li.card-item, li.list-head) {
-    --cols: minmax(19ch, 3fr) minmax(15ch, 1fr) 11ch 10ch 9ch minmax(15ch, 1fr) var(--act);
+    --cols: minmax(19ch, 3fr) minmax(15ch, 1fr) 11ch var(--meter) 10ch minmax(15ch, 1fr) var(--act);
   }
 
   ul.card-list.stash-list:where(:not(.no-account)) :is(.stash-when, .head-date) {
@@ -216,29 +202,9 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   }
 }
 
-@container (max-width: 63.5em) {
+@container (max-width: 65em) {
   ul.card-list.stash-list:where(:not(.no-account)) > :is(li.card-item, li.list-head) {
-    --cols: minmax(19ch, 3fr) minmax(15ch, 1fr) 11ch 9ch minmax(15ch, 1fr) var(--act);
-  }
-
-  ul.card-list.stash-list:where(:not(.no-account)) :is(.stash-goal, .head-target) {
-    display: none;
-  }
-}
-
-@container (max-width: 60em) {
-  ul.card-list.stash-list:where(.no-account) > :is(li.card-item, li.list-head) {
-    --cols: minmax(19ch, 3fr) 11ch 10ch 9ch minmax(15ch, 1fr) var(--act);
-  }
-
-  ul.card-list.stash-list:where(.no-account) :is(.stash-when, .head-date) {
-    display: none;
-  }
-}
-
-@container (max-width: 57em) {
-  ul.card-list.stash-list:where(:not(.no-account)) > :is(li.card-item, li.list-head) {
-    --cols: minmax(19ch, 3fr) 11ch 9ch minmax(15ch, 1fr) var(--act);
+    --cols: minmax(19ch, 3fr) 11ch var(--meter) 10ch minmax(15ch, 1fr) var(--act);
   }
 
   ul.card-list.stash-list :is(.stash-account, .head-account) {
@@ -246,9 +212,29 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   }
 }
 
-@container (max-width: 53.5em) {
+@container (max-width: 61.7em) {
+  ul.card-list.stash-list:where(.no-account) > :is(li.card-item, li.list-head) {
+    --cols: minmax(19ch, 3fr) 11ch var(--meter) 10ch minmax(15ch, 1fr) var(--act);
+  }
+
+  ul.card-list.stash-list:where(.no-account) :is(.stash-when, .head-date) {
+    display: none;
+  }
+}
+
+@container (max-width: 55.3em) {
   ul.card-list.stash-list > :is(li.card-item, li.list-head) {
-    --cols: minmax(19ch, 3fr) 11ch 9ch minmax(15ch, 1fr) var(--act);
+    --cols: minmax(19ch, 3fr) 11ch var(--meter) 10ch var(--act);
+  }
+
+  ul.card-list.stash-list :is(.stash-status, .head-status) {
+    display: none;
+  }
+}
+
+@container (max-width: 45.5em) {
+  ul.card-list.stash-list > :is(li.card-item, li.list-head) {
+    --cols: minmax(19ch, 3fr) 11ch var(--meter) var(--act);
   }
 
   ul.card-list.stash-list :is(.stash-goal, .head-target) {
@@ -256,22 +242,12 @@ ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
   }
 }
 
-@container (max-width: 47em) {
-  ul.card-list.stash-list > :is(li.card-item, li.list-head) {
-    --cols: minmax(19ch, 3fr) 11ch minmax(15ch, 1fr) var(--act);
-  }
-
-  ul.card-list.stash-list :is(.stash-meter, .head-meter) {
-    display: none;
-  }
-}
-
-@container (max-width: 40.5em) {
+@container (max-width: 38.8em) {
   ul.card-list.stash-list > :is(li.card-item, li.list-head) {
     --cols: minmax(5rem, 1fr) 11ch var(--act);
   }
 
-  ul.card-list.stash-list :is(.stash-status, .head-status) {
+  ul.card-list.stash-list :is(.stash-meter, .head-meter) {
     display: none;
   }
 }
@@ -287,10 +263,15 @@ ul.card-list > li.card-item.is-archived {
   margin-top: 0.375rem;
 }
 
-/* The account and the kind (a compact line with no labels) share one line on the phone, half each. */
+/* The account, the kind and the status (a compact line with no labels) share a line on the phone, as wide as each other; with all three the account has
+   a line of its own, and the other two share the next. */
 html.is-phone .stashes-page .filter-bar {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+html.is-phone .stashes-page .filter-bar > .pick:first-child:nth-last-child(3) {
+  flex-basis: 100%;
 }
 
 html.is-phone .stashes-page .filter-bar > .pick {
