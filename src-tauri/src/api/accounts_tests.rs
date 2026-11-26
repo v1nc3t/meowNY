@@ -341,7 +341,14 @@ fn every_account_answer_has_the_fields_of_the_design_note_with_ids_and_money_as_
     let (_dir, vault) = seeded();
     let list = listed(&vault);
     let names: Vec<&str> = list.iter().map(|a| a["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Lei account", "Flat", "Car", "Old savings"], "the person's order, the archived one last");
+    assert_eq!(
+        names,
+        [
+            "Current account", "Savings", "Cash", "Credit card", "Lei account", "Flat", "Car", "Emergency fund at the credit union, long term", "Credit line", "Old savings",
+            "Appliance loan"
+        ],
+        "the person's order, the archived ones last"
+    );
     for a in &list {
         assert_eq!(keys(a), ACCOUNT_KEYS, "{a}");
         assert!(a["id"].as_str().unwrap().bytes().all(|b| b.is_ascii_digit()), "{a}");
@@ -363,7 +370,7 @@ fn every_account_answer_has_the_fields_of_the_design_note_with_ids_and_money_as_
     }
     assert_eq!((list[0]["id"].as_str(), list[0]["isMain"].as_bool()), (Some("1"), Some(true)));
     assert_eq!(list.iter().filter(|a| a["isMain"] == true).count(), 1);
-    assert_eq!(list.iter().map(|a| a["archived"].as_bool().unwrap()).collect::<Vec<_>>(), [false, false, false, false, false, false, false, true]);
+    assert_eq!(list.iter().map(|a| a["archived"].as_bool().unwrap()).collect::<Vec<_>>(), [false, false, false, false, false, false, false, false, false, true, true]);
     // the demo's account in lei is the one foreign account: its rate is text, and it is worth its balance divided by the rate
     assert_eq!(list.iter().filter(|a| a["foreign"] == true).map(|a| a["name"].as_str().unwrap()).collect::<Vec<_>>(), ["Lei account"]);
     let lei_account = &list[4];
@@ -397,11 +404,11 @@ fn every_account_answer_has_the_fields_of_the_design_note_with_ids_and_money_as_
     // net worth
     let summary = ok(&vault, "accounts.summary", json!({}));
     assert_eq!(keys(&summary), ["accounts", "debts", "friends", "inAccounts", "inUse", "netWorth"]);
-    assert_eq!((summary["accounts"].as_u64(), summary["inUse"].as_bool()), (Some(8), Some(true)));
+    assert_eq!((summary["accounts"].as_u64(), summary["inUse"].as_bool()), (Some(11), Some(true)));
     for money in ["debts", "friends", "inAccounts", "netWorth"] {
         assert!(is_money(summary[money].as_str().unwrap()), "{money}");
     }
-    // the accounts you owe on (the demo's mortgage and car loan) are the debts; the others are what is in the accounts
+    // the accounts you owe on (the demo's mortgage, car loan and credit line) are the debts; the others are what is in the accounts
     let owed = |a: &&Value| ["CREDIT", "LOAN", "MORTGAGE"].contains(&a["kind"].as_str().unwrap());
     let counted = || list.iter().filter(|a| a["includeInNetWorth"] == true);
     let held_in_all: i64 = counted().filter(|a| !owed(a)).map(|a| cents(a["balanceInMain"].as_str().unwrap())).sum();
@@ -2205,7 +2212,7 @@ fn a_read_token_reads_accounts_and_transfers_and_cannot_write_any_of_them() {
         assert_eq!(reply.json()["ok"], true, "{name}");
         assert!(!reply.body.contains(&h.read) && !reply.body.contains(&h.write), "{name}");
     }
-    assert_eq!(call(port, Some(&h.read), "accounts.list", "{}").data().as_array().unwrap().len(), 8);
+    assert_eq!(call(port, Some(&h.read), "accounts.list", "{}").data().as_array().unwrap().len(), 11);
 
     // every write route: a read token is refused before anything else is looked at, with a valid request and with none
     let world = World { a: "2".into(), b: "3".into(), archived: "5".into(), empty: "2".into(), transfer: "1".into(), active: vec!["1".into(), "2".into(), "3".into(), "4".into()] };
@@ -2360,9 +2367,9 @@ fn the_person_is_told_that_a_file_holds_accounts_and_transfers() {
     let r = rig(true);
     let json = r.path("all.json");
     assert_eq!(r.post("export.json", json!({ "out": json })).status, 200);
-    assert!(r.last().contains("8 accounts by name, type, number, balance and details (BIC, group, notes, virtual balance, net worth, currency and rate), and ") && r.last().contains(" transfers between them"), "{}", r.last());
+    assert!(r.last().contains("11 accounts by name, type, number, balance and details (BIC, group, notes, virtual balance, net worth, currency and rate), and ") && r.last().contains(" transfers between them"), "{}", r.last());
     let file: Value = serde_json::from_str(&std::fs::read_to_string(&json).unwrap()).unwrap();
-    assert_eq!(file["accounts"].as_array().unwrap().len(), 8, "what the person was told is what the file holds");
+    assert_eq!(file["accounts"].as_array().unwrap().len(), 11, "what the person was told is what the file holds");
     assert!(file["transfers"].as_array().unwrap().len() >= 16);
     // a CSV is only the transactions, and says nothing of accounts
     assert_eq!(r.post("export.csv", json!({ "out": r.path("t.csv") })).status, 200);

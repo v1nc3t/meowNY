@@ -48,12 +48,25 @@ fn phone_vault(dir: std::path::PathBuf) -> Vault {
     Vault::with_policy(dir, Box::new(FileStore::new(secret)), Policy::PHONE)
 }
 
+/// Dev only: `MEOWNY_DATA_DIR=<folder>` in a debug build puts the app's data in that folder instead of the app's own, for demo data
+/// made by `cargo run --example dev_vault` with the same variable. A release build ignores it.
+pub fn dev_data_dir() -> Option<std::path::PathBuf> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    std::env::var_os("MEOWNY_DATA_DIR").filter(|v| !v.is_empty()).map(std::path::PathBuf::from)
+}
+
 /// A computer keeps the secret in the OS keychain. In a debug build `MEOWNY_PROFILE=phone` gives the phone's vault instead, so
 /// the phone's screens can be tried in a window on a computer (with a separate data folder; the vault is of another kind).
 #[cfg(desktop)]
 fn make_vault(dir: std::path::PathBuf) -> Vault {
     if cfg!(debug_assertions) && std::env::var("MEOWNY_PROFILE").is_ok_and(|v| v == "phone") {
         return phone_vault(dir);
+    }
+    // Dev only: a data folder of its own (`dev_data_dir`) keeps its secret in a file there, so demo data never touches the keychain.
+    if dev_data_dir().is_some() {
+        return Vault::with_policy(dir.clone(), Box::new(FileStore::new(dir.join("dev.secret"))), Policy::DESKTOP);
     }
     Vault::new(dir, Box::new(crate::keys::KeychainStore::new().expect("keychain entry")))
 }
@@ -168,7 +181,10 @@ pub fn run() {
 
     builder
         .setup(|app| {
-            let dir = app.path().app_data_dir()?;
+            let dir = match dev_data_dir() {
+                Some(dir) => dir,
+                None => app.path().app_data_dir()?,
+            };
             #[cfg(target_os = "ios")]
             keep_out_of_backups(&dir)?;
             let vault = Arc::new(make_vault(dir));

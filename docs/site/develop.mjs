@@ -125,9 +125,17 @@ const SECTIONS = [
     id: 'demo',
     title: 'Demo data',
     blocks: [
-      { t: 'p', text: 'Sixteen months of made-up data, dated from today: budgets, recurring items, debts, and awkward text for the exports. Quit the app, then:' },
-      { t: 'code', text: 'cd src-tauri\ncargo run --example dev_vault -- ~/.local/share/org.meowny.app   # deletes the app data there first\ncargo run --example api_demo                                     # the command API on demo data, no app needed' },
-      { t: 'p', text: 'Run the demo data with its own `HOME` and keychain, so your own data is never touched.' },
+      { t: 'p', text: 'Sixteen months of made-up data, dated from today, to show all the app can do: budgets, recurring items, debts and friends, accounts (one in lei, a credit line, a loan that is paid off), stashes and term deposits in every state, documents, and awkward and long text for the exports and the cut-text box. Make it in a folder of its own:' },
+      {
+        t: 'ol',
+        items: [
+          '`cd src-tauri && MEOWNY_DATA_DIR=/tmp/meowny-demo cargo run --example dev_vault`',
+          '`MEOWNY_DATA_DIR=/tmp/meowny-demo npm run tauri dev` (from the repo root)',
+        ],
+      },
+      { t: 'p', text: 'The real data and keychain stay untouched: the secret is kept in `dev.secret` in that folder. Run step 1 again to start over.' },
+      { t: 'p', text: 'The old way, which replaces the app\'s own data (quit the app first; run it with its own `HOME` and keychain so your own data is never touched):' },
+      { t: 'code', text: 'cd src-tauri\ncargo run --example dev_vault -- ~/.local/share/org.meowny.app   # replaces the app\'s own data there\ncargo run --example api_demo                                     # the command API on demo data, no app needed' },
       { t: 'h3', id: 'screenshots', text: 'The website\'s screenshots' },
       {
         t: 'ul',
