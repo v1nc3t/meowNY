@@ -131,7 +131,7 @@ main {
   max-width: none;
 }
 
-.wide main > :not(figure) {
+.wide main > :not(figure, #features) {
   max-width: var(--measure);
 }
 
@@ -226,6 +226,41 @@ h4 {
   line-height: 1.3;
 }
 
+/* Headings stand out from the text: a green that starts dark and ends light. */
+:root {
+  --head-from: #14532d;
+  --head-to: #22c55e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --head-from: #16a34a;
+    --head-to: #86efac;
+  }
+}
+
+:root[data-theme='dark'] {
+  --head-from: #16a34a;
+  --head-to: #86efac;
+}
+
+/* The gradient paints every letter inside, a hidden one too, so a heading with a "#" link has it on its text only. */
+h1,
+h2:not(:has(.anchor)),
+h2 > .head-text {
+  width: fit-content;
+  background: linear-gradient(90deg, var(--head-from), var(--head-to));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+h3 {
+  color: var(--head-from);
+}
+
+
+
 /* The page title is the one heading in the pixel font. */
 h1 {
   margin: 0 0 0.75rem;
@@ -236,15 +271,14 @@ h1 {
 }
 
 h2 {
-  margin: 0 0 1rem;
+  margin: 0 0 1.25rem;
   padding-bottom: 0.5rem;
-  border-bottom: var(--hairline) solid var(--border);
   font-size: 1.125rem;
   text-transform: lowercase;
 }
 
 h3 {
-  margin: 2.25rem 0 0.75rem;
+  margin: 2.75rem 0 0.875rem;
   font-size: 0.9375rem;
   text-transform: lowercase;
 }
@@ -267,6 +301,12 @@ section.doc {
   margin-top: var(--space);
 }
 
+/* A hairline between sections, with room on both sides of it. */
+section.doc + section.doc {
+  padding-top: var(--space);
+  border-top: var(--hairline) solid var(--border);
+}
+
 .anchor {
   margin-left: 0.35rem;
   color: var(--muted-foreground);
@@ -285,36 +325,22 @@ ul,
 ol,
 figure,
 .table-wrap {
-  margin: 0 0 1rem;
+  margin: 0 0 1.25rem;
 }
 
-/* Numbered steps: each number sits in a small square box. */
+main li + li {
+  margin-top: 0.375rem;
+}
+
+/* Numbered steps: a plain "1." in the heading green. */
 main ol {
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
+  padding-left: 1.75rem;
+  list-style: decimal;
 }
 
-main ol > li {
-  position: relative;
-  counter-increment: step;
-  padding-left: 2.25rem;
-}
-
-main ol > li::before {
-  content: counter(step);
-  position: absolute;
-  left: 0;
-  top: 0.1rem;
-  display: grid;
-  place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  border: var(--hairline) solid var(--border);
-  background: var(--card);
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  line-height: 1;
+main ol > li::marker {
+  color: var(--head-from);
+  font-weight: 600;
 }
 
 /* Bullets: a small square marker. */
@@ -554,20 +580,26 @@ section.command h4 code {
 /* What it does: one card per feature, with the hard shadow. */
 ul.features {
   display: grid;
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1rem;
   padding: 0;
   list-style: none;
 }
 
 .features li {
   display: grid;
-  grid-template-columns: 13rem minmax(0, 1fr);
-  gap: 0 1.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 0.375rem;
   margin: 0;
-  padding: 0.75rem 1rem;
+  padding: 1rem 1.25rem;
   border: var(--hairline) solid var(--border);
   background: var(--card);
   box-shadow: var(--shadow-md);
+}
+
+.features li + li {
+  margin-top: 0;
 }
 
 .features span {
