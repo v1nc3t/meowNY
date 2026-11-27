@@ -1,0 +1,23 @@
+[package]
+name = "meowny-server"
+version = "0.3.0"
+description = "meowNY, self-hosted: the app served to a browser over HTTP"
+license = "AGPL-3.0-only"
+edition = "2021"
+rust-version = "1.90"
+
+# The self-hosted server (docs/self-host.md). It is built on its own, like the command line, and not as part of the desktop app:
+# `cargo build --release --manifest-path selfhost/Cargo.toml`.
+
+[dependencies]
+# The app itself: its vault, its commands and the file exchange that stands in for its file dialogs.
+meowny-desktop = { path = "../src-tauri" }
+# The same Tauri as the app; "test" is its mock runtime, which runs the app's commands without a window.
+tauri = { version = "2", features = ["test"] }
+# A small HTTP/1.1 server with no async runtime.
+tiny_http = "0.12.0"
+serde_json = "1.0.154"
+chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
