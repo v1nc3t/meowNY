@@ -56,6 +56,17 @@
   min-width: 0;
 }
 
+/* A narrow widget (one column on a phone) gives the whole title line to its name: the period at its right goes. */
+.dash-widget {
+  container: widget / inline-size;
+}
+
+@container widget (max-width: 13rem) {
+  .dash-aside {
+    display: none;
+  }
+}
+
 .dash-widget .dash-widget-title {
   min-width: 0;
   margin: 0;
@@ -80,7 +91,8 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  container-type: inline-size;
+  /* it measures both its width and its height: a widget drops what is secondary when it is narrow (a phone) or short (one row) */
+  container-type: size;
 }
 
 .dash-widget-body > .dash-empty {
@@ -93,7 +105,8 @@
   flex: none;
 }
 
-.dash-widget-body > .dash-year {
+.dash-widget-body > .dash-year,
+.dash-widget-body > .dash-spark {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -155,6 +168,44 @@
 
 .dash-widget .dash-facts {
   row-gap: var(--space-1);
+}
+
+/* The net worth: a wide widget has its figures side by side, each a small word over its value; a short one (one row) is a tight list. */
+@container (min-width: 30rem) {
+  .dash-widget .dash-facts.is-sum {
+    grid-template-columns: none;
+    grid-template-rows: auto auto;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, max-content);
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-4);
+  }
+
+  .dash-widget .dash-facts.is-sum > dd {
+    text-align: left;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .dash-widget .dash-facts.is-sum > dd b {
+    font-size: inherit;
+  }
+}
+
+@container (max-width: 30rem) and (max-height: 6.5rem) {
+  .dash-widget .dash-facts.is-sum {
+    row-gap: 0;
+    font-size: 0.75rem;
+    line-height: 1.3;
+  }
+
+  .dash-widget .dash-facts.is-sum > dt {
+    font-size: 0.75rem;
+  }
+
+  .dash-widget .dash-facts.is-sum > dd b {
+    font-size: 0.875rem;
+  }
 }
 
 .dash-widget .stash-mini {
@@ -406,7 +457,7 @@ html.is-phone .dash-size-cell {
 
 .dash-catalog button {
   display: grid;
-  grid-template-columns: 9rem minmax(0, 1fr) auto;
+  grid-template-columns: 13rem minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-4);
   width: 100%;
@@ -427,7 +478,11 @@ html.is-phone .dash-size-cell {
 }
 
 .dash-catalog-name {
+  min-width: 0;
+  overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dash-catalog-about {

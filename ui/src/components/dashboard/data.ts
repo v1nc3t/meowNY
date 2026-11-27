@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { accounts as accountsApi } from '../../api/accounts'
+import { accounts as accountsApi, type Account } from '../../api/accounts'
 import { debts } from '../../api/debts'
 import { errorText } from '../../api/invoke'
 import { recurring } from '../../api/recurring'
 import { stashes as stashesApi } from '../../api/stashes'
 import { stats, type YearPoint } from '../../api/stats'
-import { transactions } from '../../api/transactions'
-import type { CategoryType } from '../../api/categories'
+import { transactions, type Transaction } from '../../api/transactions'
+import { categories as categoriesApi, type CategoryType } from '../../api/categories'
+import { shiftMonth } from '../../api/months'
 import { useToast } from '../../hooks/toast'
+import { biggest, netWorthByMonth, newest, sparkMonths, type Share } from '../../lib/dashboardData'
 import { monthsOf, previousRange, type Range } from '../../lib/dashboardPeriod'
 import { fromMinor, toMinor } from '../../lib/money'
 import { ratePercent, usedPercent } from '../../pages/dashboardMath'
@@ -33,6 +35,8 @@ export const loadWorth = () => shared('worth', () => accountsApi.summary())
 export const loadOwed = () => shared('owed', () => debts.summary())
 export const loadStashes = () => shared('stashes', async () => ({ summary: await stashesApi.summary(), list: await stashesApi.list() }))
 export const loadDues = (days: number) => shared(`dues:${days}`, () => recurring.dues(days))
+export const loadAccounts = () => shared('accounts', () => accountsApi.list())
+export const loadCategories = () => shared('categories', () => categoriesApi.list())
 
 /** The data of a widget, null until it has come (and while `enabled` is false); it is read again when `key` (what it was asked for) changes. A failure is a toast. */
 export function useData<T>(key: string, load: () => Promise<T>, enabled = true): T | null {
@@ -70,15 +74,25 @@ const PAGE = 100
 /** No more than this many pages of transactions are read for one sum. */
 const MAX_PAGES = 100
 
-async function addUp(range: Range, accountId: string | undefined, categoryId: string | undefined, kind: CategoryType, into: Map<string, bigint>) {
+/** Reads every transaction of `range` (of one account and category, or all; one kind, or both), page after page, and hands each to `visit`. */
+async function eachRow(range: Range, accountId: string | undefined, categoryId: string | undefined, kind: CategoryType | undefined, visit: (row: Transaction) => void) {
   for (let page = 0; page < MAX_PAGES; page++) {
     const answer = await transactions.list({ from: range.from, to: range.to, accountId, categoryId, kind, limit: PAGE, offset: page * PAGE })
-    for (const row of answer.transactions) {
-      const month = row.paymentDate.slice(0, 7)
-      into.set(month, (into.get(month) ?? 0n) + (toMinor(row.myShare) ?? 0n))
-    }
+    answer.transactions.forEach(visit)
     if ((page + 1) * PAGE >= answer.total) return
   }
+}
+
+async function addUp(range: Range, accountId: string | undefined, categoryId: string | undefined, kind: CategoryType, into: Map<string, bigint>) {
+  await eachRow(range, accountId, categoryId, kind, (row) => {
+    const month = row.paymentDate.slice(0, 7)
+    into.set(month, (into.get(month) ?? 0n) + (toMinor(row.myShare) ?? 0n))
+  })
+}
+
+/** The accounts and categories of a filter as the pairs to ask for: none chosen is one question about everything. */
+function combos(filter: Filter): { accountId?: string; categoryId?: string }[] {
+  return (filter.accountIds?.length ? filter.accountIds : [undefined]).flatMap((accountId) => (filter.categoryIds?.length ? filter.categoryIds : [undefined]).map((categoryId) => ({ accountId, categoryId })))
 }
 
 function pointOf(month: string, income: bigint, expense: bigint): YearPoint {
@@ -99,13 +113,7 @@ export function loadPoints(range: Range, filter: Filter): Promise<YearPoint[]> {
   return shared(`points:${range.from}:${range.to}:${filterKey(filter)}`, async () => {
     const income = new Map<string, bigint>()
     const expense = new Map<string, bigint>()
-    const jobs: Promise<void>[] = []
-    for (const accountId of filter.accountIds?.length ? filter.accountIds : [undefined]) {
-      for (const categoryId of filter.categoryIds?.length ? filter.categoryIds : [undefined]) {
-        jobs.push(addUp(range, accountId, categoryId, 'INCOME', income), addUp(range, accountId, categoryId, 'EXPENSE', expense))
-      }
-    }
-    await Promise.all(jobs)
+    await Promise.all(combos(filter).flatMap(({ accountId, categoryId }) => [addUp(range, accountId, categoryId, 'INCOME', income), addUp(range, accountId, categoryId, 'EXPENSE', expense)]))
     return months.map((month) => pointOf(month, income.get(month) ?? 0n, expense.get(month) ?? 0n))
   })
 }
@@ -158,4 +166,98 @@ export async function loadBudgetRows(range: Range): Promise<BudgetRow[]> {
     ...[...totals].filter(([kind, o]) => kind === type && o.budgeted !== null).map(([, o]) => row(`total-${type}`, '', type, o.budgeted, o.actual, true)),
     ...[...lines].filter(([, c]) => c.type === type && (c.budgeted !== null || c.actual !== 0n)).map(([id, c]) => row(id, c.name, type, c.budgeted, c.actual, false)),
   ])
+}
+
+// -- balances over time ---------------------------------------------------------------------------------------------------------
+
+/** What an account held at the end of each of `months` ("YYYY-MM" to "-12.50"), in its own currency; a month after today has none. */
+export async function loadBalances(accountId: string, months: readonly string[]): Promise<Map<string, string>> {
+  const years = [...new Set(months.map((month) => month.slice(0, 4)))]
+  const lists = await Promise.all(years.map((year) => shared(`history:${accountId}:${year}`, () => accountsApi.history(accountId, year))))
+  return new Map(lists.flat().map((point) => [point.month, point.balance]))
+}
+
+/** What the accounts that count in net worth held together at the end of each of `months`, in the app's currency. Friends are not in it: what they owed on a day is not kept. */
+export async function loadNetWorthByMonth(months: readonly string[]): Promise<{ month: string; value: string }[]> {
+  const counted = (await loadAccounts()).filter((account) => account.includeInNetWorth)
+  const series = await Promise.all(counted.map(async (account) => ({ rate: account.rate, balances: await loadBalances(account.id, months) })))
+  return netWorthByMonth(series, months)
+}
+
+/** How many months a sparkline shows. */
+export const SPARK_MONTHS = 12
+
+/** One account and its balance month by month (as numbers, for a sparkline). With no `accountId` the main account. Null when there is no such account. */
+export async function loadAccountCard(accountId: string | undefined, last: string, today: string): Promise<{ account: Account; balances: number[] } | null> {
+  const all = (await loadAccounts()).filter((account) => !account.archived)
+  const account = all.find((one) => one.id === accountId) ?? all.find((one) => one.isMain) ?? all[0]
+  if (!account) return null
+  const months = sparkMonths(last, today, SPARK_MONTHS, shiftMonth)
+  const balances = await loadBalances(account.id, months)
+  return { account, balances: months.filter((month) => balances.has(month)).map((month) => Number(balances.get(month))) }
+}
+
+// -- spending, by category and by transaction --------------------------------------------------------------------------------------
+
+/** What each category cost over `range`: of everything, or of the accounts in `accountIds`. Not sorted, with no limit. */
+export async function loadSpending(range: Range, accountIds: readonly string[] | undefined): Promise<Share[]> {
+  if (!accountIds?.length) {
+    const rows = await loadBudgetRows(range)
+    return rows.filter((row) => row.type === 'EXPENSE' && !row.total).map((row) => ({ id: row.key, name: row.name, amount: row.actual }))
+  }
+  const sums = new Map<string, bigint>()
+  await Promise.all(
+    accountIds.map((accountId) =>
+      eachRow(range, accountId, undefined, 'EXPENSE', (row) => sums.set(row.categoryId, (sums.get(row.categoryId) ?? 0n) + (toMinor(row.myShare) ?? 0n))),
+    ),
+  )
+  const names = new Map((await loadCategories()).map((category) => [category.id, category.name]))
+  return [...sums].map(([id, sum]) => ({ id, name: names.get(id) ?? '', amount: fromMinor(sum) }))
+}
+
+/** The `count` expenses that cost the most over `range`, in the accounts and categories of `filter`. */
+export function loadBiggest(range: Range, filter: Filter, count: number): Promise<Transaction[]> {
+  return shared(`biggest:${range.from}:${range.to}:${filterKey(filter)}:${count}`, async () => {
+    const rows: Transaction[] = []
+    await Promise.all(combos(filter).map(({ accountId, categoryId }) => eachRow(range, accountId, categoryId, 'EXPENSE', (row) => rows.push(row))))
+    return biggest(rows, count)
+  })
+}
+
+/** The `count` newest transactions up to `today`, in the accounts and categories of `filter`. */
+export function loadNewest(filter: Filter, count: number, today: string): Promise<Transaction[]> {
+  return shared(`newest:${filterKey(filter)}:${count}:${today}`, async () => {
+    const pages = await Promise.all(combos(filter).map(({ accountId, categoryId }) => transactions.list({ to: today, accountId, categoryId, limit: count })))
+    return newest(pages.flatMap((page) => page.transactions), count)
+  })
+}
+
+// -- one category -------------------------------------------------------------------------------------------------------------------
+
+export type CategoryCard = { id: string; name: string; type: CategoryType; budgeted: string | null; actual: string; pct: number | null; spark: number[] }
+
+/**
+ * One category over `range`: what was spent (or earned), its budget, and the months before the range's end as a sparkline. With no `categoryId` the
+ * expense category that cost the most. Null when there is none (nothing was spent, or the category is gone).
+ */
+export async function loadCategoryCard(range: Range, categoryId: string | undefined, today: string): Promise<CategoryCard | null> {
+  const rows = (await loadBudgetRows(range)).filter((row) => !row.total)
+  const row = categoryId
+    ? rows.find((one) => one.key === categoryId)
+    : rows.filter((one) => one.type === 'EXPENSE' && toMinor(one.actual)! > 0n).sort((a, b) => (toMinor(b.actual)! > toMinor(a.actual)! ? 1 : -1))[0]
+  const known = row ? undefined : categoryId ? (await loadCategories()).find((category) => category.id === categoryId) : undefined
+  const id = row?.key ?? known?.id
+  if (!id) return null
+  const months = sparkMonths(range.to.slice(0, 7), today.slice(0, 7), 6, shiftMonth)
+  const trend = await shared(`trend:${id}:${months[0]}:${months[months.length - 1]}`, () => stats.categoryTrend(id, months[0], months[months.length - 1]))
+  const byMonth = new Map(trend.points.map((point) => [point.month, Number(point.actual)]))
+  return {
+    id,
+    name: row?.name ?? known?.name ?? '',
+    type: row?.type ?? known?.type ?? 'EXPENSE',
+    budgeted: row?.budgeted ?? null,
+    actual: row?.actual ?? '0.00',
+    pct: row?.pct ?? null,
+    spark: months.map((month) => byMonth.get(month) ?? 0),
+  }
 }

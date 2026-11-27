@@ -116,7 +116,7 @@ function Form({ widget, today, accounts, categories, stashes, onSave }: { widget
         </>
       ) : null}
       {has.account === 'many' && usable.length > 1 ? <Checks label={t('dashboard.setAccounts')} items={usable.map(({ id, name }) => ({ id, name }))} chosen={accountsChosen} onChange={setAccounts} /> : null}
-      {has.account === 'one' && usable.length > 1 ? oneOf(usable, accountsChosen[0] ?? '', t('dashboard.setAccount'), t('dashboard.allAccounts'), (id) => setAccounts(id ? [id] : [])) : null}
+      {has.account === 'one' && usable.length > 1 ? oneOf(usable, accountsChosen[0] ?? '', t('dashboard.setAccount'), t('dashboard.mainAccount'), (id) => setAccounts(id ? [id] : [])) : null}
       {has.side ? (
         <Dropdown
           label={t('dashboard.setSide')}
@@ -132,7 +132,7 @@ function Form({ widget, today, accounts, categories, stashes, onSave }: { widget
         />
       ) : null}
       {has.category === 'many' ? <Checks label={t('dashboard.setCategories')} items={sideCategories} chosen={categoriesChosen} onChange={setCategories} /> : null}
-      {has.category === 'one' ? oneOf(sideCategories, categoriesChosen[0] ?? '', t('common.category'), t('dashboard.allCategories'), (id) => setCategories(id ? [id] : [])) : null}
+      {has.category === 'one' ? oneOf(sideCategories, categoriesChosen[0] ?? '', t('common.category'), t('dashboard.biggestCategory'), (id) => setCategories(id ? [id] : [])) : null}
       {has.count ? (
         <Dropdown
           label={t('dashboard.setCount')}

@@ -505,6 +505,251 @@
 
 .dash .rec-over { color: var(--c-expense); }
 
+/* -- the widgets that show one thing: a figure, a line, bars or a short list. Each measures its own width (`.dash-widget-body`) and drops what is
+   secondary when it is narrow. -------------------------------------------------------------------------------------------------------------- */
+
+/* A large figure (the savings rate) and its red when more was spent than earned. */
+.dash-stat-value.is-big {
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.dash-stat-value.is-bad {
+  color: var(--destructive);
+}
+
+/* One row high: the figure is smaller and a word that only names it goes, so the figure and its bar or line fit. */
+@container (max-height: 6.5rem) {
+  .dash-widget .dash-stat-value {
+    font-size: 1.25rem;
+    line-height: 1.3;
+  }
+
+  .dash-widget .dash-stat-value.is-big {
+    font-size: 1.75rem;
+    line-height: 1.2;
+  }
+
+  .dash-stat-label.is-optional {
+    display: none;
+  }
+}
+
+@container (max-width: 13rem) {
+  .dash-widget .dash-stat-value {
+    font-size: 1.125rem;
+  }
+
+  .dash-widget .dash-stat-value.is-big {
+    font-size: 1.5rem;
+  }
+}
+
+/* The sparkline: a thin line over a light area, in the colour of the balance line. It fills what the figure above leaves. */
+.dash-spark {
+  min-width: 0;
+}
+
+.dash-spark svg {
+  display: block;
+}
+
+.spark-line {
+  fill: none;
+  stroke: var(--c-savings);
+  stroke-width: 2;
+  stroke-linejoin: miter;
+  stroke-linecap: square;
+}
+
+.spark-area {
+  fill: var(--c-savings);
+  stroke: none;
+  opacity: 0.12;
+}
+
+.spark-dot {
+  fill: var(--c-savings);
+}
+
+/* Bars of the cash flow: income and expense in the colours of their lines; the month under the pointer has a column behind it. */
+.dash-line .bar-income {
+  fill: var(--c-income);
+}
+
+.dash-line .bar-expense {
+  fill: var(--c-expense);
+}
+
+.dash-line .column-on {
+  fill: var(--accent);
+}
+
+/* The biggest categories: the name and the amount on a line, a bar under them as long as the category's share of the largest. */
+.dash-spend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+
+.dash .dash-spend li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem var(--space-3);
+  align-items: baseline;
+}
+
+.dash-spend .bar-row {
+  grid-column: 1 / -1;
+}
+
+.dash-spend .bar-fill {
+  --fill: var(--c-expense);
+}
+
+.dash-spend .legend-amount {
+  min-width: 0;
+}
+
+/* Transactions in columns: name, category, day, amount. The category goes when the widget is under 30rem wide, then the day (under 17rem). The
+   rows share the columns of the list, so the figures line up. */
+.dash-tx {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) max-content max-content;
+  column-gap: var(--space-3);
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+
+.dash .dash-tx li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) max-content max-content;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 0 var(--space-3);
+  padding: 0.1875rem 0;
+}
+
+@supports (grid-template-columns: subgrid) {
+  .dash .dash-tx li {
+    grid-template-columns: subgrid;
+  }
+}
+
+.dash-tx .legend-amount {
+  min-width: 0;
+}
+
+.dash-tx .legend-pct {
+  min-width: 0;
+}
+
+@container (max-width: 30rem) {
+  .dash-tx,
+  .dash .dash-tx li {
+    grid-template-columns: minmax(0, 1fr) max-content max-content;
+  }
+
+  .dash-tx .tx-category {
+    display: none;
+  }
+}
+
+@container (max-width: 17rem) {
+  .dash-tx,
+  .dash .dash-tx li {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .dash-tx .tx-day {
+    display: none;
+  }
+}
+
+/* The loans: what is owed, the installment and the payoff side by side; the narrower the widget, the fewer (under 20rem two, under 13rem the first). */
+.dash-trio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+}
+
+.dash-trio > .dash-stat:nth-child(n + 2) {
+  display: none;
+}
+
+@container (min-width: 13rem) {
+  .dash-trio {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dash-trio > .dash-stat:nth-child(2) {
+    display: flex;
+  }
+}
+
+@container (min-width: 20rem) {
+  .dash-trio {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dash-trio > .dash-stat:nth-child(3) {
+    display: flex;
+  }
+}
+
+.dash-trio .dash-stat-value {
+  font-size: 1.25rem;
+}
+
+/* Tall but narrow (two rows in four columns): all three, one under the other, the word at the left and the figure at the right. */
+@container (max-width: 20rem) and (min-height: 9rem) {
+  .dash-trio {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+
+  .dash-trio > .dash-stat:nth-child(n) {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+}
+
+/* What only a tall widget shows: the list under the figures. */
+.dash-tall {
+  display: none;
+}
+
+@container (min-height: 9rem) {
+  .dash-tall {
+    display: flex;
+  }
+}
+
+/* The target of a stash and its day, under the bar, small; they go when the widget is narrow. */
+.dash-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.dash-foot .legend-amount {
+  min-width: 0;
+  color: inherit;
+}
+
+@container (max-width: 11.5rem) {
+  .dash-foot {
+    display: none;
+  }
+}
+
 /* The period control (components/PeriodNav.tsx): "‹ nov 2026 ›", the middle a button that opens the choice of month and year, and "current" at the
    end only while another period is shown. The popover is drawn over the page, in the body (or in a dialog). */
 .period-nav {

@@ -51,11 +51,11 @@ Each has a minimum and maximum size; the default size in bold.
 | month summary | income, expense, savings, savings rate, each with its change | period, account | 6–12 × 1, **12×1** |
 | trend | income, expense and savings by month, as lines | period, account, category | 6–12 × 2–3, **12×2** |
 | cash flow | money in and out by month, as bars | period, account | 6–12 × 2, **6×2** |
-| net worth | in accounts, debts, friends, net worth | — | 4–6 × 1–2, **6×2** |
+| net worth | in accounts, debts, friends, net worth | — | 4–6 × 1–2, **6×1** |
 | net worth over time | net worth by month, as a line | period | 6–12 × 2, **6×2** |
 | account | one account: balance, this month, a sparkline | account | 3–6 × 1–2, **3×1** |
 | accounts | every account with its balance | count | 4–6 × 2–3, **4×2** |
-| budgets | each category's spent against budget, with bars | period, category, count | 6–12 × 2–4, **6×2** |
+| budgets | each category's spent against budget, with bars | period, category, count | 6–12 × 2–4, **6×3** |
 | category | one category: spent, budget, left, a bar and a sparkline | period, category | 3–6 × 1–2, **3×1** |
 | spending by category | the biggest categories, as bars with amounts | period, account, count | 4–6 × 2–3, **4×2** |
 | top expenses | the biggest transactions | period, account, category, count | 4–6 × 2–3, **4×2** |
@@ -69,10 +69,17 @@ Each has a minimum and maximum size; the default size in bold.
 
 The phone uses the same widgets; a desktop span of 6 or more becomes 2 columns, less becomes 1.
 
+Every widget is its title line and then one main value or one visual, with at most a short list in columns (a name, then its value at the right). A widget
+measures its own width and height (container queries) and drops what is secondary when it is small: the period at the right of the title in a narrow one,
+a word that only names a figure in a one-row one, the category and day columns of a list when it is narrow, the loans list under the figures unless it is
+tall. The default height of a widget is the one its content fits in, so a short widget (the net worth, a figure with a bar) is one row. Where a widget has
+"all" for a choice it does not make sense for (a one-account widget without an account), it shows the main account, the biggest category or the first stash.
+
 ## 5. Default layouts
 
-- **Desktop:** month summary 12×1; trend 12×2; net worth 6×2; budgets 6×2; stashes 6×2; upcoming 6×2; debts 6×2 — today's dashboard.
-- **Phone:** month summary 2×1; trend 2×2; net worth 2×2; budgets 2×2; upcoming 2×2; stashes 2×2.
+- **Desktop:** month summary 12×1; trend 12×2; net worth 6×1; budgets 6×3; stashes 6×2; upcoming 6×2; debts 6×2 — today's dashboard. The net worth is one
+  row, beside the budgets (three rows), and the stashes pack under it.
+- **Phone:** month summary 2×1; trend 2×2; net worth 2×1; budgets 2×3; upcoming 2×2; stashes 2×2.
 
 ## 6. Storage
 

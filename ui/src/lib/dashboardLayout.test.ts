@@ -20,11 +20,11 @@ test('an empty layout, or one with nothing left, is the default', () => {
 test('the defaults are today\'s dashboard, with sizes the widgets allow', () => {
   assert.deepEqual(
     defaultLayout('desktop').widgets.map((w) => `${w.type} ${w.w}x${w.h}`),
-    ['summary 12x1', 'trend 12x2', 'networth 6x2', 'budgets 6x2', 'stashes 6x2', 'upcoming 6x2', 'debts 6x2'],
+    ['summary 12x1', 'trend 12x2', 'networth 6x1', 'budgets 6x3', 'stashes 6x2', 'upcoming 6x2', 'debts 6x2'],
   )
   assert.deepEqual(
     defaultLayout('phone').widgets.map((w) => `${w.type} ${w.w}x${w.h}`),
-    ['summary 2x1', 'trend 2x2', 'networth 2x2', 'budgets 2x2', 'upcoming 2x2', 'stashes 2x2'],
+    ['summary 2x1', 'trend 2x2', 'networth 2x1', 'budgets 2x3', 'upcoming 2x2', 'stashes 2x2'],
   )
 })
 
@@ -86,7 +86,7 @@ test('resizing is clamped to the widget, adding appends at its start size, remov
   const added = addWidget(layout, 'stashes', 'desktop', 'n1')
   assert.deepEqual(added.widgets.at(-1), { id: 'n1', type: 'stashes', w: 6, h: 2, settings: {} })
   assert.equal(addWidget(added, 'stashes', 'desktop', 'n1'), added)
-  assert.equal(resizeWidget(layout, 'networth', 6, 2, 'desktop'), layout)
+  assert.equal(resizeWidget(layout, 'networth', 6, 1, 'desktop'), layout)
   assert.equal(resizeWidget(layout, 'nothing', 6, 2, 'desktop'), layout)
   assert.equal(moveWidget(layout, 'summary', 0), layout)
   assert.equal(removeWidget(layout, 'trend').widgets.length, 6)

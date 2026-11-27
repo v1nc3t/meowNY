@@ -19,7 +19,26 @@ export const MAX_ROWS = 4
 /** The most widgets on a dashboard. */
 export const MAX_WIDGETS = 40
 
-export const WIDGET_TYPES = ['summary', 'trend', 'networth', 'budgets', 'stashes', 'upcoming', 'debts'] as const
+export const WIDGET_TYPES = [
+  'summary',
+  'trend',
+  'cashflow',
+  'networth',
+  'networthtime',
+  'account',
+  'accounts',
+  'budgets',
+  'category',
+  'spending',
+  'topexpenses',
+  'recent',
+  'upcoming',
+  'stashes',
+  'stash',
+  'debts',
+  'loans',
+  'savingsrate',
+] as const
 export type WidgetType = (typeof WIDGET_TYPES)[number]
 
 export const PERIOD_KINDS = ['thisMonth', 'lastMonth', 'thisYear', 'lastYear', 'last12', 'custom'] as const
@@ -72,20 +91,52 @@ export const SPECS: Record<WidgetType, WidgetSpec> = {
     size: [12, 2],
     settings: { period: 'thisYear', account: 'many', category: 'many' },
   },
+  cashflow: {
+    name: 'dashboard.w.cashflow.name',
+    about: 'dashboard.w.cashflow.about',
+    w: [6, 12],
+    h: [2, 2],
+    size: [6, 2],
+    settings: { period: 'thisYear', account: 'many' },
+  },
   networth: {
     name: 'accounts.netWorth',
     about: 'dashboard.w.networth.about',
     w: [4, 6],
     h: [1, 2],
-    size: [6, 2],
+    size: [6, 1],
     settings: {},
+  },
+  networthtime: {
+    name: 'dashboard.w.networthtime.name',
+    about: 'dashboard.w.networthtime.about',
+    w: [6, 12],
+    h: [2, 2],
+    size: [6, 2],
+    settings: { period: 'last12' },
+  },
+  account: {
+    name: 'dashboard.w.account.name',
+    about: 'dashboard.w.account.about',
+    w: [3, 6],
+    h: [1, 2],
+    size: [3, 1],
+    settings: { account: 'one' },
+  },
+  accounts: {
+    name: 'nav.accounts',
+    about: 'dashboard.w.accounts.about',
+    w: [4, 6],
+    h: [2, 3],
+    size: [4, 2],
+    settings: { count: { options: [5, 10, 20], start: null } },
   },
   budgets: {
     name: 'nav.budgets',
     about: 'dashboard.w.budgets.about',
     w: [6, 12],
     h: [2, 4],
-    size: [6, 2],
+    size: [6, 3],
     settings: { period: 'thisMonth', category: 'many', count: { options: [5, 10, 20], start: null } },
   },
   stashes: {
@@ -96,6 +147,38 @@ export const SPECS: Record<WidgetType, WidgetSpec> = {
     size: [6, 2],
     settings: { count: { options: [3, 5, 10, 20], start: 3 } },
   },
+  category: {
+    name: 'common.category',
+    about: 'dashboard.w.category.about',
+    w: [3, 6],
+    h: [1, 2],
+    size: [3, 1],
+    settings: { period: 'thisMonth', category: 'one' },
+  },
+  spending: {
+    name: 'dashboard.w.spending.name',
+    about: 'dashboard.w.spending.about',
+    w: [4, 6],
+    h: [2, 3],
+    size: [4, 2],
+    settings: { period: 'thisMonth', account: 'many', count: { options: [3, 5, 10], start: 5 } },
+  },
+  topexpenses: {
+    name: 'dashboard.w.topexpenses.name',
+    about: 'dashboard.w.topexpenses.about',
+    w: [4, 6],
+    h: [2, 3],
+    size: [4, 2],
+    settings: { period: 'thisMonth', account: 'many', category: 'many', count: { options: [5, 8, 12, 20], start: 8 } },
+  },
+  recent: {
+    name: 'dashboard.w.recent.name',
+    about: 'dashboard.w.recent.about',
+    w: [4, 8],
+    h: [2, 4],
+    size: [6, 2],
+    settings: { account: 'many', category: 'many', count: { options: [5, 8, 12, 20], start: 8 } },
+  },
   upcoming: {
     name: 'dashboard.w.upcoming.name',
     about: 'dashboard.w.upcoming.about',
@@ -104,6 +187,14 @@ export const SPECS: Record<WidgetType, WidgetSpec> = {
     size: [6, 2],
     settings: { count: { options: [5, 10, 20], start: 10 } },
   },
+  stash: {
+    name: 'dashboard.w.stash.name',
+    about: 'dashboard.w.stash.about',
+    w: [3, 4],
+    h: [1, 1],
+    size: [3, 1],
+    settings: { stash: true },
+  },
   debts: {
     name: 'debts.title',
     about: 'dashboard.w.debts.about',
@@ -111,6 +202,22 @@ export const SPECS: Record<WidgetType, WidgetSpec> = {
     h: [2, 2],
     size: [6, 2],
     settings: { count: { options: [3, 5, 10], start: 3 } },
+  },
+  loans: {
+    name: 'dashboard.w.loans.name',
+    about: 'dashboard.w.loans.about',
+    w: [4, 6],
+    h: [1, 2],
+    size: [4, 1],
+    settings: {},
+  },
+  savingsrate: {
+    name: 'dashboard.savingsRate',
+    about: 'dashboard.w.savingsrate.about',
+    w: [3, 4],
+    h: [1, 1],
+    size: [3, 1],
+    settings: { period: 'thisMonth', account: 'many' },
   },
 }
 
