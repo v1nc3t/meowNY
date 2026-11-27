@@ -119,8 +119,40 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
         run: cargo test --locked
 
+      # The self-hosted server (docs/self-host.md) is built for Linux only, where its image runs.
+      - name: Rust tests (self-hosted server)
+        if: runner.os == 'Linux'
+        working-directory: selfhost
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
+        run: cargo test --locked
+
       - name: Build the app
         run: npm run tauri build -- --debug --bundles ${{ matrix.bundle }}
+
+  # The self-hosted server's image: it builds, starts read-only with no capabilities, serves the page and answers a command.
+  server-image:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t meowny:ci .
+
+      - name: It starts and answers
+        run: |
+          docker run -d --name meowny -p 127.0.0.1:8080:8080 --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true meowny:ci
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8080/app/dashboard | grep -q '<div id="root">'
+          curl -fsS -X POST -H 'X-Meowny: 1' http://127.0.0.1:8080/api/invoke/vault_status | grep -q '"not_set_up"'
+          # a request without the page's header is refused
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/invoke/vault_status)" = 403
+
+      - name: Server log
+        if: always()
+        run: docker logs meowny || true
 
   # The phone app for Android: a debug-signed APK to sideload (artifact meowny-android-debug).
   android:
