@@ -29,6 +29,7 @@ meowNY is a local-first budget app for your computer and your phone. It is a [Ta
 ## Features
 
 - **Budgeting:** categories, monthly budgets, recurring items and statistics. Expense, income and transfer share one add dialog.
+- **Dashboard:** a dashboard you arrange, with 18 widgets.
 - **Accounts:** bank, savings, cash and credit card, with groups, other currencies, return rates, transfers and net worth.
 - **Stashes:** money set aside in an account for a goal, or a term deposit at a rate.
 - **Documents:** receipts and invoices attached to transactions, encrypted, previewed inside the app.

@@ -14,6 +14,7 @@ const VERSION = JSON.parse(readFileSync(new URL('../../src-tauri/tauri.conf.json
 /** What it does: a name, a line, and where the guide says more. */
 const FEATURES = [
   ['budgets', 'Monthly budgets per category, with statistics and trends.', 'guide.html#budgeting'],
+  ['dashboard', 'A dashboard you arrange, with 18 widgets.', 'guide.html#dashboard-customize'],
   ['accounts', 'Bank, savings, cash and credit card, in any currency, with transfers and net worth.', 'guide.html#accounts'],
   ['stashes', 'Money set aside for a goal, or a term deposit at a rate.', 'guide.html#stashes'],
   ['recurring', 'Rent, salary, subscriptions.', 'guide.html#recurring'],

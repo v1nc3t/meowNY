@@ -10,7 +10,8 @@ const DESKTOP = { width: 1280, height: 800 }
 const PHONE = { width: 400, height: 860, phone: true }
 
 export const SHOTS = {
-  dashboard: { ...DESKTOP, alt: 'The dashboard: income, expenses and savings of the month, a year of trends, the budgets and net worth', caption: 'the dashboard' },
+  dashboard: { ...DESKTOP, alt: 'The dashboard in its default layout: the summary of the month at the top, a year of trends, net worth, the budgets, the stashes and what is upcoming, each a card of its own', caption: 'the dashboard' },
+  'dashboard-edit': { ...DESKTOP, alt: 'The dashboard in edit mode with the size grid open: a trend widget with its size button pressed, and the grid of columns and rows to pick from', caption: 'customizing the dashboard' },
   transactions: { ...DESKTOP, alt: 'The transactions of a month with the month to step through at the top, the tabs all, expenses, income and transfers, a search field and a filters button; each row has a name, category, account, date and amount', caption: 'transactions' },
   'transactions-transfers': { ...DESKTOP, alt: 'The transfers tab: each transfer with its date, the account it came from, the account it went to, the amount and a note', caption: 'the transfers tab' },
   'add-income': { ...DESKTOP, alt: 'The add dialog on the income tab: a name, an amount, an income category and the account the money comes into', caption: 'adding an income' },
@@ -33,7 +34,7 @@ export const SHOTS = {
   settings: { ...DESKTOP, alt: 'Settings, the phone part: the phones that are paired, with the last sync and the changes waiting for each, and the direction of the sync', caption: 'settings' },
   lock: { ...DESKTOP, alt: 'The lock screen asking for the passphrase', caption: 'the lock screen' },
   'phone-menu': { ...PHONE, alt: "The menu on the phone: the logo at the left of a page's title opens a panel with every page, from dashboard to settings, and lock at the bottom", caption: 'the menu' },
-  'phone-dashboard': { ...PHONE, alt: 'The dashboard on the phone, with the logo that opens the menu at the left of the title', caption: 'dashboard' },
+  'phone-dashboard': { ...PHONE, alt: 'The dashboard on the phone in its default layout, two columns of widgets under the title, with the logo that opens the menu at the left of the title', caption: 'dashboard' },
   'phone-transactions': { ...PHONE, alt: 'Transactions on the phone, with the month at the top, the tabs all, expenses, income and transfers, a search field with a filters button, and the rows by day, each with its name, its category in grey and its amount', caption: 'transactions' },
   'phone-recurring': { ...PHONE, alt: 'Recurring expenses and recurring income on the phone: each row has the name, a mark when it is overdue, paused or ended, the next due date in grey and the amount', caption: 'recurring' },
   'phone-debts': { ...PHONE, alt: 'Debts on the phone: each friend with the balance and who owes whom under the name, and under them the history', caption: 'debts' },
