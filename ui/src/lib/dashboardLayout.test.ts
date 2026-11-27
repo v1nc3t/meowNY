@@ -17,14 +17,14 @@ test('an empty layout, or one with nothing left, is the default', () => {
   assert.deepEqual(parseLayout(layoutOf(widget({ type: 'gone' })), 'phone'), defaultLayout('phone'))
 })
 
-test('the defaults are today\'s dashboard, with sizes the widgets allow', () => {
+test('the defaults keep the sizes they ask for: each one is a size its widget allows', () => {
   assert.deepEqual(
     defaultLayout('desktop').widgets.map((w) => `${w.type} ${w.w}x${w.h}`),
-    ['summary 12x1', 'trend 12x2', 'networth 6x1', 'budgets 6x3', 'stashes 6x2', 'upcoming 6x2', 'debts 6x2'],
+    ['summary 12x1', 'trend 8x2', 'savingsrate 4x1', 'networth 4x1', 'spending 4x2', 'upcoming 4x2', 'accounts 4x2', 'budgets 6x4', 'cashflow 6x2', 'loans 6x1', 'account 6x1', 'stashes 6x2', 'debts 6x2', 'recent 8x2', 'topexpenses 4x2'],
   )
   assert.deepEqual(
     defaultLayout('phone').widgets.map((w) => `${w.type} ${w.w}x${w.h}`),
-    ['summary 2x1', 'trend 2x2', 'networth 2x1', 'budgets 2x3', 'upcoming 2x2', 'stashes 2x2'],
+    ['summary 2x1', 'savingsrate 1x1', 'loans 1x1', 'trend 2x2', 'networth 2x1', 'spending 2x2', 'budgets 2x4', 'upcoming 2x2', 'stashes 2x2', 'recent 2x2'],
   )
 })
 
@@ -86,11 +86,11 @@ test('resizing is clamped to the widget, adding appends at its start size, remov
   const added = addWidget(layout, 'stashes', 'desktop', 'n1')
   assert.deepEqual(added.widgets.at(-1), { id: 'n1', type: 'stashes', w: 6, h: 2, settings: {} })
   assert.equal(addWidget(added, 'stashes', 'desktop', 'n1'), added)
-  assert.equal(resizeWidget(layout, 'networth', 6, 1, 'desktop'), layout)
+  assert.equal(resizeWidget(layout, 'networth', 4, 1, 'desktop'), layout)
   assert.equal(resizeWidget(layout, 'nothing', 6, 2, 'desktop'), layout)
   assert.equal(moveWidget(layout, 'summary', 0), layout)
-  assert.equal(removeWidget(layout, 'trend').widgets.length, 6)
-  assert.equal(removeWidget(layout, 'nothing').widgets.length, 7)
+  assert.equal(removeWidget(layout, 'trend').widgets.length, 14)
+  assert.equal(removeWidget(layout, 'nothing').widgets.length, 15)
 })
 
 test('settings are cleaned when they are set', () => {

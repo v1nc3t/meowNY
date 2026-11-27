@@ -77,9 +77,15 @@ tall. The default height of a widget is the one its content fits in, so a short 
 
 ## 5. Default layouts
 
-- **Desktop:** month summary 12×1; trend 12×2; net worth 6×1; budgets 6×3; stashes 6×2; upcoming 6×2; debts 6×2 — today's dashboard. The net worth is one
-  row, beside the budgets (three rows), and the stashes pack under it.
-- **Phone:** month summary 2×1; trend 2×2; net worth 2×1; budgets 2×3; upcoming 2×2; stashes 2×2.
+- **Desktop**, row by row on the 12 columns:
+  - month summary 12×1;
+  - trend 8×2, with savings rate 4×1 and net worth 4×1 beside it;
+  - spending by category 4×2, upcoming 4×2, accounts 4×2;
+  - budgets 6×4, with cash flow 6×2, loans 6×1 and the main account 6×1 beside it;
+  - stashes 6×2, debts 6×2;
+  - recent transactions 8×2, top expenses 4×2.
+- **Phone:** month summary 2×1; savings rate 1×1 and loans 1×1; trend 2×2; net worth 2×1; spending by category 2×2; budgets 2×4;
+  upcoming 2×2; stashes 2×2; recent transactions 2×2.
 
 ## 6. Storage
 

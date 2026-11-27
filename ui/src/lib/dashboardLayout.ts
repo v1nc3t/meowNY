@@ -31,10 +31,42 @@ export type WidgetSettings = {
 export type Widget = { id: string; type: WidgetType; w: number; h: number; settings: WidgetSettings }
 export type Layout = { version: 1; widgets: Widget[] }
 
-/** The layout of the app: today's dashboard (section 5). */
-const DEFAULT_TYPES: Record<Profile, WidgetType[]> = {
-  desktop: ['summary', 'trend', 'networth', 'budgets', 'stashes', 'upcoming', 'debts'],
-  phone: ['summary', 'trend', 'networth', 'budgets', 'upcoming', 'stashes'],
+/**
+ * The layout the app starts with (section 5): each widget with its size, in an order that packs without holes. On the desktop, rows of the
+ * 12 columns: the month across the top; the trend beside the savings rate and net worth; spending, upcoming and accounts in three; budgets
+ * beside cash flow, loans and the main account; stashes beside debts; recent transactions beside the top expenses. The phone keeps the ones that read well
+ * in two columns.
+ */
+const DEFAULTS: Record<Profile, [WidgetType, number, number][]> = {
+  desktop: [
+    ['summary', 12, 1],
+    ['trend', 8, 2],
+    ['savingsrate', 4, 1],
+    ['networth', 4, 1],
+    ['spending', 4, 2],
+    ['upcoming', 4, 2],
+    ['accounts', 4, 2],
+    ['budgets', 6, 4],
+    ['cashflow', 6, 2],
+    ['loans', 6, 1],
+    ['account', 6, 1],
+    ['stashes', 6, 2],
+    ['debts', 6, 2],
+    ['recent', 8, 2],
+    ['topexpenses', 4, 2],
+  ],
+  phone: [
+    ['summary', 2, 1],
+    ['savingsrate', 1, 1],
+    ['loans', 1, 1],
+    ['trend', 2, 2],
+    ['networth', 2, 1],
+    ['spending', 2, 2],
+    ['budgets', 2, 4],
+    ['upcoming', 2, 2],
+    ['stashes', 2, 2],
+    ['recent', 2, 2],
+  ],
 }
 
 function widgetOf(type: WidgetType, profile: Profile, id: string): Widget {
@@ -42,7 +74,7 @@ function widgetOf(type: WidgetType, profile: Profile, id: string): Widget {
 }
 
 export function defaultLayout(profile: Profile): Layout {
-  return { version: 1, widgets: DEFAULT_TYPES[profile].map((type) => widgetOf(type, profile, type)) }
+  return { version: 1, widgets: DEFAULTS[profile].map(([type, w, h]) => ({ ...widgetOf(type, profile, type), ...clampSize(type, profile, w, h) })) }
 }
 
 // -- reading ------------------------------------------------------------------------------------------------------------------
