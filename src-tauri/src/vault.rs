@@ -196,6 +196,9 @@ pub struct Policy {
 impl Policy {
     pub const DESKTOP: Policy = Policy { require_passphrase: false, erase_after_failures: 0 };
     pub const PHONE: Policy = Policy { require_passphrase: true, erase_after_failures: 5 };
+    /// The self-hosted server (`meowny-server`): its secret is in a file beside the data, so the passphrase is what keeps the data
+    /// closed. It never erases: anyone who can reach the page could otherwise wipe the data with five wrong guesses.
+    pub const SERVER: Policy = Policy { require_passphrase: true, erase_after_failures: 0 };
 }
 
 /// How many wrong passphrases have been typed, and how many are allowed before the erase. Readable while locked.
@@ -396,6 +399,18 @@ impl Vault {
         }
         let failed = config.failed_attempts.min(config.erase_after_failures);
         Ok(Some(Attempts { failed, allowed: config.erase_after_failures, left: config.erase_after_failures - failed }))
+    }
+
+    /// Checks a passphrase without opening or closing anything. The server needs it: the data may already be open for one browser
+    /// when another asks to come in, and `unlock` of open data checks nothing. A vault without a passphrase never passes, so the
+    /// server cannot let a browser in on no secret at all.
+    pub fn verify_passphrase(&self, passphrase: &str) -> Result<(), AppError> {
+        let _one_at_a_time = self.unlock_guard.lock().unwrap_or_else(|e| e.into_inner());
+        let config = read_config(&self.config_path())?;
+        if !config.passphrase || passphrase.is_empty() {
+            return Err(AppError::WrongCredentials);
+        }
+        self.everyday_key(&config, Some(passphrase)).map(|_| ())
     }
 
     /// Opens the everyday copy of the database key with the keychain secret and the passphrase.
@@ -908,6 +923,45 @@ mod tests {
         assert!(!v.config_path().exists() && !v.db_path().exists());
         v.create(&settings(), Some(PHONE_PASS)).unwrap();
         assert_eq!(v.attempts().unwrap(), Some(Attempts { failed: 0, allowed: 5, left: 5 }));
+    }
+
+    #[test]
+    fn a_server_vault_demands_a_passphrase_and_never_erases() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = Vault::with_policy(dir.path().to_path_buf(), Box::new(MemoryStore::default()), Policy::SERVER);
+        assert_eq!(v.create(&settings(), None), Err(AppError::InvalidInput));
+        v.create(&settings(), Some(PHONE_PASS)).unwrap();
+        v.lock();
+        for _ in 0..8 {
+            assert_eq!(v.unlock(Some("wrong wrong wrong")), Err(AppError::WrongCredentials));
+        }
+        assert_eq!(v.attempts().unwrap(), None);
+        v.unlock(Some(PHONE_PASS)).unwrap();
+    }
+
+    #[test]
+    fn a_passphrase_is_checked_while_the_data_is_open_and_nothing_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), Some("long enough pass")).unwrap();
+        assert_eq!(v.status(), VaultStatus::Unlocked);
+        // unlock of open data checks nothing; this does
+        assert_eq!(v.unlock(Some("wrong wrong wrong")), Ok(()));
+        assert_eq!(v.verify_passphrase("wrong wrong wrong"), Err(AppError::WrongCredentials));
+        assert_eq!(v.verify_passphrase(""), Err(AppError::WrongCredentials));
+        assert_eq!(v.verify_passphrase("long enough pass"), Ok(()));
+        assert_eq!(v.status(), VaultStatus::Unlocked);
+        v.lock();
+        assert_eq!(v.verify_passphrase("long enough pass"), Ok(()));
+        assert_eq!(v.status(), VaultStatus::Locked);
+    }
+
+    #[test]
+    fn data_without_a_passphrase_never_passes_the_check() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = vault(dir.path());
+        v.create(&settings(), None).unwrap();
+        assert_eq!(v.verify_passphrase("anything at all"), Err(AppError::WrongCredentials));
     }
 
     #[test]
