@@ -51,27 +51,43 @@ fn clock_now(vault: &Vault) -> Result<chrono::DateTime<chrono::Utc>, AppError> {
 mod ask {
     use std::path::PathBuf;
 
+    use tauri::Runtime;
     use tauri_plugin_dialog::DialogExt;
 
+    use crate::served;
     use crate::vault::AppError;
 
-    pub fn save(app: &tauri::AppHandle, name: &str, kind: &str, extension: &str) -> Result<Option<PathBuf>, AppError> {
+    // Served to a browser (`meowny-server`), there is no window for a dialog: the browser's download and upload stand in for it.
+
+    pub fn save<R: Runtime>(app: &tauri::AppHandle<R>, name: &str, kind: &str, extension: &str) -> Result<Option<PathBuf>, AppError> {
+        if served::is_served() {
+            return served::save(name);
+        }
         let picked = app.dialog().file().set_file_name(name).add_filter(kind, &[extension]).blocking_save_file();
         picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
     }
 
     /// A place to save a file of any kind, as a copy of a document: no filter, since its type is whatever the person's file was.
-    pub fn save_any(app: &tauri::AppHandle, name: &str) -> Result<Option<PathBuf>, AppError> {
+    pub fn save_any<R: Runtime>(app: &tauri::AppHandle<R>, name: &str) -> Result<Option<PathBuf>, AppError> {
+        if served::is_served() {
+            return served::save(name);
+        }
         let picked = app.dialog().file().set_file_name(name).blocking_save_file();
         picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
     }
 
-    pub fn pick(app: &tauri::AppHandle, kind: &str, extension: &str) -> Result<Option<PathBuf>, AppError> {
+    pub fn pick<R: Runtime>(app: &tauri::AppHandle<R>, kind: &str, extension: &str) -> Result<Option<PathBuf>, AppError> {
+        if served::is_served() {
+            return served::pick();
+        }
         let picked = app.dialog().file().add_filter(kind, &[extension]).blocking_pick_file();
         picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
     }
 
-    pub fn folder(app: &tauri::AppHandle) -> Result<Option<PathBuf>, AppError> {
+    pub fn folder<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<Option<PathBuf>, AppError> {
+        if served::is_served() {
+            return served::folder();
+        }
         let picked = app.dialog().file().blocking_pick_folder();
         picked.map(|path| path.into_path().map_err(|_| AppError::Internal)).transpose()
     }
@@ -81,21 +97,23 @@ mod ask {
 mod ask {
     use std::path::PathBuf;
 
+    use tauri::Runtime;
+
     use crate::vault::AppError;
 
-    pub fn save(_: &tauri::AppHandle, _: &str, _: &str, _: &str) -> Result<Option<PathBuf>, AppError> {
+    pub fn save<R: Runtime>(_: &tauri::AppHandle<R>, _: &str, _: &str, _: &str) -> Result<Option<PathBuf>, AppError> {
         Err(AppError::InvalidInput)
     }
 
-    pub fn save_any(_: &tauri::AppHandle, _: &str) -> Result<Option<PathBuf>, AppError> {
+    pub fn save_any<R: Runtime>(_: &tauri::AppHandle<R>, _: &str) -> Result<Option<PathBuf>, AppError> {
         Err(AppError::InvalidInput)
     }
 
-    pub fn pick(_: &tauri::AppHandle, _: &str, _: &str) -> Result<Option<PathBuf>, AppError> {
+    pub fn pick<R: Runtime>(_: &tauri::AppHandle<R>, _: &str, _: &str) -> Result<Option<PathBuf>, AppError> {
         Err(AppError::InvalidInput)
     }
 
-    pub fn folder(_: &tauri::AppHandle) -> Result<Option<PathBuf>, AppError> {
+    pub fn folder<R: Runtime>(_: &tauri::AppHandle<R>) -> Result<Option<PathBuf>, AppError> {
         Err(AppError::InvalidInput)
     }
 }
@@ -279,7 +297,7 @@ pub async fn recover_vault(vault: Shared<'_>, recovery_key: String, new_passphra
 /// Saves the recovery key as a text file the person picks a place for. Returns false if they cancel.
 /// Only a valid recovery key can be written, so this cannot be used to write other content to disk.
 #[tauri::command]
-pub async fn save_recovery_key(app: tauri::AppHandle, code: String) -> Result<bool, AppError> {
+pub async fn save_recovery_key<R: tauri::Runtime>(app: tauri::AppHandle<R>, code: String) -> Result<bool, AppError> {
     let text = crate::recovery_file::text(&code)?;
     let Some(path) = ask::save(&app, "meowny-recovery-key.txt", "Text file", "txt")? else { return Ok(false) };
     crate::recovery_file::write(&path, &text)?;
@@ -544,7 +562,7 @@ pub fn set_notify_due(vault: Shared, on: bool) -> Result<(), AppError> {
 /// Shows a desktop notification, only if the person has them on. The text comes from the UI so
 /// it is in the chosen language; it is a local notification and nothing leaves the machine.
 #[tauri::command]
-pub fn show_due_notification(app: tauri::AppHandle, vault: Shared, title: String, body: String) -> Result<(), AppError> {
+pub fn show_due_notification<R: tauri::Runtime>(app: tauri::AppHandle<R>, vault: Shared, title: String, body: String) -> Result<(), AppError> {
     use tauri_plugin_notification::NotificationExt;
     if title.chars().count() > 100 || body.chars().count() > 300 {
         return Err(AppError::InvalidInput);
@@ -593,7 +611,7 @@ pub fn recurring_planned_vs_paid(vault: Shared, month: String) -> Result<Vec<Pla
 }
 
 /// Asks the person to pick a backup file. None if they cancel.
-fn pick_backup_file(app: &tauri::AppHandle) -> Result<Option<std::path::PathBuf>, AppError> {
+fn pick_backup_file<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Option<std::path::PathBuf>, AppError> {
     ask::pick(app, "meowNY backup", backup::EXTENSION)
 }
 
@@ -601,7 +619,7 @@ fn pick_backup_file(app: &tauri::AppHandle) -> Result<Option<std::path::PathBuf>
 /// they chose for this backup, and the files of the documents too if `include_documents`. What it held of the documents, or None
 /// if they cancel the save dialog. The file is written as it is read, so a big library does not have to fit in memory.
 #[tauri::command]
-pub async fn create_backup(app: tauri::AppHandle, vault: Shared<'_>, passphrase: String, include_documents: bool) -> Result<Option<backup::Written>, AppError> {
+pub async fn create_backup<R: tauri::Runtime>(app: tauri::AppHandle<R>, vault: Shared<'_>, passphrase: String, include_documents: bool) -> Result<Option<backup::Written>, AppError> {
     backup::check_passphrase(&passphrase)?;
     let name = format!("meowny-backup-{}.{}", today_text(&vault)?, backup::EXTENSION);
     let Some(path) = ask::save(&app, &name, "meowNY backup", backup::EXTENSION)? else { return Ok(None) };
@@ -615,8 +633,8 @@ pub async fn create_backup(app: tauri::AppHandle, vault: Shared<'_>, passphrase:
 /// Replaces all data with a backup the person picks. `confirmation` must be "RESTORE". Returns false
 /// if they cancel the file dialog. Nothing changes unless the whole backup is valid.
 #[tauri::command]
-pub async fn restore_backup(
-    app: tauri::AppHandle,
+pub async fn restore_backup<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     vault: Shared<'_>,
     passphrase: String,
     confirmation: String,
@@ -636,8 +654,8 @@ pub async fn restore_backup(
 /// is the optional app passphrase for this install. Returns the recovery key, or None if the person
 /// cancels the file dialog.
 #[tauri::command]
-pub async fn restore_backup_new_vault(
-    app: tauri::AppHandle,
+pub async fn restore_backup_new_vault<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     vault: Shared<'_>,
     passphrase: String,
     vault_passphrase: Option<String>,
@@ -660,8 +678,8 @@ pub fn get_backup_schedule(vault: Shared) -> Result<Option<Schedule>, AppError> 
 /// `every_days` is 1, 7 or 30; `include_documents` puts the files of the documents in every backup. Returns false if the person
 /// cancels the folder dialog.
 #[tauri::command]
-pub async fn set_backup_schedule(
-    app: tauri::AppHandle,
+pub async fn set_backup_schedule<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     vault: Shared<'_>,
     passphrase: String,
     every_days: u32,
@@ -682,7 +700,7 @@ pub fn clear_backup_schedule(vault: Shared) -> Result<(), AppError> {
 
 /// Asks where to save `text`, then writes it there readable by the owner only. False if the person cancels.
 /// These files are not encrypted; the guides say so (the screen used to, until the maintainer asked for the warning to go).
-fn save_export(app: &tauri::AppHandle, name: String, kind: &str, extension: &str, bytes: &[u8]) -> Result<bool, AppError> {
+fn save_export<R: tauri::Runtime>(app: &tauri::AppHandle<R>, name: String, kind: &str, extension: &str, bytes: &[u8]) -> Result<bool, AppError> {
     let Some(path) = ask::save(app, &name, kind, extension)? else { return Ok(false) };
     backup::write_file(&path, bytes)?;
     Ok(true)
@@ -720,14 +738,14 @@ pub async fn export_preview_pdf(vault: Shared<'_>, options: ReportOptions) -> Re
 
 /// The data as a JSON file, or part of it: see `Selection`. Not encrypted.
 #[tauri::command]
-pub async fn export_json(app: tauri::AppHandle, vault: Shared<'_>, selection: Selection) -> Result<bool, AppError> {
+pub async fn export_json<R: tauri::Runtime>(app: tauri::AppHandle<R>, vault: Shared<'_>, selection: Selection) -> Result<bool, AppError> {
     let text = vault.with_conn(|c| export::json(c, &selection, chrono::Utc::now()))?;
     save_export(&app, format!("meowny-export-{}.json", today_text(&vault)?), "JSON", "json", text.as_bytes())
 }
 
 /// Transactions as a CSV file. Cells that start like a formula are written as text. Not encrypted.
 #[tauri::command]
-pub async fn export_csv(app: tauri::AppHandle, vault: Shared<'_>, selection: Selection) -> Result<bool, AppError> {
+pub async fn export_csv<R: tauri::Runtime>(app: tauri::AppHandle<R>, vault: Shared<'_>, selection: Selection) -> Result<bool, AppError> {
     let text = vault.with_conn(|c| export::csv(c, &selection))?;
     save_export(&app, format!("meowny-transactions-{}.csv", today_text(&vault)?), "CSV", "csv", text.as_bytes())
 }
@@ -736,8 +754,8 @@ pub async fn export_csv(app: tauri::AppHandle, vault: Shared<'_>, selection: Sel
 /// summary. `format` sets how dates and money look; leave it out for ISO dates and a plain number.
 /// Text cells that start like a formula are written as text. Not encrypted.
 #[tauri::command]
-pub async fn export_xlsx(
-    app: tauri::AppHandle,
+pub async fn export_xlsx<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     vault: Shared<'_>,
     selection: Selection,
     format: Option<DisplayFormat>,
@@ -750,7 +768,7 @@ pub async fn export_xlsx(
 /// the transactions. Made on this computer. Not encrypted, so `showDescriptions` off is the way to share
 /// one without private details.
 #[tauri::command]
-pub async fn export_pdf(app: tauri::AppHandle, vault: Shared<'_>, options: ReportOptions) -> Result<bool, AppError> {
+pub async fn export_pdf<R: tauri::Runtime>(app: tauri::AppHandle<R>, vault: Shared<'_>, options: ReportOptions) -> Result<bool, AppError> {
     let report = vault.with_conn(|c| report::read(c, &options))?;
     // Laying out and writing the file can take a moment for a long list; the database is free meanwhile.
     let bytes = report.pdf(&options)?;
@@ -988,7 +1006,7 @@ pub fn read_document_preview(vault: Shared, id: String) -> Result<docs::PreviewD
 /// Opens a document in the system's own viewer, from a plain copy that is removed when the app locks or closes. Not for a kind of
 /// file the app could not identify. The copy is made inside the call that holds the vault, so a lock that comes next removes it.
 #[tauri::command]
-pub fn open_document(app: tauri::AppHandle, vault: Shared, id: String) -> Result<(), AppError> {
+pub fn open_document<R: tauri::Runtime>(app: tauri::AppHandle<R>, vault: Shared, id: String) -> Result<(), AppError> {
     use tauri_plugin_opener::OpenerExt;
     let id = categories::parse_id(&id)?;
     let opened = vault.opened();
@@ -999,7 +1017,7 @@ pub fn open_document(app: tauri::AppHandle, vault: Shared, id: String) -> Result
 /// Saves a copy of the file where the person chooses. Returns false if they cancel. The copy is not encrypted. The phone has no
 /// file dialogs, so there it is refused.
 #[tauri::command]
-pub async fn save_document_copy(app: tauri::AppHandle, vault: Shared<'_>, id: String) -> Result<bool, AppError> {
+pub async fn save_document_copy<R: tauri::Runtime>(app: tauri::AppHandle<R>, vault: Shared<'_>, id: String) -> Result<bool, AppError> {
     let id = categories::parse_id(&id)?;
     let (name, bytes) = vault.with_files(|conn, files| {
         let document = docs::get(conn, files, id)?;
@@ -1540,7 +1558,7 @@ fn debts_file(vault: &Shared<'_>, request: &DebtsExport, today: &str) -> Result<
 /// Saves who owes what (the summary, one friend's statement, or the whole ledger) as text, CSV or PDF, where the person says. The app sends
 /// it to nobody. Not encrypted.
 #[tauri::command]
-pub async fn export_debts(app: tauri::AppHandle, vault: Shared<'_>, request: DebtsExport) -> Result<bool, AppError> {
+pub async fn export_debts<R: tauri::Runtime>(app: tauri::AppHandle<R>, vault: Shared<'_>, request: DebtsExport) -> Result<bool, AppError> {
     let today = today_text(&vault)?;
     let (stem, bytes) = debts_file(&vault, &request, &today)?;
     let (kind, extension) = match request.format {
