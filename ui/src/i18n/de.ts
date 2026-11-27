@@ -509,6 +509,8 @@ export const de: Messages = {
   'phone.passphrase': 'passphrase',
   'phone.passphraseRepeat': 'passphrase wiederholen',
   'phone.passphraseRequired': 'das handy braucht eine passphrase.',
+  'served.passphraseRequired': 'eine passphrase ist nötig: mit ihr meldest du dich auf diesem server an.',
+  'served.lockHint': 'deine daten sind auf dem server verschlüsselt. die passphrase öffnet sie und meldet dich in jedem browser an.',
   'phone.passphraseLonger': 'nimm mindestens 12 zeichen oder ein paar zufällige wörter.',
   'phone.eraseWarning': '5 falsche passphrasen löschen dieses handy. deine daten bleiben auf deinem computer.',
   'phone.welcomeCreate': 'erstellen',

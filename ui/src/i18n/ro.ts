@@ -506,6 +506,8 @@ export const ro: Messages = {
   'phone.passphrase': 'frază de acces',
   'phone.passphraseRepeat': 'repetă fraza de acces',
   'phone.passphraseRequired': 'telefonul are nevoie de o frază de acces.',
+  'served.passphraseRequired': 'este nevoie de o frază de acces: cu ea intri pe acest server.',
+  'served.lockHint': 'datele tale sunt criptate pe server. fraza de acces le deschide și te conectează din orice browser.',
   'phone.passphraseLonger': 'folosește cel puțin 12 caractere sau câteva cuvinte alese la întâmplare.',
   'phone.eraseWarning': '5 fraze de acces greșite șterg acest telefon. datele rămân pe calculator.',
   'phone.welcomeCreate': 'creează',

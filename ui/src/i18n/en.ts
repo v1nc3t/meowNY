@@ -521,6 +521,8 @@ export const en = {
   'phone.passphrase': 'passphrase',
   'phone.passphraseRepeat': 'repeat the passphrase',
   'phone.passphraseRequired': 'the phone needs a passphrase.',
+  'served.passphraseRequired': 'a passphrase is needed: it is what signs you in to this server.',
+  'served.lockHint': 'your data is encrypted on the server. the passphrase opens it and signs you in from any browser.',
   'phone.passphraseLonger': 'use at least 12 characters, or a few random words.',
   'phone.eraseWarning': '5 wrong passphrases erase this phone. your data stays on your computer.',
   'phone.welcomeCreate': 'create',

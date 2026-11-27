@@ -508,6 +508,8 @@ export const es: Messages = {
   'phone.passphrase': 'frase de contraseña',
   'phone.passphraseRepeat': 'repite la frase de contraseña',
   'phone.passphraseRequired': 'el móvil necesita una frase de contraseña.',
+  'served.passphraseRequired': 'se necesita una frase de contraseña: con ella entras en este servidor.',
+  'served.lockHint': 'tus datos están cifrados en el servidor. la frase de contraseña los abre y te da acceso desde cualquier navegador.',
   'phone.passphraseLonger': 'usa al menos 12 caracteres o unas cuantas palabras al azar.',
   'phone.eraseWarning': '5 frases de contraseña incorrectas borran este móvil. tus datos siguen en tu ordenador.',
   'phone.welcomeCreate': 'crear',

@@ -1,11 +1,12 @@
 import { listen } from '@tauri-apps/api/event'
 import { z } from 'zod'
-import { call, errorText, inDesktopApp, ApiError, type ErrorCode } from '../api/invoke'
+import { call, errorText, hasBackend, inDesktopApp, ApiError, type ErrorCode } from '../api/invoke'
+import { isServed, onServedLock } from '../api/served'
 import { forgetLayouts } from '../lib/dashboardStorage'
 import { forgetChoices } from '../lib/sticky'
 import type { Settings } from './rules'
 
-export { errorText, inDesktopApp, ApiError as VaultError }
+export { errorText, hasBackend, inDesktopApp, ApiError as VaultError }
 export type { ErrorCode }
 
 export type VaultStatus = 'not_set_up' | 'locked' | 'unlocked'
@@ -112,5 +113,7 @@ export const vault = {
   showDueNotification: (title: string, body: string) => done(call('show_due_notification', Nothing, { title, body })),
   dataLocation: () => call('data_location', z.string()),
   wipe: (confirmation: string) => done(call('wipe_all_data', Nothing, { confirmation }).then(fresh)),
-  onLocked: (handler: () => void) => listen('vault-locked', handler),
+  /** The desktop app says when it locks; a served page hears it from an answer, or asks now and then. */
+  onLocked: (handler: () => void) =>
+    isServed() ? Promise.resolve(onServedLock(handler, () => call('vault_status', Status))) : listen('vault-locked', handler),
 }

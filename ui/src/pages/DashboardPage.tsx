@@ -20,6 +20,7 @@ import { useShortcut } from '../keys/registry'
 import { addWidget, setWidgetSettings } from '../lib/dashboardLayout'
 import { SPECS } from '../lib/dashboardWidgets'
 import { useSticky } from '../lib/sticky'
+import { isServed } from '../api/served'
 
 export default function DashboardPage() {
   const { settings, error } = useMoneySettings()
@@ -153,7 +154,7 @@ function FirstSteps() {
       <h2 id="first-steps-title">{t('dashboard.firstTitle')}</h2>
       <p className="hint">{t('dashboard.firstText')}</p>
       <ul className="first-steps-list">
-        {FIRST_STEPS.filter((step) => !(phone && step.desktopOnly)).map((step) => (
+        {FIRST_STEPS.filter((step) => !((phone || isServed()) && step.desktopOnly)).map((step) => (
           <li key={step.picture}>
             <Link className="first-step" to={step.to} state={step.state}>
               <Illustration name={step.picture} scale={3} />

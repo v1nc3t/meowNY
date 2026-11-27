@@ -508,6 +508,8 @@ export const pt: Messages = {
   'phone.passphrase': 'frase-passe',
   'phone.passphraseRepeat': 'repete a frase-passe',
   'phone.passphraseRequired': 'o telemóvel precisa de uma frase-passe.',
+  'served.passphraseRequired': 'é precisa uma frase-passe: é com ela que entras neste servidor.',
+  'served.lockHint': 'os teus dados estão cifrados no servidor. a frase-passe abre-os e dá-te acesso a partir de qualquer navegador.',
   'phone.passphraseLonger': 'usa pelo menos 12 caracteres ou algumas palavras ao acaso.',
   'phone.eraseWarning': '5 frases-passe erradas apagam este telemóvel. os teus dados ficam no computador.',
   'phone.welcomeCreate': 'criar',

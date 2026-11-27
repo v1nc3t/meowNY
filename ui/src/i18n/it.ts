@@ -508,6 +508,8 @@ export const it: Messages = {
   'phone.passphrase': 'frase segreta',
   'phone.passphraseRepeat': 'ripeti la frase segreta',
   'phone.passphraseRequired': 'il telefono ha bisogno di una frase segreta.',
+  'served.passphraseRequired': 'serve una frase segreta: è quella con cui accedi a questo server.',
+  'served.lockHint': 'i tuoi dati sono cifrati sul server. la frase segreta li apre e ti fa accedere da qualsiasi browser.',
   'phone.passphraseLonger': 'usa almeno 12 caratteri, oppure qualche parola a caso.',
   'phone.eraseWarning': '5 frasi segrete sbagliate cancellano questo telefono. i tuoi dati restano sul computer.',
   'phone.welcomeCreate': 'crea',
