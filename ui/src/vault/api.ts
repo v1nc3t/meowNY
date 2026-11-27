@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { call, errorText, hasBackend, inDesktopApp, ApiError, type ErrorCode } from '../api/invoke'
 import { isServed, onServedLock } from '../api/served'
 import { forgetLayouts } from '../lib/dashboardStorage'
+import { forgetGuide } from '../lib/gettingStarted'
 import { forgetChoices } from '../lib/sticky'
 import type { Settings } from './rules'
 
@@ -57,6 +58,7 @@ const done = <T>(promise: Promise<T>) => promise.then(() => undefined)
 const fresh = <T>(answer: T) => {
   forgetChoices()
   forgetLayouts()
+  forgetGuide()
   return answer
 }
 

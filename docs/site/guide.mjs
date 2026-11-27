@@ -163,7 +163,8 @@ const SECTIONS = [
         items: [
           'The default shows the month **summary**, the **trend**, **savings rate**, **net worth**, **spending by category**, **upcoming**, **accounts**, **budgets**, **cash flow**, **loans**, your main **account**, **stashes**, **debts**, **recent transactions** and **top expenses**.',
           'Click a title to open its page.',
-          'On an empty dashboard, **first steps**: add a transaction, set a budget, add a friend, pair your phone.',
+          'After you create your data, **getting started** sits at the top: a step for each part of the app (accounts, categories, a transaction, a budget, a recurring bill, a stash, a friend, a receipt, backups and your phone), each a link to its page. A step ticks itself off once you have done it, and a bar shows how far along you are.',
+          'Hide it with **×**. Bring it back with **⋯** › **show getting started**.',
         ],
       },
       { t: 'h3', id: 'dashboard-customize', text: 'Customize the dashboard' },

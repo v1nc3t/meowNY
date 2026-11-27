@@ -1,4 +1,4 @@
-/* The first start (what the app does, then three steps), the first steps of an empty dashboard, and the room of an empty list. */
+/* The first start (what the app does, then three steps), getting started on the dashboard, and the room of an empty list. */
 
 /* The first screen is wider than the other password screens, so it starts a little higher. */
 .gate.onboard {
@@ -48,30 +48,26 @@
   border: 0;
 }
 
-.onboard-tile .pixel-art,
-.first-step .pixel-art {
+.onboard-tile .pixel-art {
   flex: none;
   color: var(--foreground);
 }
 
-.onboard-tile-text,
-.first-step-text {
+.onboard-tile-text {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   min-width: 0;
 }
 
-.onboard-tile-text > b,
-.first-step-text > b {
+.onboard-tile-text > b {
   font-size: 0.9375rem;
   font-weight: 600;
   line-height: 1.35;
   color: var(--foreground);
 }
 
-.onboard-tile-text > span,
-.first-step-text > span {
+.onboard-tile-text > span {
   font-size: 0.875rem;
   line-height: 1.5;
   color: var(--muted-foreground);
@@ -211,84 +207,186 @@ html.is-phone .onboard-features > .onboard-tile {
   gap: 0.875rem;
 }
 
-/* The first steps on a dashboard with nothing in it yet: a few big links, each with its picture, under a title, with no box around them. */
-.first-steps {
+/* "Getting started" at the top of the dashboard: a title line with the count and a close button, a bar of one block per step, then the
+   steps, two columns wide (one on a phone). A step is a link with an icon; a done one is grey with a check, the next one is marked. */
+.guide {
   container-type: inline-size;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
+  gap: var(--space-3);
+  margin-bottom: var(--group-gap, var(--space-5));
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: var(--border-width) solid var(--border);
 }
 
-.first-steps > h2 {
+.guide-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.guide-head > h2 {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
+  font-size: 1rem;
 }
 
-.first-steps > .hint {
-  margin: -0.25rem 0 0.25rem;
+.guide-count {
   font-size: 0.875rem;
+  white-space: nowrap;
+  color: var(--muted-foreground);
 }
 
-.dash .first-steps-list {
+.guide-bar {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.guide-bar > span {
+  flex: 1 1 0;
+  height: 0.5rem;
+  background-color: var(--c-track);
+}
+
+.guide-bar > .is-done {
+  background-color: var(--primary);
+}
+
+.dash .guide-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem 1.25rem;
+  gap: var(--space-2) var(--space-4);
   width: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-/* Two by two, or one under the other when the panel is narrow (a phone). */
 @container (max-width: 34rem) {
-  .dash .first-steps-list {
+  .dash .guide-list {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-.dash .first-steps-list > li {
+.dash .guide-list > li {
   display: block;
   padding: 0;
 }
 
-/* A step is a link with a thin line, so it reads as something to press; pressed, it shrinks a little, like a button. */
-.first-step {
+.guide-step {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 1rem;
+  gap: var(--space-3);
   height: 100%;
-  padding: 0.875rem 1rem;
+  padding: var(--space-2) var(--space-3);
   color: inherit;
   text-decoration: none;
-  border: var(--border-width) solid var(--border);
+  border: var(--border-width) solid transparent;
+}
+
+a.guide-step {
+  border-color: var(--border);
   transition:
     background-color var(--t-fast, 110ms),
     transform var(--t-fast, 110ms) steps(1, end);
 }
 
-.first-step:focus-visible {
+a.guide-step:focus-visible {
   outline: var(--hairline-2) solid var(--ring);
   outline-offset: 0.25rem;
 }
 
 @media (hover: hover) {
-  .first-step:hover {
+  a.guide-step:hover {
     background: var(--accent);
   }
 
-  .first-step:hover .first-step-text > b {
+  a.guide-step:hover .guide-text > b {
     text-decoration: underline;
     text-underline-offset: 0.25em;
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .first-step:active {
+  a.guide-step:active {
     transform: scale(0.97);
   }
 }
 
-html.is-phone .first-step {
+/* The next thing to do stands out: its frame and icon in the accent colour. */
+.is-next > a.guide-step {
+  border-color: var(--primary);
+}
+
+.guide-mark {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  color: var(--foreground);
+  background: var(--c-track);
+}
+
+.is-next .guide-mark {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.is-done .guide-mark {
+  color: var(--primary);
+  background: transparent;
+}
+
+.guide-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.guide-text > b {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.guide-text > span {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--muted-foreground);
+}
+
+.is-done .guide-text > b {
+  font-weight: 400;
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+
+.is-done .guide-text > span {
+  display: none;
+}
+
+.guide-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.guide-end > p {
+  margin: 0;
+}
+
+html.is-phone .guide {
+  padding: var(--space-3);
+}
+
+html.is-phone a.guide-step {
   min-height: 2.75rem;
-  padding: 0.75rem 0.875rem;
 }
 
 /* An empty list: the button for the first thing to do goes under the hint. */

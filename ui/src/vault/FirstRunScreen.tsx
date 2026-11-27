@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { currencyOptions } from '../api/currencies'
 import { cleanCategoryName } from '../api/categories'
+import { startGuide } from '../lib/gettingStarted'
 import { saveSenderName } from '../lib/senderName'
 import { formatExamples, localeOptions, zoneOptions } from '../api/locales'
 import Facts from '../components/Facts'
@@ -106,6 +107,8 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
         ),
       )
       saveSenderName(name)
+      // the dashboard opens with the steps that show the rest of the app
+      startGuide(null)
     } catch (error) {
       setMessage(errorText(error))
       setBusy(false)
