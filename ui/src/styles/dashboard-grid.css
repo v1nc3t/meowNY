@@ -54,6 +54,8 @@
 .dash-widget-head {
   align-items: baseline;
   min-width: 0;
+  /* room between the title line and what the widget shows */
+  padding-bottom: var(--space-3);
 }
 
 /* A narrow widget (one column on a phone) gives the whole title line to its name: the period at its right goes. */

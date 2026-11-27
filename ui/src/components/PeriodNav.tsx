@@ -68,6 +68,11 @@ export default function PeriodNav({
 
   return (
     <div className={cn('period-nav', className)}>
+      {value === current ? null : (
+        <Button variant="outline" size="sm" className="period-current" {...(keys ? tip('today') : {})} onClick={() => (onCurrent ? onCurrent() : onChange(current))}>
+          {t('common.current')}
+        </Button>
+      )}
       <Button variant="ghost" size="icon" aria-label={prevLabel} {...(keys ? tip('prev') : {})} onClick={() => step(-1)}>
         &lsaquo;
       </Button>
@@ -90,11 +95,6 @@ export default function PeriodNav({
       <Button variant="ghost" size="icon" aria-label={nextLabel} {...(keys ? tip('next') : {})} onClick={() => step(1)}>
         &rsaquo;
       </Button>
-      {value === current ? null : (
-        <Button variant="outline" size="sm" className="period-current" {...(keys ? tip('today') : {})} onClick={() => (onCurrent ? onCurrent() : onChange(current))}>
-          {t('common.current')}
-        </Button>
-      )}
       {host
         ? createPortal(
             <div ref={popupRef} className="period-popover" role="dialog" aria-label={kind === 'month' ? t('common.month') : t('common.year')} onKeyDown={onKeyDown}>

@@ -224,7 +224,7 @@ html.is-phone .fab {
 
 /* The period control (components/PeriodNav.tsx) on a phone: ‹ nov 2026 ▾ › as one outlined box, as tall as the fields and buttons beside it
    (--control-phone), starting at the left edge of what holds it (the page, or the card of a chart) and no wider than its words and arrows
-   need; "current" follows it, as tall. */
+   need; "current" comes before it, as tall. */
 html.is-phone .period-nav {
   gap: 0;
   width: fit-content;
@@ -239,11 +239,11 @@ html.is-phone .period-nav > .ui-btn-ghost + .ui-btn-ghost {
   margin-left: calc(var(--border-width) * -1);
 }
 
-html.is-phone .period-nav > .ui-btn-ghost:first-child {
+html.is-phone .period-nav > .ui-btn-ghost:has(+ .period-pick) {
   border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
 
-html.is-phone .period-nav > .ui-btn-ghost:nth-child(3) {
+html.is-phone .period-nav > .period-pick + .ui-btn-ghost {
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 
@@ -257,7 +257,7 @@ html.is-phone .period-nav > .period-pick {
 }
 
 html.is-phone .period-nav > .period-current {
-  margin-left: 0.5rem;
+  margin-right: 0.5rem;
   padding-inline: 0.75rem;
 }
 
