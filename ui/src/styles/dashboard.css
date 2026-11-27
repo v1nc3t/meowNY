@@ -33,7 +33,8 @@
 /* Headline numbers: four across, two across when the widget is narrow. A widget measures its own width (`.dash-widget-body`). */
 .dash-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* as many columns as figures, each an equal share of the width */
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
   gap: var(--space-4) var(--space-5);
 }
 
@@ -423,7 +424,7 @@
 
 .dash .dash-bars li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto minmax(5.5rem, 8rem);
+  grid-template-columns: minmax(0, 1fr) auto auto minmax(6rem, 1.5fr);
   align-items: center;
   gap: 0 0.75rem;
   padding: 0.25rem 0.5rem;
@@ -433,8 +434,8 @@
 @supports (grid-template-columns: subgrid) {
   .dash-bars {
     display: grid;
-    grid-template-columns: minmax(5rem, 1fr) max-content max-content minmax(5.5rem, 8rem);
-    column-gap: 0.75rem;
+    grid-template-columns: minmax(8rem, 1fr) max-content max-content minmax(6rem, 1.5fr);
+    column-gap: var(--space-4);
   }
 
   .dash .dash-bars li {
@@ -481,11 +482,11 @@
 
 @container (max-width: 24rem) {
   .dash .dash-bars li {
-    grid-template-columns: minmax(0, 1fr) auto minmax(5.5rem, 8rem);
+    grid-template-columns: minmax(0, 1fr) auto minmax(5rem, 1fr);
   }
 
   .dash-bars {
-    grid-template-columns: minmax(5rem, 1fr) max-content minmax(5.5rem, 8rem);
+    grid-template-columns: minmax(5rem, 1fr) max-content minmax(5rem, 1fr);
   }
 
   .dash-bars .dash-bar-budget {
