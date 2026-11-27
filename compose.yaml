@@ -1,0 +1,35 @@
+# meowNY, self-hosted (docs/self-host.md): `docker compose up -d`, then open http://127.0.0.1:8080 and set it up.
+#
+# It listens on this machine only. To reach it from elsewhere, put it behind a reverse proxy with HTTPS (the guide has an example)
+# rather than publishing the port: the passphrase is the only lock, and it should not cross a network in plain text.
+
+services:
+  meowny:
+    build: .
+    image: meowny:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # the encrypted data, its secret and the documents
+      - meowny-data:/data
+      # scheduled backups; better on another disk than the data
+      - meowny-backups:/backups
+    environment:
+      MEOWNY_BACKUP_DIR: /backups
+      # behind an HTTPS proxy that sets X-Forwarded-Proto the cookie is Secure on its own; "true" makes it always so
+      MEOWNY_COOKIE_SECURE: auto
+      # the largest file that can be uploaded (a backup to restore), in megabytes
+      MEOWNY_MAX_UPLOAD_MB: 1024
+    # the program writes to /data, /backups and /tmp only
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  meowny-data:
+  meowny-backups:

@@ -1,6 +1,7 @@
 import { listen } from '@tauri-apps/api/event'
 import { z } from 'zod'
 import { ApiError, call } from './invoke'
+import { isServed } from './served'
 
 const id = z.string().regex(/^[1-9]\d*$/)
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -202,7 +203,9 @@ export const documents = {
   image: (id: string) => call('read_document_image', ImageData, { id }),
   preview: (id: string) => call('read_document_preview', PreviewData, { id }),
   /** Opens the file in the system's own viewer, from a plain copy that is removed when the app locks or closes. */
-  open: (id: string) => call('open_document', z.null(), { id }).then(() => undefined),
+  /** In the system's viewer. A served page has no system to hand it to, so the browser downloads a copy instead. */
+  open: (id: string) =>
+    isServed() ? call('save_document_copy', z.boolean(), { id }).then(() => undefined) : call('open_document', z.null(), { id }).then(() => undefined),
   /** Saves a copy where the person chooses. False if they cancel. The copy is not encrypted. */
   saveCopy: (id: string) => call('save_document_copy', z.boolean(), { id }),
   add: (file: Blob, input: NewDoc, onProgress?: (sent: number, total: number) => void) => upload(file, input, transport, onProgress),
@@ -214,7 +217,8 @@ export const documents = {
   /** Told when something is held over the window (true) and when it is let go or dropped (false). */
   onDrag: (handler: (over: boolean) => void) => listen<boolean>('documents-drag', (event) => handler(event.payload === true)),
   /** Told when files were dropped on the window and the app is holding them, waiting to be asked to add them. */
-  onDropped: (handler: () => void) => listen('documents-dropped', () => handler()),
+  /** Files dropped on the desktop app's window. A served page has no window of its own to drop on. */
+  onDropped: (handler: () => void) => (isServed() ? Promise.resolve(() => undefined) : listen('documents-dropped', () => handler())),
 }
 
 /** Whether the app opens this kind of file in the system's viewer. A file of an unknown kind can only be saved as a copy. */

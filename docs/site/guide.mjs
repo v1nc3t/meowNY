@@ -62,6 +62,16 @@ const SECTIONS = [
           'Open **meowNY**, then pair it with your computer ([your phone](#phone)).',
         ],
       },
+      { t: 'p', text: '**Your own server** (Docker), to use meowNY in a browser' },
+      {
+        t: 'ol',
+        items: [
+          `Get the source: \`git clone ${REPO}.git\` and \`cd meowNY\`.`,
+          'Start it: `docker compose up -d`.',
+          'Open `http://127.0.0.1:8080` and set it up. The passphrase is required: it signs you in from any browser.',
+        ],
+      },
+      { t: 'p', text: `To reach it from other devices, put it behind HTTPS. What a server leaves out (the phone sync, the command line, notifications): [self-hosting](${doc('self-host.md')}).` },
       { t: 'note', kind: 'warn', text: `**iPhone and Mac: not available yet.** The App Store and Google Play need paid developer accounts. [Support meowNY on Ko-fi](${SPONSOR}) to help.` },
       { t: 'p', text: 'Check a download with `sha256sum -c SHA256SUMS --ignore-missing`. To build meowNY yourself: [develop](develop.html).' },
       { t: 'h3', id: 'updates', text: 'Update' },
@@ -153,7 +163,8 @@ const SECTIONS = [
         items: [
           'The default shows the month **summary**, the **trend**, **savings rate**, **net worth**, **spending by category**, **upcoming**, **accounts**, **budgets**, **cash flow**, **loans**, your main **account**, **stashes**, **debts**, **recent transactions** and **top expenses**.',
           'Click a title to open its page.',
-          'On an empty dashboard, **first steps**: add a transaction, set a budget, add a friend, pair your phone.',
+          'After you create your data, **getting started** sits at the top: a step for each part of the app (accounts, categories, a transaction, a budget, a recurring bill, a stash, a friend, a receipt, backups and your phone), each a link to its page. A step ticks itself off once you have done it, and a bar shows how far along you are.',
+          'Hide it with **×**. Bring it back with **⋯** › **show getting started**.',
         ],
       },
       { t: 'h3', id: 'dashboard-customize', text: 'Customize the dashboard' },

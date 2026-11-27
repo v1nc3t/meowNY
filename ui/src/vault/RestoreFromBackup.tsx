@@ -4,7 +4,8 @@ import { useNotice } from '../hooks/useNotice'
 import { messageFor } from '../api/invoke'
 import { errorText, vault } from './api'
 import PasswordField from './PasswordField'
-import { passphraseProblem } from './rules'
+import { appPassphraseProblem } from './rules'
+import { isServed } from '../api/served'
 import { UpdateLink } from '../components/AppFooter'
 import { Button } from '../components/ui/button'
 import { Logo } from '../components/ui/Pixel'
@@ -19,7 +20,7 @@ export default function RestoreFromBackup({ onKey, onBack }: { onKey: (recoveryK
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const passphrase = String(form.get('passphrase'))
-    const problem = passphraseProblem(passphrase, String(form.get('confirm')))
+    const problem = appPassphraseProblem(passphrase, String(form.get('confirm')))
     if (problem) return setMessage(problem)
     setBusy(true)
     try {
@@ -40,7 +41,7 @@ export default function RestoreFromBackup({ onKey, onBack }: { onKey: (recoveryK
         </p>
         <h1>{t('welcome.restore')}</h1>
         <PasswordField label={t('settings.backupPassphrase')} name="backup_passphrase" current autoFocus />
-        <PasswordField label={t('welcome.passphrase')} name="passphrase" />
+        <PasswordField label={t(isServed() ? 'phone.passphrase' : 'welcome.passphrase')} name="passphrase" />
         <PasswordField label={t('welcome.passphraseRepeat')} name="confirm" />
         <Button type="submit" disabled={busy}>
           {t('welcome.restoreSubmit')}

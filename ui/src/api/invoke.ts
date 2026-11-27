@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { ZodType } from 'zod'
 import { t } from '../i18n/translate'
+import { isServed, servedCall } from './served'
 
 // The one place the UI talks to the Rust side. Every command goes through `call`:
 // arguments go out as given, the answer is checked against a schema before the UI sees it,
@@ -44,9 +45,15 @@ export function toErrorCode(raw: unknown): ErrorCode {
   return typeof raw === 'string' && ERROR_CODES.includes(raw as ErrorCode) ? (raw as ErrorCode) : 'internal'
 }
 
-/** True inside the desktop app. In a plain browser (UI dev against the old server) there is no backend. */
+/** True inside the desktop (or phone) app, in its window. */
 export function inDesktopApp(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+}
+
+/** True when there is an app to talk to: the desktop app's window, or a page served by `meowny-server`. A page in a plain browser
+ * during UI development has none. */
+export function hasBackend(): boolean {
+  return inDesktopApp() || isServed()
 }
 
 export function errorText(error: unknown): string {
@@ -56,7 +63,7 @@ export function errorText(error: unknown): string {
 export async function call<T>(command: string, schema: ZodType<T>, args?: Record<string, unknown>): Promise<T> {
   let raw: unknown
   try {
-    raw = await invoke(command, args)
+    raw = isServed() ? await servedCall(command, args) : await invoke(command, args)
   } catch (error) {
     throw new ApiError(toErrorCode(error))
   }

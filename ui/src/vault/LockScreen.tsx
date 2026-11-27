@@ -6,7 +6,8 @@ import Decrypting, { DecryptingPage } from './Decrypting'
 import { atLeast, closeKeyboard, useDecryptingGate, useRefocus } from './unlockFlow'
 import PasswordField from './PasswordField'
 import { ErasedScreen, ForgotPhone } from './PhoneScreens'
-import { passphraseProblem } from './rules'
+import { appPassphraseProblem } from './rules'
+import { isServed } from '../api/served'
 import { useNotice } from '../hooks/useNotice'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
@@ -17,9 +18,11 @@ import { Logo } from '../components/ui/Pixel'
 export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const t = useT()
   const phone = useProfile() === 'phone'
+  // A phone and a server always ask: neither has a keychain that could open the data without a passphrase.
+  const alwaysAsks = phone || isServed()
   const [attempts, setAttempts] = useState<Attempts | null>(null)
   const [erased, setErased] = useState(false)
-  const [needsPassphrase, setNeedsPassphrase] = useState(phone)
+  const [needsPassphrase, setNeedsPassphrase] = useState(alwaysAsks)
   const [keyMissing, setKeyMissing] = useState(false)
   const [recovering, setRecovering] = useState(false)
   const [message, setMessage] = useNotice()
@@ -27,17 +30,18 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   // The data is open; the decrypting line may run to its end.
   const [workDone, setWorkDone] = useState(false)
   // The silent first try (desktop, keychain only) is a loading state of its own; `opened` waits for the loading screen to finish.
-  const [trying, setTrying] = useState(!phone)
+  const [trying, setTrying] = useState(!alwaysAsks)
   const [opened, setOpened] = useState(false)
   const loading = useDecryptingGate(trying)
   const formRef = useRefocus(busy)
 
-  // Try without a passphrase first: a keychain-only vault opens straight away. A phone always asks.
+  // Try without a passphrase first: a keychain-only vault opens straight away. A phone and a server always ask.
   useEffect(() => {
     if (phone) {
       syncApi.attempts().then(setAttempts, () => undefined)
       return
     }
+    if (alwaysAsks) return
     let cancelled = false
     vault.unlock('').then(
       () => {
@@ -56,7 +60,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     return () => {
       cancelled = true
     }
-  }, [phone, setMessage])
+  }, [phone, alwaysAsks, setMessage])
 
   // Go on into the app once the data is open and the loading screen (if it came up) has had its time.
   useEffect(() => {
@@ -84,7 +88,7 @@ export default function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const passphrase = String(form.get('passphrase'))
-    const problem = passphraseProblem(passphrase, String(form.get('confirm')))
+    const problem = appPassphraseProblem(passphrase, String(form.get('confirm')))
     if (problem) return setMessage(problem)
     closeKeyboard()
     setWorkDone(false)

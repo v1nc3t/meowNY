@@ -3,7 +3,7 @@ import { categories as categoriesApi, type Category } from '../api/categories'
 import { dataExport, EXPORT_SECTIONS, report, type ExportSection, type Preview, type ReportOptions, type TextPreview } from '../api/dataExport'
 import { displayFormat } from '../api/displayFormat'
 import { debtsLabels } from '../api/debtsLabels'
-import { ApiError, errorText, inDesktopApp } from '../api/invoke'
+import { ApiError, errorText, hasBackend } from '../api/invoke'
 import { periodLabel, reportLabels } from '../api/reportLabels'
 import { useToday, type Today } from '../api/today'
 import HelpButton from '../components/HelpButton'
@@ -67,11 +67,11 @@ export default function ExportPage() {
   const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
-    if (!inDesktopApp()) return
+    if (!hasBackend()) return
     categoriesApi.list().then(setCategories, (e) => setLoadError(errorText(e)))
   }, [])
 
-  if (!inDesktopApp()) return <p>{t('settings.unavailable')}</p>
+  if (!hasBackend()) return <p>{t('settings.unavailable')}</p>
   if (!today || !settings || !categories) {
     return loadError ? <p className="notice">{loadError}</p> : null
   }

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { inDesktopApp } from '../api/invoke'
+import { hasBackend } from '../api/invoke'
 import { syncApi, type Profile } from '../api/sync'
 import { showShortcutHints } from '../keys/tip'
 import { ProfileContext } from './profile'
@@ -10,10 +10,10 @@ import { ProfileContext } from './profile'
  * (UI development) there is no app to ask, and it is the desktop.
  */
 export function ProfileProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<Profile | null>(inDesktopApp() ? null : 'desktop')
+  const [profile, setProfile] = useState<Profile | null>(hasBackend() ? null : 'desktop')
 
   useEffect(() => {
-    if (!inDesktopApp()) return
+    if (!hasBackend()) return
     syncApi.profile().then(setProfile, () => setProfile('desktop'))
   }, [])
 

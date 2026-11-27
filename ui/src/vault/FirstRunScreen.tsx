@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { currencyOptions } from '../api/currencies'
 import { cleanCategoryName } from '../api/categories'
+import { startGuide } from '../lib/gettingStarted'
 import { saveSenderName } from '../lib/senderName'
 import { formatExamples, localeOptions, zoneOptions } from '../api/locales'
 import Facts from '../components/Facts'
@@ -15,7 +16,8 @@ import { atLeast, closeKeyboard, useRefocus } from './unlockFlow'
 import PasswordField from './PasswordField'
 import RecoveryKeyPanel from './RecoveryKeyPanel'
 import RestoreFromBackup from './RestoreFromBackup'
-import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } from './rules'
+import { appPassphraseProblem, defaultSettings, isCurrency, normalizeCurrency } from './rules'
+import { isServed } from '../api/served'
 import { Button } from '../components/ui/button'
 import { Illustration, Logo, type PictureName } from '../components/ui/Pixel'
 
@@ -82,7 +84,7 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
     const problems: [Step, string][] = [
       [1, name ? '' : t('welcome.nameError')],
       [2, isCurrency(currency) ? '' : t('welcome.currencyError')],
-      [3, passphraseProblem(passphrase, String(form.get('confirm')))],
+      [3, appPassphraseProblem(passphrase, String(form.get('confirm')))],
     ]
     const wrong = problems.find(([at, problem]) => at <= step && problem)
     if (wrong || !name) {
@@ -105,6 +107,8 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
         ),
       )
       saveSenderName(name)
+      // the dashboard opens with the steps that show the rest of the app
+      startGuide(null)
     } catch (error) {
       setMessage(errorText(error))
       setBusy(false)
@@ -214,8 +218,8 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
 
         <section {...stepProps(3)}>
           <h1 id="onboard-title-3">{t('welcome.stepLock')}</h1>
-          <p className="hint">{t('welcome.lockHint')}</p>
-          <PasswordField label={t('welcome.passphrase')} name="passphrase" />
+          <p className="hint">{t(isServed() ? 'served.lockHint' : 'welcome.lockHint')}</p>
+          <PasswordField label={t(isServed() ? 'phone.passphrase' : 'welcome.passphrase')} name="passphrase" />
           <PasswordField label={t('welcome.passphraseRepeat')} name="confirm" />
           <p className="warning" role="note">
             {t('welcome.warning')}

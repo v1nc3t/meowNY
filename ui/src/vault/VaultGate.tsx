@@ -4,7 +4,7 @@ import { useDecryptingGate } from './unlockFlow'
 import FirstRunScreen from './FirstRunScreen'
 import LockScreen from './LockScreen'
 import { PhoneFirstRun } from './PhoneScreens'
-import { inDesktopApp, vault, type VaultStatus } from './api'
+import { hasBackend, vault, type VaultStatus } from './api'
 import { locksAfterBackground } from '../api/sync'
 import { useProfile } from '../hooks/profile'
 import { useI18n } from '../i18n/context'
@@ -17,7 +17,7 @@ const ACTIVITY_PING_MS = 15_000
  * development) there is no vault and the children show directly.
  */
 export default function VaultGate({ children }: { children: ReactNode }) {
-  const desktop = inDesktopApp()
+  const desktop = hasBackend()
   const phone = useProfile() === 'phone'
   const { setLanguage } = useI18n()
   const [status, setStatus] = useState<VaultStatus | 'loading'>(desktop ? 'loading' : 'unlocked')

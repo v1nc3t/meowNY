@@ -1,24 +1,22 @@
-import { useEffect, useState, type KeyboardEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, type KeyboardEvent } from 'react'
 import { shiftMonth } from '../api/months'
 import { useToday, type Today } from '../api/today'
-import { transactions } from '../api/transactions'
 import ConfirmModal from '../components/ConfirmModal'
 import CatalogDialog from '../components/dashboard/CatalogDialog'
 import DashboardGrid from '../components/dashboard/DashboardGrid'
 import EditBar from '../components/dashboard/EditBar'
+import GettingStarted from '../components/dashboard/GettingStarted'
 import SettingsDialog from '../components/dashboard/SettingsDialog'
 import PageHeader from '../components/PageHeader'
-import { Illustration, type PictureName } from '../components/ui/Pixel'
 import YearNav from '../components/YearNav'
 import { newWidgetId, useDashboardLayout } from '../hooks/useDashboardLayout'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useProfile } from '../hooks/profile'
-import { useI18n, useT } from '../i18n/context'
-import type { MessageKey } from '../i18n/en'
+import { useI18n } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
 import { addWidget, setWidgetSettings } from '../lib/dashboardLayout'
 import { SPECS } from '../lib/dashboardWidgets'
+import { loadGuide, saveGuide } from '../lib/gettingStarted'
 import { useSticky } from '../lib/sticky'
 
 export default function DashboardPage() {
@@ -42,21 +40,14 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
   const [catalog, setCatalog] = useState(false)
   const [asking, setAsking] = useState(false)
   const [settingsOf, setSettingsOf] = useState<string | null>(null)
-  // Whether nothing at all has been recorded yet (no transaction in any month): then the first steps show. Unknown at first.
-  const [fresh, setFresh] = useState<boolean | null>(null)
+  // "Getting started" opens after the data is created and stays until it is hidden; the "more" menu brings it back.
+  const [guide, setGuide] = useState(loadGuide)
 
-  useEffect(() => {
-    let cancelled = false
-    void transactions.list({ limit: 1 }).then(
-      (page) => {
-        if (!cancelled) setFresh(page.total === 0)
-      },
-      () => undefined,
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  function showGuide(open: boolean) {
+    const state = open ? 'open' : 'hidden'
+    saveGuide(state)
+    setGuide(state)
+  }
 
   // Keyboard: [ and ] step through months, t jumps to this month.
   useShortcut('prev', () => setMonth((current) => shiftMonth(current, -1)))
@@ -79,13 +70,14 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
         more={[
           { label: t('dashboard.customize'), icon: 'pencil', onSelect: () => setEditing(true) },
           { label: t('dashboard.resetLayout'), icon: 'recurring', onSelect: () => setAsking(true) },
+          ...(guide === 'open' ? [] : [{ label: t('guide.show'), icon: 'help', onSelect: () => showGuide(true) }]),
         ]}
       >
         <YearNav month={month} thisMonth={now.month} onChange={setMonth} />
       </PageHeader>
       <div className="tx-pane wide dash">
         {editing ? <EditBar onAdd={() => setCatalog(true)} onReset={() => setAsking(true)} onDone={() => setEditing(false)} /> : null}
-        {fresh ? <FirstSteps /> : null}
+        {guide === 'open' && !editing ? <GettingStarted onHide={() => showGuide(false)} /> : null}
         <DashboardGrid
           layout={layout}
           profile={profile}
@@ -127,43 +119,6 @@ function DashboardView({ settings, now }: { settings: MoneySettings; now: Today 
           }}
         />
       ) : null}
-    </section>
-  )
-}
-
-type FirstStep = { picture: PictureName; title: MessageKey; to: string; state?: object; desktopOnly?: boolean }
-
-/**
- * The ways to start, each a picture and a link to the page that does it. The transaction form (and on a phone the friend form) opens
- * at once.
- */
-const FIRST_STEPS: FirstStep[] = [
-  { picture: 'spend', title: 'dashboard.firstAdd', to: '/app/transactions', state: { add: true } },
-  { picture: 'budget', title: 'dashboard.firstBudget', to: '/app/categories' },
-  { picture: 'share', title: 'dashboard.firstFriend', to: '/app/debts', state: { addFriend: true } },
-  { picture: 'sync', title: 'dashboard.firstPhone', to: '/app/settings?section=phone', desktopOnly: true },
-]
-
-/** For someone who has recorded nothing yet: what to do first. It goes once there is a transaction. */
-function FirstSteps() {
-  const t = useT()
-  const phone = useProfile() === 'phone'
-  return (
-    <section className="first-steps" aria-labelledby="first-steps-title">
-      <h2 id="first-steps-title">{t('dashboard.firstTitle')}</h2>
-      <p className="hint">{t('dashboard.firstText')}</p>
-      <ul className="first-steps-list">
-        {FIRST_STEPS.filter((step) => !(phone && step.desktopOnly)).map((step) => (
-          <li key={step.picture}>
-            <Link className="first-step" to={step.to} state={step.state}>
-              <Illustration name={step.picture} scale={3} />
-              <span className="first-step-text">
-                <b>{t(step.title)}</b>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
     </section>
   )
 }

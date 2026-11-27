@@ -12,11 +12,14 @@ const { version } = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.jso
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
-  define: { __APP_VERSION__: JSON.stringify(version) },
+  // MEOWNY_SERVED=1 builds the page for `meowny-server` (docs/self-host.md), which talks to it over HTTP instead of through the window.
+  define: { __APP_VERSION__: JSON.stringify(version), __MEOWNY_SERVED__: JSON.stringify(process.env.MEOWNY_SERVED === '1') },
   // The desktop app loads this dev server, so the port and host must match src-tauri/tauri.conf.json.
   server: {
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
+    // `MEOWNY_SERVED=1 npm run dev` works on the page against a `meowny-server` running on this port.
+    proxy: { '/api': 'http://127.0.0.1:8080' },
   },
 })

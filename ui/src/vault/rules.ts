@@ -1,6 +1,7 @@
 import type { MessageKey } from '../i18n/en'
 import { pickLanguage } from '../i18n/languages'
 import { t } from '../i18n/translate'
+import { isServed } from '../api/served'
 
 // Input rules shared by the first-run screen and settings. The Rust side enforces the same
 // rules again; these exist to give an answer before a round trip.
@@ -51,6 +52,17 @@ export function passphraseProblem(passphrase: string, confirm: string): string {
 export function phonePassphraseProblem(passphrase: string, confirm: string): string {
   if (passphrase === '') return t('phone.passphraseRequired')
   return passphraseProblem(passphrase, confirm)
+}
+
+/** Like `passphraseProblem`, but `meowny-server` always needs a passphrase: it is the login, and the server has no keychain. */
+export function servedPassphraseProblem(passphrase: string, confirm: string): string {
+  if (passphrase === '') return t('served.passphraseRequired')
+  return passphraseProblem(passphrase, confirm)
+}
+
+/** The passphrase rule of this app: required when served, optional on the desktop. */
+export function appPassphraseProblem(passphrase: string, confirm: string): string {
+  return isServed() ? servedPassphraseProblem(passphrase, confirm) : passphraseProblem(passphrase, confirm)
 }
 
 /** Like `passphraseProblem`, but a backup always needs a passphrase. */

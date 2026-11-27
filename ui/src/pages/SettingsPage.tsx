@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
+import { errorText, hasBackend, vault, type LockPrefs } from '../vault/api'
+import { isServed } from '../api/served'
 import { useI18n } from '../i18n/context'
 import PageHeader from '../components/PageHeader'
 import AppFooter from '../components/AppFooter'
@@ -37,6 +38,10 @@ type SectionId = (typeof SECTIONS)[number]['id']
 /** What a phone has: the rest (pairing, command line, recovery key, backups, deleting) lives on the desktop. */
 const ON_PHONE: readonly SectionId[] = ['region', 'appearance', 'lock', 'notifications', 'friend']
 
+/** What a page served by `meowny-server` leaves out: it cannot find a phone on the home network, its command line API would listen
+ * inside the server, and it has no desktop notifications. */
+const NOT_SERVED: readonly SectionId[] = ['notifications', 'phone', 'cli']
+
 export default function SettingsPage() {
   const { t } = useI18n()
   const phone = useProfile() === 'phone'
@@ -51,13 +56,13 @@ export default function SettingsPage() {
   const paneRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!inDesktopApp()) return
+    if (!hasBackend()) return
     vault.settings().then(setSettings, (e) => say(errorText(e), 'error'))
     vault.lockPrefs().then(setPrefs, (e) => say(errorText(e), 'error'))
     vault.notifyDue().then(setNotifyDue, (e) => say(errorText(e), 'error'))
   }, [say])
 
-  const sections = SECTIONS.filter((section) => !phone || ON_PHONE.includes(section.id))
+  const sections = SECTIONS.filter((section) => (!phone || ON_PHONE.includes(section.id)) && !(isServed() && NOT_SERVED.includes(section.id)))
   const asked = sections.find((section) => section.id === params.get('section'))
   // The desktop always shows a section (the first, unless one is asked for); the phone shows the list until one is chosen.
   const current = asked ?? (phone ? undefined : sections[0])
@@ -68,7 +73,7 @@ export default function SettingsPage() {
     paneRef.current?.scrollTo({ top: 0 })
   }, [currentId])
 
-  if (!inDesktopApp()) return <p>{t('settings.unavailable')}</p>
+  if (!hasBackend()) return <p>{t('settings.unavailable')}</p>
 
   async function onNotify(on: boolean) {
     try {

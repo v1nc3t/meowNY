@@ -25,7 +25,7 @@ const RUST_RULES = [
   ['url-literal', /https?:\/\/[a-z0-9]/i],
   ['network-crate', /\b(reqwest|ureq|hyper|isahc|surf|attohttpc|tokio_tungstenite|tungstenite)\b/],
   ['std-net', /\b(TcpStream|UdpSocket)\b/],
-  ['listener', /\bTcpListener\b/],
+  ['listener', /\b(TcpListener|tiny_http)\b/],
 ]
 const NETWORK_CRATES = /^(reqwest|ureq|hyper|curl|isahc|surf|attohttpc|tauri-plugin-http|tauri-plugin-updater|tauri-plugin-websocket)\b/
 
@@ -60,6 +60,7 @@ scan(
 )
 scan(walk(join(root, 'src-tauri', 'src'), (n) => n.endsWith('.rs')), RUST_RULES)
 scan(walk(join(root, 'cli', 'src'), (n) => n.endsWith('.rs')), RUST_RULES)
+scan(walk(join(root, 'selfhost', 'src'), (n) => n.endsWith('.rs')), RUST_RULES)
 
 // Dependencies that bring their own network stack.
 for (const manifest of ['src-tauri/Cargo.toml', 'cli/Cargo.toml']) {

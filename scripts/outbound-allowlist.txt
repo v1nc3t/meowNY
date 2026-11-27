@@ -37,3 +37,10 @@ url-literal src-tauri/src/sync/service.rs  # a test: a web address is not a meow
 # Links in the footer of the settings and the lock screens (source code, licence, releases, discussions, sponsor). The person
 # opens them in their own browser by clicking; the app makes no request to them.
 url-literal ui/src/components/AppFooter.tsx  # links the person opens in their browser from the footer; the app makes no request
+
+# The self-hosted server (`meowny-server`, docs/self-host.md): the same app, served to a browser by the person who hosts it. It only
+# listens, on the address they choose, and its page talks to that one server and nothing else (the CSP allows connect-src 'self').
+# Nothing here connects out.
+listener selfhost/src/main.rs  # the server's listener, on the address in MEOWNY_LISTEN
+listener selfhost/src/files.rs  # answers those requests with the page's files and the downloads
+fetch ui/src/api/served.ts  # the served page's commands, uploads and downloads, to its own server only (same origin)
