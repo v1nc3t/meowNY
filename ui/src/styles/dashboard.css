@@ -138,8 +138,7 @@
   width: 100%;
 }
 
-/* A thin flat track, with no frame. The fill is cut into blocks of 0.375rem with a gap of 0.125rem (the pixel hint), and grows in steps when it
-   changes. */
+/* A thin flat track, with no frame, and a smooth fill that grows smoothly when it changes. */
 .bar {
   flex: 1;
   display: block;
@@ -154,8 +153,8 @@
   display: block;
   height: 100%;
   border-radius: var(--radius-sm);
-  background: repeating-linear-gradient(90deg, var(--fill) 0 0.375rem, transparent 0.375rem 0.5rem);
-  transition: width var(--t-med, 180ms) steps(6, end);
+  background: var(--fill);
+  transition: width var(--t-med, 180ms) ease-out;
 }
 
 .bar-near {

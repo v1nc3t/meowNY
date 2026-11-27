@@ -21,7 +21,7 @@
   display: block;
   height: 100%;
   background: var(--fill);
-  transition: width var(--t-med, 180ms) steps(6, end);
+  transition: width var(--t-med, 180ms) ease-out;
 }
 
 .stash-bar.is-reached {
@@ -527,14 +527,14 @@ ul.card-list.stash-history > li.card-item {
   flex: none;
   height: 100%;
   background: var(--c-savings);
-  transition: width var(--t-fast) steps(4, end);
+  transition: width var(--t-fast) ease-out;
 }
 
 .stash-stripe {
   flex: none;
   height: 100%;
   background: repeating-linear-gradient(135deg, var(--success) 0 0.1875rem, transparent 0.1875rem 0.375rem);
-  transition: width var(--t-fast) steps(4, end);
+  transition: width var(--t-fast) ease-out;
 }
 
 .stash-track.is-take .stash-stripe,
