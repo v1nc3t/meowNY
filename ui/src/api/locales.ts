@@ -66,15 +66,14 @@ export function localeLabel(tag: string, language = activeLanguage()): string {
   }
 }
 
-/** A sample of how numbers and dates will look, so the choice is visible before saving. */
-export function formatExample(locale: string, currency: string, date = new Date(Date.UTC(2026, 9, 13))): string {
+/** A sample of how an amount and a date will look, so the choice is visible before saving: two values, for two cells. */
+export function formatExamples(locale: string, currency: string, date = new Date(Date.UTC(2026, 9, 13))): { amount: string; date: string } {
   try {
-    const money = new Intl.NumberFormat(locale, { style: 'currency', currency }).format(1234.56)
+    const amount = new Intl.NumberFormat(locale, { style: 'currency', currency }).format(1234.56)
     const day = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).format(date)
-    // Non-breaking spaces, so the spacing around the bar survives HTML whitespace collapsing.
-    return `${money}\u00a0\u00a0|\u00a0\u00a0${day}`
+    return { amount, date: day }
   } catch {
-    return ''
+    return { amount: '', date: '' }
   }
 }
 

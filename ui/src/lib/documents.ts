@@ -24,17 +24,17 @@ export function fileState(doc: Pick<Doc, 'hasFile' | 'keepOnPhone'>, phone: bool
   return doc.keepOnPhone ? 'waiting' : 'onComputer'
 }
 
-/** The words for a state, or null when there is nothing to say. */
+/** The few words for a state (the value of a fact: "not on this device"), or null when there is nothing to say. */
 export function fileStateText(state: FileState): MessageKey | null {
   switch (state) {
     case 'here':
       return null
     case 'missing':
-      return 'docs.fileMissing'
+      return 'docs.stateMissing'
     case 'onComputer':
-      return 'docs.fileOnComputer'
+      return 'docs.stateOnComputer'
     case 'waiting':
-      return 'docs.fileWaiting'
+      return 'docs.stateWaiting'
   }
 }
 
@@ -91,11 +91,14 @@ export function canKeepToPreview(doc: Pick<Doc, 'hasFile' | 'keepOnPhone' | 'nam
   return fileState(doc, phone) === 'onComputer' && canPreview({ ...doc, hasFile: true })
 }
 
-/** The lines the page shows under its title about the files, each a text key and a number. Nothing for zero. */
-export function reportLines(report: Report, phone: boolean): { key: MessageKey; count: number }[] {
-  const lines: { key: MessageKey; count: number }[] = []
-  if (report.missing > 0) lines.push({ key: phone ? 'docs.waiting' : 'docs.missing', count: report.missing })
-  if (report.damaged > 0) lines.push({ key: 'docs.damaged', count: report.damaged })
+/**
+ * What is wrong with the files, each a sentence (`key`, behind the help button of the page) and a few words for a mark in its header (`short`), with a
+ * number. Nothing for zero.
+ */
+export function reportLines(report: Report, phone: boolean): { key: MessageKey; short: MessageKey; count: number }[] {
+  const lines: { key: MessageKey; short: MessageKey; count: number }[] = []
+  if (report.missing > 0) lines.push({ key: phone ? 'docs.waiting' : 'docs.missing', short: phone ? 'docs.waitingShort' : 'docs.missingShort', count: report.missing })
+  if (report.damaged > 0) lines.push({ key: 'docs.damaged', short: 'docs.damagedShort', count: report.damaged })
   return lines
 }
 

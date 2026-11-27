@@ -15,13 +15,14 @@ use crate::accounts::{self, AccountPatch, Kind, NewAccount, MAIN_ID, MAIN_SYNC_I
 use crate::categories::CategoryType;
 use crate::currency;
 use crate::debts::{ledger, people};
+use crate::rates::Period;
 use crate::recurring::{self, NewRecurring, Unit};
 use crate::transactions::{self, NewTransaction, TransactionPatch};
 
 // --- a world to work in ------------------------------------------------------------------------------------------------
 
 /// `sync_ok`, and on both devices the main account is as it must be and every reference holds.
-fn settle(a: &mut Connection, b: &mut Connection) -> Outcome {
+pub(super) fn settle(a: &mut Connection, b: &mut Connection) -> Outcome {
     let outcome = sync_ok(a, b);
     for conn in [&*a, &*b] {
         assert!(accounts::check(conn).unwrap(), "the main account is not as it must be");
@@ -33,23 +34,23 @@ fn settle(a: &mut Connection, b: &mut Connection) -> Outcome {
 }
 
 /// An account with nothing in it and an opening date of its own. Returns its local id.
-fn open(conn: &Connection, name: &str) -> i64 {
-    accounts::create(conn, &NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap().id
+pub(super) fn open(conn: &Connection, name: &str) -> i64 {
+    accounts::create(conn, &NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }, TODAY).unwrap().id
 }
 
 fn rename(conn: &Connection, id: i64, name: &str) {
     accounts::update(conn, id, &AccountPatch { name: Some(name.into()), ..Default::default() }, TODAY).unwrap();
 }
 
-fn account_id(conn: &Connection, name: &str) -> i64 {
+pub(super) fn account_id(conn: &Connection, name: &str) -> i64 {
     id_of(conn, "accounts", name)
 }
 
-fn transfer_named(conn: &Connection, note: &str) -> i64 {
+pub(super) fn transfer_named(conn: &Connection, note: &str) -> i64 {
     conn.query_row("SELECT id FROM transfers WHERE note = ?1", [note], |r| r.get(0)).unwrap()
 }
 
-fn account_sync_id(conn: &Connection, name: &str) -> String {
+pub(super) fn account_sync_id(conn: &Connection, name: &str) -> String {
     text(conn, &format!("SELECT sync_id FROM accounts WHERE name = '{name}'"))
 }
 
@@ -120,7 +121,7 @@ fn stamp_and_updated_at(conn: &Connection, table: &str, column: &str, value: &st
     conn.query_row(&format!("SELECT stamp, updated_at FROM {table} WHERE {column} = ?1"), [value], |r| Ok((r.get(0)?, r.get(1)?))).unwrap()
 }
 
-fn marker_of(conn: &Connection, sync_id: &str) -> Option<String> {
+pub(super) fn marker_of(conn: &Connection, sync_id: &str) -> Option<String> {
     conn.query_row("SELECT stamp FROM sync_deleted WHERE sync_id = ?1", [sync_id], |r| r.get(0)).ok()
 }
 
@@ -130,11 +131,11 @@ fn accounts_shown(conn: &Connection) -> Vec<(String, String, String, bool)> {
 }
 
 /// The version of Stamp's order the sync works by.
-fn later_of(a: &str, b: &str) -> String {
+pub(super) fn later_of(a: &str, b: &str) -> String {
     std::cmp::max(Stamp::parse(a).unwrap(), Stamp::parse(b).unwrap()).format()
 }
 
-fn after(stamp: &str) -> String {
+pub(super) fn after(stamp: &str) -> String {
     engine::after(&Stamp::parse(stamp).unwrap()).format()
 }
 
@@ -149,12 +150,12 @@ fn a_device_with_accounts_transfers_and_rows_in_several_accounts_gives_a_new_pho
     rename(&desktop, MAIN_ID, "Current");
     let savings = accounts::create(
         &desktop,
-        &NewAccount { name: "Savings".into(), kind: Kind::Savings, number: Some("IE29 AIBK 9311 5212 3456 78".into()), opening_balance: Some("1000.00".into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None },
+        &NewAccount { name: "Savings".into(), kind: Kind::Savings, number: Some("IE29 AIBK 9311 5212 3456 78".into()), opening_balance: Some("1000.00".into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None },
         TODAY,
     )
     .unwrap()
     .id;
-    let card = accounts::create(&desktop, &NewAccount { name: "Card".into(), kind: Kind::CreditCard, number: None, opening_balance: Some("-250.00".into()), opening_date: Some("2026-02-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap().id;
+    let card = accounts::create(&desktop, &NewAccount { name: "Card".into(), kind: Kind::CreditCard, number: None, opening_balance: Some("-250.00".into()), opening_date: Some("2026-02-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }, TODAY).unwrap().id;
     let old = open(&desktop, "Old");
     spend_in(&desktop, "On the card", card);
     spend_in(&desktop, "Long ago", old);
@@ -240,7 +241,7 @@ fn both_devices_renaming_the_main_account_differently_is_an_ordinary_conflict_wi
 }
 
 /// What a sync would put in front of the person at `desktop`: the conflicts since they met, and what differs in each.
-fn conflicts_between(desktop: &Connection, phone: &Connection, met: u64) -> (Vec<engine::Conflict>, Vec<engine::ConflictView>) {
+pub(super) fn conflicts_between(desktop: &Connection, phone: &Connection, met: u64) -> (Vec<engine::Conflict>, Vec<engine::ConflictView>) {
     let (mine, theirs) = (engine::digest(desktop).unwrap(), engine::digest(phone).unwrap());
     let (conflicts, more) = engine::conflicts(&mine, &theirs, &Table::ALL, Some(met));
     assert_eq!(more, 0);
@@ -254,11 +255,11 @@ fn conflicts_between(desktop: &Connection, phone: &Connection, met: u64) -> (Vec
     (conflicts, views)
 }
 
-fn fields(views: &[engine::ConflictView], table: Table) -> Vec<(String, String, String)> {
+pub(super) fn fields(views: &[engine::ConflictView], table: Table) -> Vec<(String, String, String)> {
     views.iter().find(|v| v.table == table).unwrap().fields.iter().map(|f| (f.field.to_string(), f.mine.clone(), f.theirs.clone())).collect()
 }
 
-fn texts(list: &[(&str, &str, &str)]) -> Vec<(String, String, String)> {
+pub(super) fn texts(list: &[(&str, &str, &str)]) -> Vec<(String, String, String)> {
     list.iter().map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string())).collect()
 }
 
@@ -424,6 +425,9 @@ fn a_main_account_row_that_is_archived_is_refused_even_when_it_gets_past_the_wir
         virtual_balance_minor: 0,
         currency: None,
         rate: None,
+        interest_rate: None,
+        interest_period: None,
+        installment: None,
         created_at: "1970-01-01T00:00:00.000Z".into(),
         updated_at: "1970-01-01T00:00:00.000Z".into(),
     };
@@ -452,13 +456,13 @@ fn rows_naming_an_account_the_phone_lacks() -> (Connection, Connection) {
     (desktop, phone)
 }
 
-fn only(mut incoming: Incoming, tables: &[Table]) -> Incoming {
+pub(super) fn only(mut incoming: Incoming, tables: &[Table]) -> Incoming {
     incoming.rows.retain(|table, _| tables.contains(table));
     incoming.markers.clear();
     incoming
 }
 
-fn refused_with_a_broken_reference(phone: &mut Connection, incoming: &Incoming, what: &str) {
+pub(super) fn refused_with_a_broken_reference(phone: &mut Connection, incoming: &Incoming, what: &str) {
     let before = snapshot(phone).unwrap();
     let result = engine::apply(phone, incoming, now(), None);
     assert!(matches!(result, Err(SyncError::Invalid("reference"))), "{what}: {result:?}");
@@ -819,7 +823,7 @@ fn two_devices_that_rename_different_accounts_to_one_name_keep_both_and_merge_no
 fn two_devices_that_make_an_account_of_one_name_keep_both_and_do_not_add_up_their_balances() {
     let (mut desktop, mut phone) = met_with_accounts();
     for (conn, opening) in [(&desktop, "100.00"), (&phone, "40.00")] {
-        accounts::create(conn, &NewAccount { name: "Rainy day".into(), kind: Kind::Savings, number: None, opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap();
+        accounts::create(conn, &NewAccount { name: "Rainy day".into(), kind: Kind::Savings, number: None, opening_balance: Some(opening.into()), opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }, TODAY).unwrap();
     }
     let outcome = settle(&mut desktop, &mut phone);
     assert_eq!((outcome.first.merged, outcome.second.merged, outcome.first.dropped, outcome.second.dropped), (0, 0, 0, 0));
@@ -832,7 +836,7 @@ fn two_devices_that_make_an_account_of_one_name_keep_both_and_do_not_add_up_thei
     // and a second round of the same changes keeps on being two
     pause();
     for conn in [&desktop, &phone] {
-        accounts::create(conn, &NewAccount { name: "Rainy day 2".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }, TODAY).unwrap();
+        accounts::create(conn, &NewAccount { name: "Rainy day 2".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }, TODAY).unwrap();
     }
     settle(&mut desktop, &mut phone);
     assert_eq!(count(&desktop, "SELECT count(*) FROM accounts WHERE name = 'Rainy day 2'"), 2);
@@ -1320,6 +1324,7 @@ fn an_account_made_with_every_detail_comes_to_a_new_phone_whole_even_at_the_boun
             include_in_net_worth: Some(false),
             virtual_balance: Some(virtual_balance.into()),
             currency: None, rate: None,
+            interest_rate: None, interest_period: None, installment: None,
         };
         let made = accounts::create(&desktop, &new, TODAY).unwrap();
         assert_eq!(made.notes.as_deref(), Some(notes.trim()));
@@ -1606,7 +1611,7 @@ fn what_the_screens_accept_as_a_detail_is_what_the_wire_accepts_and_the_other_wa
     for candidate in &candidates {
         for field in ["bic", "notes", "group"] {
             let device = device("EUR");
-            let mut new = NewAccount { name: "A".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None };
+            let mut new = NewAccount { name: "A".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None };
             match field {
                 "bic" => new.bic = Some(candidate.clone()),
                 "notes" => new.notes = Some(candidate.clone()),
@@ -1663,7 +1668,7 @@ fn a_device_that_speaks_protocol_9_is_told_to_update_whichever_of_the_two_it_is(
     let (a, b) = (device("EUR"), device("EUR"));
     let new = engine::hello(&a, "desktop", "0.1.0", now()).unwrap();
     let mut old = engine::hello(&b, "phone", "0.1.0", now()).unwrap();
-    assert_eq!(new.protocol, 11);
+    assert_eq!(new.protocol, 13);
     old.protocol = 9;
     assert!(matches!(engine::check_hello(&new, &old, now()), Err(SyncError::ProtocolMismatch)));
     assert!(matches!(engine::check_hello(&old, &new, now()), Err(SyncError::ProtocolMismatch)));
@@ -1728,6 +1733,7 @@ fn open_foreign(conn: &Connection, name: &str, code: &str, rate: &str, opening: 
             virtual_balance: None,
             currency: Some(code.into()),
             rate: Some(rate.into()),
+            interest_rate: None, interest_period: None, installment: None,
         },
         TODAY,
     )
@@ -2389,7 +2395,7 @@ fn what_the_screens_accept_as_a_currency_and_a_rate_is_what_the_wire_accepts_and
     };
     let make = |currency: &str, rate: Option<&str>| {
         let device = device("EUR");
-        let new = NewAccount { name: "A".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: Some(currency.into()), rate: rate.map(str::to_string) };
+        let new = NewAccount { name: "A".into(), kind: Kind::Cash, number: None, opening_balance: None, opening_date: Some("2026-01-01".into()), bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: Some(currency.into()), rate: rate.map(str::to_string), interest_rate: None, interest_period: None, installment: None };
         let made = accounts::create(&device, &new, TODAY);
         (device, made)
     };
@@ -2481,7 +2487,7 @@ fn a_device_that_speaks_protocol_10_is_told_to_update_whichever_of_the_two_it_is
     let (a, b) = (device("EUR"), device("EUR"));
     let new = engine::hello(&a, "desktop", "0.1.0", now()).unwrap();
     let mut old = engine::hello(&b, "phone", "0.1.0", now()).unwrap();
-    assert_eq!(new.protocol, 11);
+    assert_eq!(new.protocol, 13);
     old.protocol = 10;
     assert!(matches!(engine::check_hello(&new, &old, now()), Err(SyncError::ProtocolMismatch)));
     assert!(matches!(engine::check_hello(&old, &new, now()), Err(SyncError::ProtocolMismatch)));
@@ -2492,4 +2498,161 @@ fn a_device_that_speaks_protocol_10_is_told_to_update_whichever_of_the_two_it_is
         old_row.as_object_mut().unwrap().remove(key);
     }
     assert!(wire::parse_row(Table::Accounts, &old_row).is_ok());
+}
+
+// --- loans: the rate and the installment of an account (`docs/loans-deposits-design.md`, section 7) ----------------------------
+
+/// A debt of the kind `kind` with a rate and an installment; `owed` is typed as a person types it, positive, and stored below 0.
+fn debt_in(conn: &Connection, name: &str, kind: Kind, owed: &str, rate: &str, period: Period, installment: &str) -> i64 {
+    accounts::create(
+        conn,
+        &NewAccount {
+            name: name.into(),
+            kind,
+            number: None,
+            opening_balance: Some(format!("-{owed}")),
+            opening_date: Some("2026-01-01".into()),
+            bic: None,
+            notes: None,
+            group: None,
+            include_in_net_worth: None,
+            virtual_balance: None,
+            currency: None,
+            rate: None,
+            interest_rate: Some(rate.into()),
+            interest_period: Some(period),
+            installment: Some(installment.into()),
+        },
+        TODAY,
+    )
+    .unwrap()
+    .id
+}
+
+/// What a device holds of an account's terms, as the columns have them: kind, rate (milli), period, installment (minor).
+fn terms_of(conn: &Connection, name: &str) -> (String, Option<i64>, Option<String>, Option<i64>) {
+    conn.query_row("SELECT kind, rate_milli, rate_period, installment_minor FROM accounts WHERE name = ?1", [name], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).unwrap()
+}
+
+fn terms(kind: &str, rate: Option<i64>, period: Option<&str>, installment: Option<i64>) -> (String, Option<i64>, Option<String>, Option<i64>) {
+    (kind.into(), rate, period.map(str::to_string), installment)
+}
+
+#[test]
+fn a_mortgage_and_a_loan_with_a_rate_and_an_installment_travel_both_ways_intact_and_so_does_a_change_of_them() {
+    let (mut desktop, mut phone) = met_with_accounts();
+    debt_in(&desktop, "Flat", Kind::Mortgage, "180000.00", "3.9", Period::Yearly, "950.00");
+    debt_in(&phone, "Car", Kind::Loan, "9000.00", "0.5", Period::Monthly, "300.00");
+    // an asset has a rate too, and no installment
+    accounts::update(&desktop, account_id(&desktop, "Savings"), &AccountPatch { interest_rate: Some(Some("2.5".into())), interest_period: Some(Period::Yearly), ..Default::default() }, TODAY).unwrap();
+    settle(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(terms_of(conn, "Flat"), terms("MORTGAGE", Some(3900), Some("YEARLY"), Some(95_000)));
+        assert_eq!(terms_of(conn, "Car"), terms("LOAN", Some(500), Some("MONTHLY"), Some(30_000)));
+        assert_eq!(terms_of(conn, "Savings"), terms("CHECKING", Some(2500), Some("YEARLY"), None));
+        assert_eq!(terms_of(conn, "Cash"), terms("CHECKING", None, None, None));
+        // and what the screens make of it is the same
+        let shown: Vec<_> = accounts::list(conn, TODAY).unwrap().into_iter().filter(|a| a.name != "Main account").map(|a| (a.name, a.interest_rate, a.interest_period, a.installment, a.balance)).collect();
+        let shown = |name: &str| shown.iter().find(|a| a.0 == name).unwrap().clone();
+        assert_eq!(shown("Flat"), ("Flat".into(), Some("3.9".into()), Some(Period::Yearly), Some("950.00".into()), "-180000.00".into()));
+        assert_eq!(shown("Car"), ("Car".into(), Some("0.5".into()), Some(Period::Monthly), Some("300.00".into()), "-9000.00".into()));
+    }
+    // clearing the rate and the installment on the phone, and a kind of the same group on the desktop, arrive too
+    pause();
+    accounts::update(&phone, account_id(&phone, "Flat"), &AccountPatch { interest_rate: Some(None), installment: Some(None), ..Default::default() }, TODAY).unwrap();
+    accounts::update(&desktop, account_id(&desktop, "Car"), &AccountPatch { kind: Some(Kind::Credit), installment: Some(Some("0.01".into())), ..Default::default() }, TODAY).unwrap();
+    settle(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(terms_of(conn, "Flat"), terms("MORTGAGE", None, None, None));
+        assert_eq!(terms_of(conn, "Car"), terms("CREDIT", Some(500), Some("MONTHLY"), Some(1)));
+    }
+}
+
+#[test]
+fn a_conflict_over_a_debt_lists_its_rate_its_period_and_its_installment_and_a_cleared_installment_arrives_cleared() {
+    let (mut desktop, mut phone) = met_with_accounts();
+    debt_in(&desktop, "Flat", Kind::Mortgage, "180000.00", "3.9", Period::Yearly, "950.00");
+    settle(&mut desktop, &mut phone);
+    let met = now();
+    pause();
+    accounts::update(
+        &desktop,
+        account_id(&desktop, "Flat"),
+        &AccountPatch { interest_rate: Some(Some("3.5".into())), interest_period: Some(Period::Yearly), installment: Some(Some("1000.00".into())), ..Default::default() },
+        TODAY,
+    )
+    .unwrap();
+    accounts::update(&phone, account_id(&phone, "Flat"), &AccountPatch { interest_rate: Some(Some("0.3".into())), interest_period: Some(Period::Monthly), installment: Some(None), ..Default::default() }, TODAY).unwrap();
+    let (conflicts, views) = conflicts_between(&desktop, &phone, met);
+    assert_eq!(conflicts.iter().map(|c| c.table).collect::<Vec<_>>(), [Table::Accounts]);
+    // the rate is the percent as the screens write it, the installment is an amount, and a cleared one is empty
+    assert_eq!(fields(&views, Table::Accounts), texts(&[("interestRate", "3.5", "0.3"), ("interestPeriod", "YEARLY", "MONTHLY"), ("installment", "1000.00", "")]));
+    engine::decide(&mut desktop, &conflicts, &[engine::Choice::Theirs]).unwrap();
+    settle(&mut desktop, &mut phone);
+    for conn in [&desktop, &phone] {
+        assert_eq!(terms_of(conn, "Flat"), terms("MORTGAGE", Some(300), Some("MONTHLY"), None));
+    }
+}
+
+#[test]
+fn an_account_row_with_a_kind_a_rate_or_an_installment_the_checks_refuse_is_refused_like_any_bad_row_and_nothing_is_applied() {
+    let (desktop, mut phone) = met_with_accounts();
+    debt_in(&desktop, "Flat", Kind::Mortgage, "180000.00", "3.9", Period::Yearly, "950.00");
+    let before = snapshot(&phone).unwrap();
+    let mut flat = wire_row_of(&desktop, "Flat");
+    flat["syncId"] = serde_json::json!("ab".repeat(16));
+    flat["stamp"] = serde_json::json!(newer_than_everything());
+    assert!(wire::parse_row(Table::Accounts, &flat).is_ok(), "the debt as it stands is a good row");
+    let with = |changes: &[(&str, serde_json::Value)]| {
+        let mut row = flat.clone();
+        for (key, value) in changes {
+            row[*key] = value.clone();
+        }
+        row
+    };
+    let null = serde_json::Value::Null;
+    let bad = [
+        ("an unknown kind", with(&[("kind", serde_json::json!("BROKERAGE"))])),
+        ("a kind in small letters", with(&[("kind", serde_json::json!("mortgage"))])),
+        ("a rate above 100 %", with(&[("interestRate", serde_json::json!(100_001))])),
+        ("a rate below 0", with(&[("interestRate", serde_json::json!(-1))])),
+        ("a rate as text", with(&[("interestRate", serde_json::json!("3.9"))])),
+        ("a rate with no period", with(&[("interestPeriod", null.clone())])),
+        ("a period with no rate", with(&[("interestRate", null.clone())])),
+        ("a period that is no period", with(&[("interestPeriod", serde_json::json!("WEEKLY"))])),
+        ("an installment of 0", with(&[("installment", serde_json::json!(0))])),
+        ("an installment above the limit", with(&[("installment", serde_json::json!(crate::money::MAX_MINOR + 1))])),
+        ("an installment on an asset", with(&[("kind", serde_json::json!("SAVINGS"))])),
+        ("the main account as a mortgage", with(&[("syncId", serde_json::json!(MAIN_SYNC_ID))])),
+    ];
+    for (what, row) in &bad {
+        assert!(wire::parse_row(Table::Accounts, row).is_err(), "{what}");
+        let message = wire::RowsMessage { table: Table::Accounts, rows: vec![row.clone()], deleted: vec![], last: true };
+        assert!(RowsCollector::new(vec![Table::Accounts]).push(message).is_err(), "{what}");
+    }
+    // what the wire would refuse but a row put in by hand gets past it stops the applier with the rest of its batch: the table refuses the
+    // installment of an asset and a rate with no period, and the check of the main account refuses a main account that owes
+    let mut other = flat.clone();
+    other["syncId"] = serde_json::json!("cd".repeat(16));
+    other["name"] = serde_json::json!("Car");
+    let cases = [
+        ("an installment on an asset", with(&[("kind", serde_json::json!("SAVINGS"))]), "row"),
+        ("a rate with no period", with(&[("interestPeriod", null)]), "row"),
+        ("the main account as a mortgage", with(&[("syncId", serde_json::json!(MAIN_SYNC_ID))]), "account"),
+    ];
+    for (what, row, refused) in cases {
+        let rows = [other.clone(), row].into_iter().map(|v| Row::Account(serde_json::from_value(v).unwrap())).collect();
+        let mut incoming = Incoming::default();
+        incoming.rows.insert(Table::Accounts, rows);
+        let result = engine::apply(&mut phone, &incoming, now(), None);
+        assert!(matches!(result, Err(SyncError::Invalid(tag)) if tag == refused), "{what}: {result:?}");
+        assert_eq!(snapshot(&phone).unwrap(), before, "{what}: nothing at all was applied, the good debt neither");
+        assert_eq!(count(&phone, "SELECT applying FROM sync_clock"), 0, "{what}");
+    }
+    // the good debt goes in, with every field as sent
+    let mut incoming = Incoming::default();
+    incoming.rows.insert(Table::Accounts, vec![Row::Account(serde_json::from_value(flat).unwrap())]);
+    engine::apply(&mut phone, &incoming, now(), None).unwrap();
+    assert_eq!(terms_of(&phone, "Flat"), terms("MORTGAGE", Some(3900), Some("YEARLY"), Some(95_000)));
+    assert!(accounts::check(&phone).unwrap());
 }

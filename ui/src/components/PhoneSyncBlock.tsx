@@ -6,11 +6,11 @@ import { useDeviceName } from '../hooks/useDeviceName'
 import { useToast } from '../hooks/toast'
 import { useSyncStatus } from '../hooks/useSyncStatus'
 import Dropdown from './Dropdown'
-import { Row, Table } from './RowParts'
-import Button from './ui/Button'
+import { IconAction, Row, Table } from './RowParts'
+import { Button } from './ui/button'
 import { useT } from '../i18n/context'
 import SyncStatusPanel from './SyncStatusPanel'
-import { Actions, Field, Rows } from '../pages/settings/layout'
+import { Actions, Field, Rows, Subtitle } from '../pages/settings/layout'
 
 /**
  * Settings block of the desktop for the phone: add a phone (a code to scan, six digits to compare), sync with it (a code to
@@ -66,18 +66,18 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
 
   return (
     <div className="settings-stack">
-      <h3 className="settings-subtitle">{t('sync.devices')}</h3>
+      <Subtitle>{t('sync.devices')}</Subtitle>
       {devices && devices.length === 0 && <p className="hint">{t('sync.noDevices')}</p>}
       {devices && devices.length > 0 && (
-        <Table className="device-table" heads={[t('common.name'), t('sync.colPaired'), t('sync.colSynced'), '']}>
+        <Table
+          tidy
+          className="device-table"
+          heads={[t('common.name'), { label: t('sync.colPaired'), className: 'head-paired' }, t('sync.colSynced'), { label: t('sync.colWaiting'), className: 'is-end head-waiting' }, '']}
+        >
           {devices.map((device) => (
             <Row
               key={device.deviceId}
-              actions={
-                <Button variant="outline" size="sm" className="row-primary" disabled={!idle || removing === device.deviceId} onClick={() => setRemoving(device.deviceId)}>
-                  {t('sync.remove')}
-                </Button>
-              }
+              actions={<IconAction icon="trash" label={`${t('sync.remove')}: ${device.name}`} danger disabled={!idle || removing === device.deviceId} onClick={() => setRemoving(device.deviceId)} />}
               note={
                 removing === device.deviceId ? (
                   <>
@@ -100,13 +100,9 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
                   {device.name}
                 </span>
               </div>
-              <span className="cell-sub" data-label={t('sync.colPaired')}>
-                {whenText(device.pairedAt, locale, timezone)}
-              </span>
-              <span className="cell-sub-end" {...(device.lastSyncAt ? { 'data-label': t('sync.colSynced') } : {})}>
-                {device.lastSyncAt ? whenText(device.lastSyncAt, locale, timezone) : t('sync.neverSynced')}
-                {device.changesWaiting !== null ? <span className="cell-fine">{t('sync.changesWaiting', { count: device.changesWaiting })}</span> : null}
-              </span>
+              <span className="cell-sub device-paired">{whenText(device.pairedAt, locale, timezone)}</span>
+              <span className="cell-sub">{device.lastSyncAt ? whenText(device.lastSyncAt, locale, timezone) : t('sync.neverSynced')}</span>
+              <span className="cell-sub-end device-waiting">{device.changesWaiting === null ? <span className="cell-none">—</span> : device.changesWaiting}</span>
             </Row>
           ))}
         </Table>
@@ -147,10 +143,10 @@ export default function PhoneSyncBlock({ locale, timezone }: { locale: string; t
             </Field>
           </Rows>
           <Actions>
-            <Button onClick={() => void begin(true)}>{t('sync.add')}</Button>
             <Button variant="outline" disabled={!devices || devices.length === 0} onClick={() => void begin(false)}>
               {t('sync.start')}
             </Button>
+            <Button onClick={() => void begin(true)}>{t('sync.add')}</Button>
           </Actions>
         </div>
       ) : (

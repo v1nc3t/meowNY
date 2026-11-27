@@ -295,3 +295,29 @@ fn tokens_leave_no_trace_in_the_history() {
     let rows: i64 = conn.query_row("SELECT count(*) FROM audit_log", [], |r| r.get(0)).unwrap();
     assert_eq!(rows, 0);
 }
+
+#[test]
+fn audit_rows_cover_stashes_and_their_entries_too() {
+    let conn = db();
+    conn.execute("INSERT INTO stashes (name, account_id) VALUES ('Holiday', 1)", []).unwrap();
+    conn.execute("INSERT INTO stash_entries (stash_id, amount_minor, entry_date) VALUES (1, 500, '2026-03-01')", []).unwrap();
+    assert_eq!(audit_count(&conn, "stashes", "INSERT"), 1);
+    assert_eq!(audit_count(&conn, "stash_entries", "INSERT"), 1);
+    conn.execute("UPDATE stash_entries SET amount_minor = 700 WHERE id = 1", []).unwrap();
+    assert_eq!(audit_count(&conn, "stash_entries", "UPDATE"), 1);
+    conn.execute("DELETE FROM stashes WHERE id = 1", []).unwrap();
+    assert_eq!(audit_count(&conn, "stashes", "DELETE"), 1);
+    assert_eq!(audit_count(&conn, "stash_entries", "DELETE"), 1, "the entries that go with a stash are in the history too");
+}
+
+#[test]
+fn an_account_with_a_stash_cannot_be_hard_deleted_and_a_stash_needs_an_account() {
+    let conn = db();
+    conn.execute("INSERT INTO accounts (name, kind, opening_date) VALUES ('Savings', 'SAVINGS', '2026-01-01')", []).unwrap();
+    let savings = conn.last_insert_rowid();
+    assert!(conn.execute("INSERT INTO stashes (name, account_id) VALUES ('Holiday', 99)", []).is_err());
+    conn.execute("INSERT INTO stashes (name, account_id) VALUES ('Holiday', ?1)", [savings]).unwrap();
+    assert!(conn.execute("DELETE FROM accounts WHERE id = ?1", [savings]).is_err());
+    conn.execute("DELETE FROM stashes", []).unwrap();
+    assert!(conn.execute("DELETE FROM accounts WHERE id = ?1", [savings]).is_ok());
+}

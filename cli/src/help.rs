@@ -5,7 +5,7 @@ use crate::error::{CliError, EXIT_CODES};
 
 pub const GLOBAL_FLAGS: &[(&str, &str)] = &[
     ("--json", "Print JSON: the data on standard output, an error as {code, message} on standard error."),
-    ("--yes", "Go ahead with a command that deletes or ends something."),
+    ("--yes", "Go ahead with a command that deletes, erases or ends something."),
     ("--token-file <path>", "Read the token from this file. It must not be readable by other users."),
     ("--data-dir <path>", "The app's data folder, where it writes its port. Default: the app's usual folder."),
     ("--port <number>", "Connect to this port instead of reading it from the app's data folder."),

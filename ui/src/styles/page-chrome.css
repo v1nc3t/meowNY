@@ -11,7 +11,7 @@
 
 .page-numbers button {
   min-width: 2.25rem;
-  min-height: 2.25rem;
+  min-height: var(--control);
   padding: 0 0.5rem;
   font-size: 0.875rem;
   color: var(--foreground);
@@ -34,7 +34,7 @@
   font-weight: 700;
   color: var(--primary);
   text-decoration: underline;
-  text-underline-offset: 4px;
+  text-underline-offset: 0.25em;
 }
 
 .page-numbers > span {
@@ -43,7 +43,7 @@
   color: var(--muted-foreground);
 }
 
-/* The phone: one centred line of 44px tall buttons (the pager shows fewer numbers there). */
+/* The phone: one centred line of 2.625rem tall buttons (the pager shows fewer numbers there). */
 html.is-phone .page-numbers {
   flex-wrap: nowrap;
   justify-content: center;
@@ -56,7 +56,7 @@ html.is-phone .page-numbers > span {
 }
 
 html.is-phone .tx-pane > .page-numbers {
-  margin-top: 1.25rem;
+  margin-top: var(--group-gap);
 }
 
 /* Under a list: the page numbers in the middle of the width, how many rows a page shows on the right, its label beside it. The rows
@@ -66,7 +66,7 @@ html.is-phone .tx-pane > .page-numbers {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 0.75rem 1.5rem;
+  gap: var(--space-3) var(--space-5);
   width: 100%;
   max-width: none;
 }
@@ -113,7 +113,7 @@ html.is-phone .list-foot > .per-page {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 0.75rem 0.5rem;
+  gap: var(--space-3) var(--space-2);
   width: 100%;
   min-width: 0;
 }
@@ -133,44 +133,10 @@ html.is-phone .list-foot > .per-page {
   width: 11rem;
 }
 
-.tx-title {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.875rem;
-  width: auto;
-  max-width: 100%;
-}
-
-.tx-title h1 {
-  margin: 0;
-  font-size: var(--pixel-md);
-  line-height: 1.2;
-}
-
-.tx-title:has(> .tx-actions),
-.tx-title:has(> .month-nav) {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1.25rem;
-}
-
 .tx-actions {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-}
-
-/* A title with its one action on the same line: the title on the left, the action at the right edge (under it when there is no room). */
-.app-main main > section > .tx-title.one-line {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem 1.5rem;
-  width: 100%;
+  gap: var(--space-3);
 }
 
 .toolbar.tx-bar {
@@ -250,7 +216,7 @@ html.is-phone .list-foot > .per-page {
 .toolbar.tx-bar.filter-bar {
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .filter-bar > .grow {
@@ -286,32 +252,9 @@ html.is-phone .list-foot > .per-page {
   overflow-wrap: anywhere;
 }
 
-/* The phone: the search and the "filters" button on one line, level at the bottom; the button opens the category and the period under
-   them, in a box. */
+/* The phone: the fields of the line level at the bottom. */
 html.is-phone .toolbar.tx-bar.filter-bar {
   align-items: flex-end;
-}
-
-/* In that box the field is as wide as the box and a phone has no tooltip: the whole name shows, on as many lines as it needs. */
-.filter-panel .pick.scope .pick-button {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.filter-toggle[aria-expanded='true'] {
-  --btn-fill: var(--accent);
-}
-
-.filter-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  flex: 1 1 100%;
-  min-width: 0;
-  padding: 1rem;
-  background: var(--card);
-  border: var(--border-width) solid var(--border);
-  animation: panel-in var(--t-med) var(--ease-step);
 }
 
 /* A phone: "current month" and the range sit beside "add transaction"; from and to are side by side, level with each other. */
@@ -323,4 +266,254 @@ html.is-phone .tx-actions {
 html.is-phone .tx-actions .pick {
   flex-direction: row;
   align-items: center;
+}
+
+/* The top of a page (components/PageHeader.tsx): the title and, at the right, up to two buttons and the "more" button; under them, when
+   the page has them, a back button and a total, and what else the header holds. It is above the page's own scroll area (`.tx-pane`), so it
+   stays in view; on a phone it also has the page's background and, once the page has scrolled, a hairline under it (phone.css). */
+.page-header {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.page-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-1);
+  min-width: 0;
+  /* as tall as its buttons, so the title sits at the same height on a page with no buttons */
+  min-height: var(--control);
+}
+
+/* The desktop: what is above the list (the header, the tabs, the filters) ends where the list does. The list's own area keeps a gutter
+   on the right (--room) for its scroll bar, and so these keep it too. */
+.app-shell:not(.is-phone) .tx-page > :is(.page-header, .ui-tabs, .toolbar, .tx-top, .tx-filters, .list-foot, .debts-foot) {
+  max-width: calc(100% - var(--room));
+}
+
+.page-header h1 {
+  min-width: 0;
+  margin: 0 var(--space-2) 0 0;
+  font-size: var(--pixel-md);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.page-header-actions:empty {
+  display: none;
+}
+
+/* The back button at the left and a total at the right, on one line. */
+.page-header-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.page-header-aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.25rem 0.5rem;
+  margin: 0 0 0 auto;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+.page-header-aside b {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* A label and its value side by side ("files 8"). Several in a line (the header's aside, the line over the export preview) are told apart
+   by room between them, not by a mark. */
+.label-pair {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.label-pair + .label-pair {
+  margin-left: 0.5rem;
+}
+
+.page-header-extra {
+  min-width: 0;
+}
+
+/* The logo is the button that opens the phone's menu (a phone only). */
+.page-header-menu {
+  flex: none;
+  width: var(--control-phone);
+  min-width: var(--control-phone);
+  height: var(--control-phone);
+  margin-left: -0.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+html.is-phone .page-header-menu:active {
+  opacity: 0.6;
+}
+
+/* A phone: one line, sticky at the top on the page's background, as wide as the page's own scroll area (which reaches the edge a little into
+   the page's padding, for focus rings); the safe area of the screen is in its padding. */
+html.is-phone .page-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  gap: var(--space-2);
+  margin-inline: calc(var(--edge) * -1);
+  padding: calc(var(--space-2) + env(safe-area-inset-top, 0rem)) var(--edge) var(--space-2);
+  background: var(--background);
+  border-bottom: var(--border-width) solid transparent;
+}
+
+html.is-phone .page-header.is-scrolled {
+  border-bottom-color: var(--border);
+}
+
+html.is-phone .page-header-row {
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+}
+
+html.is-phone .page-header h1 {
+  flex: 0 1 auto;
+  margin-right: 0.25rem;
+  /* a long name (an account's, a stash's) takes a second line and no more */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+html.is-phone .page-header-actions {
+  flex: none;
+  gap: 0.25rem;
+}
+
+/* The green button keeps the room of its shadow in its box at the right (phone.css), none at the bottom: the buttons of the line stay level. */
+html.is-phone .page-header-actions > .ui-btn-default {
+  margin-bottom: 0;
+}
+
+/* A button of words in the top line of a phone (an action with no icon) is as narrow as its words need. */
+html.is-phone .page-header-actions > .ui-btn:not(.ui-btn-icon) {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The text in a help popover (components/HelpButton.tsx: the shadcn Popover, or on a phone a dialog). */
+.help-title {
+  margin: 0 0 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.help-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-wrap: break-word;
+}
+
+.help-body p {
+  margin: 0;
+}
+
+/* The pairs of a thing's details (components/Facts.tsx): the label at the left, small and grey, the value at the right. */
+.facts {
+  display: grid;
+  grid-template-columns: fit-content(55%) minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.facts dt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+.facts dd.is-positive {
+  color: var(--success);
+}
+
+.facts dd.is-negative {
+  color: var(--destructive);
+}
+
+.facts dd.is-muted {
+  color: var(--muted-foreground);
+}
+
+/* The wide form (a thing's page on a computer): the whole width of the page, 2 to 4 columns of a small grey label over its value, each cell under a
+   hairline, so the facts read as a sheet and not as a narrow strip at the left. */
+.facts.is-wide {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-3) var(--space-5);
+  width: 100%;
+}
+
+.facts.is-wide > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding-top: var(--space-2);
+  border-top: var(--border-width) solid var(--border);
+}
+
+.facts.is-wide > div > dd {
+  text-align: left;
+  font-size: 0.9375rem;
+}
+
+/* What else the header holds sits at the right of the title, before the buttons (on a phone: a line of its own, under the title). */
+.page-header-row > .page-header-extra {
+  margin-left: auto;
+  margin-right: 0.75rem;
+}
+
+.page-header-row > .page-header-extra + .page-header-actions {
+  margin-left: 0;
+}
+
+.help-body b {
+  font-weight: 600;
 }

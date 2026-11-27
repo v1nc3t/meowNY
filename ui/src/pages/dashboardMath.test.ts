@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { changePercent, DONUT, savingsRateText, slicePath, usedPercent } from './dashboardMath.ts'
+import { changePercent, DONUT, ratePercent, savingsRateText, slicePath, usedPercent } from './dashboardMath.ts'
 
 test('percent of budget used matches the hand-calculated Food example', () => {
   assert.equal(usedPercent('356.20', '400.00'), 89.1)
@@ -59,4 +59,11 @@ test('a slice of more than half the ring takes the long way round, and the whole
   const whole = slicePath(0, 1)
   assert.equal((whole.match(/Z/g) ?? []).length, 2)
   assert.equal(slicePath(0, 0.99995), whole, 'a hair short of whole is whole')
+})
+
+test('a rate of savings keeps its sign, and has none without income', () => {
+  assert.equal(ratePercent('1858.21', '3200.00'), 58.1)
+  assert.equal(ratePercent('-100.00', '400.00'), -25)
+  assert.equal(ratePercent('0.00', '400.00'), 0)
+  assert.equal(ratePercent('10.00', '0.00'), null)
 })

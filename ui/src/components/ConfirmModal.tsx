@@ -11,6 +11,8 @@ export default function ConfirmModal({
   text,
   pending = false,
   danger = true,
+  formId = modalFormId,
+  extra,
   onConfirm,
   onClose,
 }: {
@@ -20,6 +22,10 @@ export default function ConfirmModal({
   pending?: boolean
   /** The yes button is red. Turn it off for something that is easy to undo (pausing an item). */
   danger?: boolean
+  /** Over another dialog: its own form id, so that its yes button submits its own form. */
+  formId?: string
+  /** A choice under the question (a checkbox that widens what is deleted). */
+  extra?: ReactNode
   onConfirm: () => void
   onClose: () => void
 }) {
@@ -29,12 +35,13 @@ export default function ConfirmModal({
     if (!pending) onConfirm()
   }
   return (
-    <Modal title={title} pending={pending} danger={danger} doneLabel={t('common.yes')} cancelLabel={t('common.no')} onClose={onClose}>
-      <form id={modalFormId} onSubmit={onSubmit}>
+    <Modal title={title} pending={pending} danger={danger} formId={formId} doneLabel={t('common.yes')} cancelLabel={t('common.no')} onClose={onClose}>
+      <form id={formId} onSubmit={onSubmit}>
         {text ? <p className="hint">{text}</p> : null}
         <p className="confirm-text" tabIndex={-1} data-autofocus>
           {t('common.areYouSure')}
         </p>
+        {extra}
       </form>
     </Modal>
   )

@@ -10,10 +10,13 @@ import { canPreview } from '../lib/documents'
 import DocumentModal from './DocumentModal'
 import Icon from './NavIcon'
 import PreviewModal from './PreviewModal'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
-/** The documents of one item, in the dialog that edits it. */
-export default function AttachArea({ attachments }: { attachments: Attachments }) {
+/**
+ * The documents of one item, in the dialog that edits it. `bare` is for a dialog whose "attach documents" switch already names the part: no title
+ * and no line that says there are none, only the list and the buttons.
+ */
+export default function AttachArea({ attachments, bare = false }: { attachments: Attachments; bare?: boolean }) {
   const t = useT()
   const phone = useProfile() === 'phone'
   const { settings } = useMoneySettings()
@@ -34,9 +37,9 @@ export default function AttachArea({ attachments }: { attachments: Attachments }
 
   return (
     <section className="attach" aria-label={t('docs.title')}>
-      <h3>{t('docs.title')}</h3>
+      {bare ? null : <h3>{t('docs.title')}</h3>}
       {attachments.working ? <p className="hint">{t('docs.adding', { name: attachments.working })}</p> : null}
-      {empty ? <p className="hint">{t('docs.attachNone')}</p> : null}
+      {empty && !bare ? <p className="hint">{t('docs.attachNone')}</p> : null}
       {empty ? null : (
         <ul className="attach-list">
           {attachments.linked.map((doc) => (

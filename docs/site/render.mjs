@@ -176,7 +176,7 @@ ${body}
 
 export function toHtml(page) {
   const sections = page.sections
-    .map((s) => `<section class="doc" id="${s.id}"><h2>${escapeHtml(s.title)}${anchor(s.id)}</h2>${s.blocks.map(blockHtml).join('\n')}</section>`)
+    .map((s) => `<section class="doc" id="${s.id}"><h2><span class="head-text">${escapeHtml(s.title)}</span>${anchor(s.id)}</h2>${s.blocks.map(blockHtml).join('\n')}</section>`)
     .join('\n')
   const fold = page.nav.length ? `<details class="fold"><summary>on this page</summary>\n${tocHtml(page.nav)}\n</details>\n` : ''
   const body = `<header class="hero" id="top"><h1>${escapeHtml(page.title)}</h1><p class="lead">${inlineHtml(page.lead)}</p></header>

@@ -2,14 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { budgets as budgetsApi, type MonthHistory } from '../api/budgets'
 import { monthLabel, shiftMonth } from '../api/months'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import PageHeader from '../components/PageHeader'
 import BudgetHalf from '../components/BudgetHalf'
 import MonthNav from '../components/MonthNav'
+import { ListGroup, PanelActions, TapRow } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
-import Button from '../components/ui/Button'
-import { CardTitle } from '../components/ui/Card'
+import { Button } from '../components/ui/button'
+import { CardTitle } from '../components/ui/card'
 import { useToday } from '../api/today'
 import { useMoneySettings, type MoneySettings } from '../hooks/useMoneySettings'
 import { useBudgets } from '../hooks/useBudgets'
+import { useOpenRow } from '../hooks/useOpenRow'
 import { useProfile } from '../hooks/profile'
 import { useSwipeHandler } from '../hooks/swipe'
 import { categoryTabs, earnedClass, shownTab, spentClass, tabOfSearch, tabQuery, type CategoryTab } from '../lib/categoriesView'
@@ -18,7 +21,6 @@ import { useSticky } from '../lib/sticky'
 import { tabPanelProps } from '../lib/tabs'
 import { useI18n } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
-import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 
 const SIDES = ['EXPENSE', 'INCOME'] as const
@@ -43,6 +45,9 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   const chosenTab = tabOfSearch(params)
   const budgets = useBudgets({ month, thisMonth, settings })
   const { money } = budgets
+  // a phone shows the grips, and lets the categories be dragged, only while this switch of the "more" menu is on
+  const [reordering, setReordering] = useState(false)
+  const historyRows = useOpenRow()
 
   useEffect(() => {
     let cancelled = false
@@ -97,66 +102,88 @@ function CategoriesView({ settings, thisMonth }: { settings: MoneySettings; this
   useRowNavigation()
 
   // The two sides, one beside the other on the computer, one at a time on a phone.
-  const halves = SIDES.map((side) => <BudgetHalf key={side} {...budgets.half(side)} hideTitle={phone} />)
+  const halves = SIDES.map((side) => <BudgetHalf key={side} {...budgets.half(side)} hideTitle={phone} reordering={reordering} />)
 
+  /** Shows a month above: the month is set and the page goes back to its top. */
+  const showMonth = (value: string) => {
+    setMonth(value)
+    if (phone) setTab('EXPENSE')
+    paneRef.current?.scrollTo({ top: 0 })
+  }
   // The months, each a row you click to see that month above; spent is green within its budget and red above it, earned green above its budget.
+  // A phone has a row for each month that opens to its four numbers and a button that shows the month.
   const historyList = history ? (
-    <ul className="card-list hist-list">
-      <li className="list-head" aria-hidden="true">
-        <span>{t('budgets.colMonth')}</span>
-        <span className="is-end">{t('budgets.colSpent')}</span>
-        <span className="is-end">{t('budgets.colExpenseBudget')}</span>
-        <span className="is-end">{t('budgets.colEarned')}</span>
-        <span className="is-end">{t('budgets.colIncomeBudget')}</span>
-      </li>
-      {history.map((row) => {
-        return (
+    phone ? (
+      <ListGroup>
+        {history.map((row) => (
+          <TapRow
+            key={row.month}
+            id={historyRows.panelId(row.month)}
+            className={row.month === month ? 'is-selected' : undefined}
+            open={historyRows.isOpen(row.month)}
+            onToggle={() => historyRows.toggle(row.month)}
+            name={<span className="hist-month">{monthLabel(row.month, language)}</span>}
+            amount={<span className={spentClass(row.expenseActual, row.expenseBudget)}>{money(row.expenseActual)}</span>}
+            facts={[
+              { label: t('budgets.colSpent'), value: money(row.expenseActual) },
+              { label: t('budgets.colExpenseBudget'), value: row.expenseBudget === null ? null : money(row.expenseBudget) },
+              { label: t('budgets.colEarned'), value: money(row.incomeActual) },
+              { label: t('budgets.colIncomeBudget'), value: row.incomeBudget === null ? null : money(row.incomeBudget) },
+            ]}
+          >
+            <PanelActions actions={[{ label: t('budgets.showMonth'), icon: 'play', onClick: () => showMonth(row.month) }]} />
+          </TapRow>
+        ))}
+      </ListGroup>
+    ) : (
+      <ul className="card-list is-tidy hist-list">
+        <li className="list-head" aria-hidden="true">
+          <span>{t('budgets.colMonth')}</span>
+          <span className="is-end">{t('budgets.colSpent')}</span>
+          <span className="is-end hist-budget">{t('budgets.colExpenseBudget')}</span>
+          <span className="is-end">{t('budgets.colEarned')}</span>
+          <span className="is-end hist-budget">{t('budgets.colIncomeBudget')}</span>
+        </li>
+        {history.map((row) => (
           <li key={row.month} className={row.month === month ? 'card-item is-selected' : 'card-item'}>
             <span className="cell-name">
-              <Button
-                variant="link"
-                className="card-name"
-                aria-current={row.month === month ? 'date' : undefined}
-                onClick={() => {
-                  setMonth(row.month)
-                  paneRef.current?.scrollTo({ top: 0 })
-                }}
-              >
+              <Button variant="link" className="card-name" aria-current={row.month === month ? 'date' : undefined} onClick={() => showMonth(row.month)}>
                 {monthLabel(row.month, language)}
               </Button>
             </span>
-            <span className="sr-only hist-label">{t('budgets.colSpent')}</span>
-            <span className={spentClass(row.expenseActual, row.expenseBudget)}>{money(row.expenseActual)}</span>
-            <span className="cell-sub-end hist-budget">
-              <span className="sr-only">{t('budgets.colExpenseBudget')}</span>
-              {row.expenseBudget === null ? '-' : money(row.expenseBudget)}
+            <span className={spentClass(row.expenseActual, row.expenseBudget)}>
+              <span className="sr-only">{t('budgets.colSpent')} </span>
+              {money(row.expenseActual)}
             </span>
-            <span className="sr-only hist-label">{t('budgets.colEarned')}</span>
-            <span className={earnedClass(row.incomeActual, row.incomeBudget)}>{money(row.incomeActual)}</span>
             <span className="cell-sub-end hist-budget">
-              <span className="sr-only">{t('budgets.colIncomeBudget')}</span>
-              {row.incomeBudget === null ? '-' : money(row.incomeBudget)}
+              <span className="sr-only">{t('budgets.colExpenseBudget')} </span>
+              {row.expenseBudget === null ? '—' : money(row.expenseBudget)}
+            </span>
+            <span className={earnedClass(row.incomeActual, row.incomeBudget)}>
+              <span className="sr-only">{t('budgets.colEarned')} </span>
+              {money(row.incomeActual)}
+            </span>
+            <span className="cell-sub-end hist-budget">
+              <span className="sr-only">{t('budgets.colIncomeBudget')} </span>
+              {row.incomeBudget === null ? '—' : money(row.incomeBudget)}
             </span>
           </li>
-        )
-      })}
-    </ul>
+        ))}
+      </ul>
+    )
   ) : null
 
   return (
     <section className="tx-page budget-page">
-      <div className="tx-title budget-title one-line">
-        <h1>{t('categories.title')}</h1>
-        <div className="tx-actions">
-          {/* The phone has the round add button for this. */}
-          {phone ? null : (
-            <Button onClick={() => budgets.add(addSide)} {...tip('new', t('categories.add'))}>
-              {t('categories.add')}
-            </Button>
-          )}
-          <MonthNav month={month} thisMonth={thisMonth} onChange={setMonth} />
-        </div>
-      </div>
+      <PageHeader
+        title={t('categories.title')}
+        // The phone has the round add button for this.
+        actions={[!phone && { label: t('categories.add'), icon: 'add', primary: true, shortcut: 'new', onClick: () => budgets.add(addSide) }]}
+        // On a phone the grips to reorder the categories are behind a switch.
+        more={[phone && tab !== 'HISTORY' && { kind: 'toggle', label: t('categories.reorder'), checked: reordering, onChange: setReordering }]}
+      >
+        <MonthNav month={month} thisMonth={thisMonth} onChange={setMonth} />
+      </PageHeader>
       {budgets.dialogs}
       {phone ? (
         <>

@@ -107,11 +107,23 @@ pub fn get(conn: &Connection, id: i64) -> Result<Transfer, AppError> {
 
 /// Both accounts must exist, not be archived, and differ.
 pub fn create(conn: &Connection, input: &NewTransfer) -> Result<Transfer, AppError> {
+    create_with(conn, input, false)
+}
+
+/// `create`; with `from_may_be_archived` the account the money leaves may be archived, as for a take from a stash whose account is archived
+/// (`docs/stash-design.md`, section 5.2): money can still leave an account that is archived. The other side must not be.
+pub(crate) fn create_with(conn: &Connection, input: &NewTransfer, from_may_be_archived: bool) -> Result<Transfer, AppError> {
     let minor = parse_positive_amount(&input.amount)?;
     let arrives = input.to_amount.as_deref().map(parse_positive_amount).transpose()?;
     let date = clean_date(&input.date)?;
     let note = clean_note(input.note.as_deref())?;
-    let from = for_new_row(conn, Some(&input.from_account_id))?;
+    let from = if from_may_be_archived {
+        let id = parse_id(&input.from_account_id)?;
+        conn.query_row("SELECT 1 FROM accounts WHERE id = ?1", [id], |_| Ok(())).optional()?.ok_or(AppError::InvalidInput)?;
+        id
+    } else {
+        for_new_row(conn, Some(&input.from_account_id))?
+    };
     let to = for_new_row(conn, Some(&input.to_account_id))?;
     if from == to || currencies_differ(conn, from, to)? != arrives.is_some() {
         return Err(AppError::InvalidInput);

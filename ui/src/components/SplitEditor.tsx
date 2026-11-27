@@ -8,8 +8,9 @@ import { useT } from '../i18n/context'
 import { amountString, formatMoney } from '../lib/money'
 import { rowKey, toInput, withMode, type SplitDraft, type SplitRow } from '../lib/split'
 import Dropdown from './Dropdown'
+import Icon from './NavIcon'
 import PersonCombo from './PersonCombo'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * Who shares a bill and how: the person (always first), friends and guests, and a mode that says how the numbers are typed. Every
@@ -169,8 +170,8 @@ export default function SplitEditor({
                 />
               ) : null}
               <span className="split-amount">{part ? money(part.amount) : ''}</span>
-              <Button variant="ghost" size="sm" className="split-remove" onClick={() => removeRow(row)}>
-                {t('split.remove')}
+              <Button variant="ghost" size="icon" className="split-remove" aria-label={`${t('split.remove')}: ${row.name}`} title={t('split.remove')} onClick={() => removeRow(row)}>
+                <Icon name="x" className="btn-icon" />
               </Button>
             </li>
           )
@@ -192,10 +193,6 @@ export default function SplitEditor({
         </p>
       ) : noPartOfMine ? (
         <p className="hint">{t('split.needMine')}</p>
-      ) : current && !proportions && bill ? (
-        <p className="hint">
-          {payer ? t('split.youOwe', { name: payer.name, mine: money(current.mine) }) : t('split.yourPartOf', { mine: money(current.mine), amount: money(bill) })}
-        </p>
       ) : null}
     </div>
   )

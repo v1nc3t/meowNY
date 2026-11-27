@@ -1,5 +1,6 @@
-import type { Account, AccountLine } from '../api/accounts'
+import { isLiability, type Account, type AccountLine } from '../api/accounts'
 import type { MessageKey } from '../i18n/en'
+import { fromMinor, toMinor } from './money'
 import { applyOrder } from './reorder'
 import { saveChoice, storedId } from './sticky'
 
@@ -18,21 +19,35 @@ export function activeAccounts(accounts: readonly Account[]): Account[] {
   return accounts.filter((account) => !account.archived)
 }
 
-/**
- * The accounts a field can offer: the ones that are not archived, and with `mainOnly` (the recurring items and the debts, which live only in
- * the app's currency: docs/accounts-design.md, section 21.1) only those in the app's currency.
- */
-export function listable(accounts: readonly Account[], mainOnly = false): Account[] {
-  return activeAccounts(accounts).filter((account) => !(mainOnly && account.foreign))
+/** The accounts that hold money and are not archived: every one that is not a credit, a loan or a mortgage (docs/loans-deposits-design.md, section 10). */
+export function assetAccounts(accounts: readonly Account[]): Account[] {
+  return activeAccounts(accounts).filter((account) => !isLiability(account.kind))
 }
 
 /**
- * The rule that hides it all: more than one account that is not archived. When it is false no form has an account field, the
- * transactions have no account filter or column, and nothing asks about accounts. With `mainOnly` only the accounts such a field would list
- * count: a form that offers one account has nothing to ask.
+ * The accounts a field of a row can offer (an expense, an income, a recurring item, a friend's entry, a stash): the assets that are not archived,
+ * and with `mainOnly` (the recurring items and the debts, which live only in the app's currency: docs/accounts-design.md, section 21.1) only those
+ * in the app's currency. A liability is never one: a transfer is what moves money to it.
+ */
+export function listable(accounts: readonly Account[], mainOnly = false): Account[] {
+  return assetAccounts(accounts).filter((account) => !(mainOnly && account.foreign))
+}
+
+/**
+ * The rule that hides the account field: more than one asset account that is not archived. When it is false no form of a row has an account field.
+ * With `mainOnly` only the accounts such a field would list count: a form that offers one account has nothing to ask. A loan does not count: with
+ * one asset and a loan the field stays hidden.
  */
 export function several(accounts: readonly Account[] | null, mainOnly = false): boolean {
   return accounts !== null && listable(accounts, mainOnly).length > 1
+}
+
+/**
+ * More than one account that is not archived, of any kind: what a transfer needs, and what the transactions page asks before it has an account
+ * filter, a column and a tab of transfers (the payment of a loan is one).
+ */
+export function manyAccounts(accounts: readonly Account[] | null): boolean {
+  return accounts !== null && activeAccounts(accounts).length > 1
 }
 
 /**
@@ -72,7 +87,15 @@ export function accountOptions(
   keep: readonly (string | undefined)[] = [],
   mainOnly = false,
 ): { value: string; label: string }[] {
-  const listed = listable(accounts, mainOnly)
+  return choicesOf(listable(accounts, mainOnly), accounts, t, keep)
+}
+
+/** The choices of a transfer's two sides: every account that is not archived, a liability too (that is how money reaches one), and the `keep` ones as above. */
+export function transferOptions(accounts: readonly Account[], t: Translate, keep: readonly (string | undefined)[] = []): { value: string; label: string }[] {
+  return choicesOf(activeAccounts(accounts), accounts, t, keep)
+}
+
+function choicesOf(listed: readonly Account[], accounts: readonly Account[], t: Translate, keep: readonly (string | undefined)[]): { value: string; label: string }[] {
   const kept = accounts.filter((account) => keep.includes(account.id) && !listed.includes(account))
   return [...kept, ...listed].map((account) => ({ value: account.id, label: accountLabel(account, t) }))
 }
@@ -199,6 +222,15 @@ export function reorderWithinGroup(accounts: readonly Account[], group: string |
 /** Whether a row says what is available: only when there is a virtual balance (a card limit), "-0.00" being none. */
 export function showAvailable(account: Pick<Account, 'virtualBalance'>): boolean {
   return Number(account.virtualBalance) !== 0
+}
+
+/**
+ * What an account can spend, for its "free" column: the balance minus what its stashes hold (`free`); with a virtual balance (a card's limit)
+ * what is available, the same less what its stashes hold. In the account's own currency.
+ */
+export function freeOf(account: Pick<Account, 'free' | 'virtualBalance'>): string {
+  if (!showAvailable(account)) return account.free
+  return fromMinor((toMinor(account.free) ?? 0n) + (toMinor(account.virtualBalance) ?? 0n))
 }
 
 /** How wide the bar of an amount is, as a percentage of the track: the largest amount of the list fills it. No largest amount, no bar. */

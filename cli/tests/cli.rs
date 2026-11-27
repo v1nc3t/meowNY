@@ -694,22 +694,22 @@ fn an_account_is_read_and_ordered_from_the_command_line_and_a_taken_name_is_exit
     // a read token reads everything about accounts
     let list = ok(&app, &app.read, &["accounts", "list"]);
     let names: Vec<&str> = list.as_array().unwrap().iter().map(|a| a["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Lei account", "Old savings"]);
+    assert_eq!(names, ["Current account", "Savings", "Cash", "Credit card", "Lei account", "Flat", "Car", "Emergency fund at the credit union, long term", "Credit line", "Old savings", "Appliance loan"]);
     let shown = ok(&app, &app.read, &["accounts", "show", "2", "--from", "2026-09-01", "--to", "2026-09-30"]);
     assert_eq!((shown["account"]["name"].clone(), shown["from"].clone(), shown["to"].clone()), (json!("Savings"), json!("2026-09-01"), json!("2026-09-30")));
     assert!(!shown["lines"].as_array().unwrap().is_empty());
     assert_eq!(ok(&app, &app.read, &["accounts", "history", "2", "--year", "2025"]).as_array().unwrap().len(), 12);
-    assert_eq!(ok(&app, &app.read, &["accounts", "summary"])["accounts"], 6);
+    assert_eq!(ok(&app, &app.read, &["accounts", "summary"])["accounts"], 11);
     assert!(ok(&app, &app.read, &["transfers", "list", "--account-id", "2", "--limit", "3"])["transfers"].as_array().unwrap().len() == 3);
     assert_eq!(failed(&app, &app.read, &["accounts", "show"]), (2, "usage".into()), "the id is needed");
     assert_eq!(failed(&app, &app.read, &["accounts", "show", "999999"]), (4, "not_found".into()));
     assert_eq!(failed(&app, &app.read, &["accounts", "show", "1", "--from", "2026-10-31", "--to", "2026-10-01"]), (2, "invalid_input".into()));
     // the order: every account that is not archived, as a list of ids
-    assert_eq!(ok(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,3,6"]), Value::Null);
+    assert_eq!(ok(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,3,6,7,8,9,10"]), Value::Null);
     let names: Vec<String> = ok(&app, &app.read, &["accounts", "list"]).as_array().unwrap().iter().map(|a| a["name"].as_str().unwrap().to_string()).collect();
-    assert_eq!(names, ["Savings", "Current account", "Credit card", "Cash", "Lei account", "Old savings"]);
+    assert_eq!(names, ["Savings", "Current account", "Credit card", "Cash", "Lei account", "Flat", "Car", "Emergency fund at the credit union, long term", "Credit line", "Old savings", "Appliance loan"]);
     assert_eq!(failed(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4"]), (2, "invalid_input".into()));
-    assert_eq!(failed(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,3"]), (2, "invalid_input".into()), "the account in lei is one of those not archived");
+    assert_eq!(failed(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,3,7,8,9,10"]), (2, "invalid_input".into()), "the account in lei is one of those not archived");
     assert_eq!(failed(&app, &app.write, &["accounts", "reorder", "--ids", "2,1,4,5"]), (2, "invalid_input".into()), "an archived one is not in the order");
     // a name that is taken, in any case, is exit 1 `name_exists`; an archived one frees its name
     assert_eq!(failed(&app, &app.write, &["accounts", "create", "--name", "SAVINGS", "--kind", "cash"]), (1, "name_exists".into()));
@@ -744,13 +744,76 @@ fn a_transfer_and_a_transaction_name_the_account_from_the_command_line() {
 }
 
 #[test]
+fn a_loan_is_made_paid_and_listed_and_a_deposit_is_made_matured_and_its_return_booked() {
+    let app = app(false);
+    // every date is far in the past, so the loan has been paid for a while and the deposit has matured whatever day the test runs
+    let bank = id_of(&ok(&app, &app.write, &["accounts", "create", "--name", "Bank", "--kind", "savings", "--opening-balance", "5000.00", "--opening-date", "2019-12-01"]));
+    let paid_for = id_of(&ok(&app, &app.write, &["categories", "create", "--name", "Loan interest", "--type", "expense"]));
+    let loan = ok(
+        &app,
+        &app.write,
+        &["accounts", "create", "--name", "Car", "--kind", "loan", "--opening-balance=-9000.00", "--opening-date", "2020-01-01", "--interest-rate", "6.5", "--interest-period", "yearly", "--installment", "950.00"],
+    );
+    let loan_id = id_of(&loan);
+    assert_eq!((loan["kind"].clone(), loan["interestRate"].clone(), loan["interestPeriod"].clone(), loan["installment"].clone()), (json!("LOAN"), json!("6.5"), json!("YEARLY"), json!("950.00")));
+    assert_eq!((loan["liability"]["owed"].clone(), loan["liability"]["state"].clone()), (json!("9000.00"), json!("OWING")));
+
+    // 950.00 from the bank, 48.75 of it interest: the rest lowers what is owed. The commands are normal writes, so nothing is asked and no --yes is needed.
+    let before = app.asked();
+    let paid = ok(&app, &app.write, &["accounts", "pay", &loan_id, "--from-account-id", &bank, "--amount", "950.00", "--interest", "48.75", "--category-id", &paid_for, "--date", "2020-02-01", "--note", "February"]);
+    assert_eq!((paid["transfer"]["amount"].clone(), paid["transaction"]["amount"].clone(), paid["transfer"]["note"].clone()), (json!("901.25"), json!("48.75"), json!("February")));
+    assert_eq!(app.asked(), before);
+    assert_eq!(ok(&app, &app.read, &["accounts", "show", &loan_id])["account"]["liability"]["owed"], "8098.75");
+    // the table has what is owed and the payoff, and the accounts that are not loans have a dash there
+    let list = run(&app, &app.read, &["accounts", "list"]);
+    assert_eq!(list.code, 0);
+    let (head, car, bank_row) = (list.out.lines().next().unwrap(), list.out.lines().find(|l| l.contains("Car")).unwrap(), list.out.lines().find(|l| l.contains("Bank")).unwrap());
+    assert!(["liability.owed", "liability.state", "liability.payoff", "interestRate", "installment"].iter().all(|c| head.contains(c)), "{head}");
+    assert!(car.contains("8098.75") && car.contains("OWING") && car.contains(" payments to ") && car.contains("6.5") && car.contains("950.00"), "{car}");
+    assert!(!bank_row.contains("OWING") && !bank_row.contains("payments"), "{bank_row}");
+    // the rate and the installment are cleared with --clear-, and the period goes with the rate
+    let cleared = ok(&app, &app.write, &["accounts", "update", &loan_id, "--clear-interest-rate", "--clear-installment"]);
+    assert_eq!((cleared["interestRate"].clone(), cleared["interestPeriod"].clone(), cleared["installment"].clone(), cleared["liability"]["payoff"].clone()), (Value::Null, Value::Null, Value::Null, Value::Null));
+    // refused as invalid_input, nothing written: interest above the payment, a payment to an account that is not a loan
+    let (rows, before) = (ok(&app, &app.read, &["accounts", "show", &loan_id])["lines"].clone(), snapshot(&app));
+    assert_eq!(failed(&app, &app.write, &["accounts", "pay", &loan_id, "--from-account-id", &bank, "--amount", "10.00", "--interest", "10.01", "--category-id", &paid_for]), (2, "invalid_input".into()));
+    assert_eq!(failed(&app, &app.write, &["accounts", "pay", &bank, "--from-account-id", &loan_id, "--amount", "10.00"]), (2, "invalid_input".into()));
+    assert_eq!((ok(&app, &app.read, &["accounts", "show", &loan_id])["lines"].clone(), snapshot(&app)), (rows, before));
+
+    // a deposit: its maturity is the target date. It takes money while it runs, so it is made to mature far ahead and the maturity is moved back
+    // to July 2020 when the money is in.
+    let earned = id_of(&ok(&app, &app.write, &["categories", "create", "--name", "Deposit interest", "--type", "income"]));
+    let made = ok(
+        &app,
+        &app.write,
+        &["stashes", "create", "--name", "Term", "--account-id", &bank, "--kind", "deposit", "--interest-rate", "3.1", "--interest-period", "yearly", "--start-date", "2020-01-01", "--target-date", "2099-01-01"],
+    );
+    let term = id_of(&made);
+    assert_eq!((made["kind"].clone(), made["deposit"]["interestRate"].clone(), made["deposit"]["state"].clone(), made["targetDate"].clone()), (json!("DEPOSIT"), json!("3.1"), json!("RUNNING"), json!("2099-01-01")));
+    assert_eq!(failed(&app, &app.write, &["stashes", "return", &term, "--amount", "15.45", "--category-id", &earned]), (2, "invalid_input".into()), "a deposit that is running has no return yet");
+    ok(&app, &app.write, &["stashes", "add", &term, "--amount", "1000.00", "--date", "2020-01-01"]);
+    assert_eq!(ok(&app, &app.write, &["stashes", "update", &term, "--target-date", "2020-07-01"])["deposit"]["state"], "MATURED");
+    let list = run(&app, &app.read, &["stashes", "list"]);
+    let (head, row) = (list.out.lines().next().unwrap(), list.out.lines().find(|l| l.contains("Term")).unwrap());
+    assert!(["deposit.state", "deposit.interestRate", "deposit.interestPeriod", "deposit.expectedReturn", "targetDate"].iter().all(|c| head.contains(c)), "{head}");
+    assert!(row.contains("MATURED") && row.contains("3.1") && row.contains("YEARLY") && row.contains("2020-07-01"), "{row}");
+    // its return is an income and an add in one step, after which it is booked
+    let booked = ok(&app, &app.write, &["stashes", "return", &term, "--amount", "15.45", "--category-id", &earned, "--date", "2020-07-02", "--note", "interest"]);
+    assert_eq!((booked["deposit"]["state"].clone(), booked["deposit"]["returnedOn"].clone(), booked["saved"].clone()), (json!("BOOKED"), json!("2020-07-02"), json!("1015.45")));
+    assert_eq!(failed(&app, &app.write, &["stashes", "return", &term, "--amount", "15.45", "--category-id", &earned]), (2, "invalid_input".into()), "not twice");
+    // a goal has no return
+    let goal = id_of(&ok(&app, &app.write, &["stashes", "create", "--name", "Coat", "--account-id", &bank, "--target", "250.00"]));
+    assert_eq!(failed(&app, &app.write, &["stashes", "return", &goal, "--amount", "1.00", "--category-id", &earned]), (2, "invalid_input".into()));
+}
+
+#[test]
 fn help_for_accounts_and_transfers_lists_their_commands_and_flags() {
     let app = app(false);
     let top = run(&app, "", &["--help"]);
     assert!(top.out.contains("accounts") && top.out.contains("transfers"), "{}", top.out);
     let accounts = run(&app, "", &["accounts", "--help"]);
     assert_eq!((accounts.code, accounts.err.as_str()), (0, ""));
-    for verb in ["list", "show", "history", "breakdown", "summary", "create", "update", "archive", "unarchive", "delete", "reorder"] {
+    for verb in ["list", "show", "history", "breakdown", "summary", "create", "update", "archive", "unarchive", "delete", "reorder", "pay"] {
         assert!(accounts.out.lines().any(|l| l.trim_start().starts_with(verb)), "accounts {verb}: {}", accounts.out);
     }
     let transfers = run(&app, "", &["transfers", "--help"]);
@@ -761,7 +824,7 @@ fn help_for_accounts_and_transfers_lists_their_commands_and_flags() {
     assert_eq!(create.code, 0);
     for text in [
         "--name <text> ",
-        "--kind <CHECKING|SAVINGS|CASH|CREDIT_CARD>",
+        "--kind <CHECKING|SAVINGS|CASH|CREDIT_CARD|CREDIT|LOAN|MORTGAGE>",
         "--opening-balance <text>",
         "--opening-date <date>",
         "--number <text>",

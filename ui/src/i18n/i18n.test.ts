@@ -31,6 +31,8 @@ const SAME_AS_ENGLISH = new Set([
   'de nav.export', 'de export.title', 'fr export.format', 'ro export.format',
   'es keys.groupGeneral', 'ro keys.groupGeneral', 'fr keys.groupActions', 'fr settings.notifications', 'fr debts.notifications',
   'de nav.sync', 'de phone.passphrase', 'de rec.confirmTitle', 'es rec.confirmTitle', 'fr rec.confirmTitle', 'it rec.confirmTitle', 'pt rec.confirmTitle', 'ro rec.confirmTitle', 'es common.no', 'it common.no',
+  // the menu behind the logo
+  'fr nav.menu', 'it nav.menu', 'pt nav.menu',
   'de sync.table.budgets', 'de sync.field.name', 'de sync.field.locale', 'fr sync.table.transactions', 'fr sync.table.budgets', 'fr sync.field.date', 'fr sync.field.description', 'fr sync.field.type', 'fr sync.field.locale', 'it sync.table.budgets', 'ro sync.field.locale',
   'fr nav.documents', 'fr docs.title', 'fr docs.kindImage', 'fr docs.kindTransaction',
   'fr sync.table.documents', 'fr sync.field.document', 'ro sync.table.documents', 'ro sync.field.document',
@@ -42,10 +44,17 @@ const SAME_AS_ENGLISH = new Set([
   'ro entry.tabTransfer',
   // a sentence made only of placeholders and symbols reads the same everywhere (docs/accounts-design.md, section 21)
   'de accounts.rateOf', 'es accounts.rateOf', 'fr accounts.rateOf', 'it accounts.rateOf', 'pt accounts.rateOf', 'ro accounts.rateOf',
-  'de accounts.inMain', 'es accounts.inMain', 'fr accounts.inMain', 'it accounts.inMain', 'pt accounts.inMain', 'ro accounts.inMain',
   'de accounts.rateLine', 'es accounts.rateLine', 'fr accounts.rateLine', 'it accounts.rateLine', 'pt accounts.rateLine', 'ro accounts.rateLine',
   'de accounts.labelIn', 'es accounts.labelIn', 'fr accounts.labelIn', 'it accounts.labelIn', 'pt accounts.labelIn', 'ro accounts.labelIn',
   'de entry.inMain', 'it entry.inMain',
+  // the stashes: a percent and a count of characters read the same in most languages, and "notes" is French as well (docs/stash-design.md, section 14)
+  'de stashes.percent', 'es stashes.percent', 'it stashes.percent', 'pt stashes.percent', 'ro stashes.percent',
+  'de stashes.noteCount', 'es stashes.noteCount', 'fr stashes.noteCount', 'it stashes.noteCount', 'pt stashes.noteCount', 'ro stashes.noteCount',
+  'fr stashes.notes',
+  // the columns of the list: "date" is French as well, and "d" is the short day in Spanish and Portuguese too
+  'fr stashes.dateHead', 'es stashes.daysShort', 'pt stashes.daysShort',
+  // "3.9 % per year": the rate and its words are placeholders (docs/loans-deposits-design.md, section 11)
+  'de accounts.rateShown', 'es accounts.rateShown', 'fr accounts.rateShown', 'it accounts.rateShown', 'pt accounts.rateShown', 'ro accounts.rateShown',
 ])
 
 test('no translation is empty or an untranslated copy of the English text', () => {

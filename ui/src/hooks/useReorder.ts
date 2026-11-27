@@ -21,7 +21,9 @@ type Drag = {
   /** How far the dragged row may go up and down. */
   lowest: number
   highest: number
+  startX: number
   startY: number
+  lastX: number
   lastY: number
   scroller: HTMLElement | null
   scrollStart: number
@@ -86,7 +88,7 @@ export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => v
 
     function begin() {
       if (!press) return
-      const { row, pointerId, y } = press
+      const { row, pointerId, x, y } = press
       press = null
       const rows = Array.from(list!.querySelectorAll<HTMLElement>(':scope > [data-reorder-id]'))
       const deleted = new Set((latest.current.items ?? []).filter((item) => item.deleted).map((item) => item.id))
@@ -106,7 +108,9 @@ export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => v
         order: rows.map((_, i) => i),
         lowest: boxes[0].top - boxes[at].top,
         highest: boxes[rows.length - 1].bottom - boxes[at].bottom,
+        startX: x,
         startY: y,
+        lastX: x,
         lastY: y,
         scroller,
         scrollStart: scroller?.scrollTop ?? 0,
@@ -194,6 +198,7 @@ export function useReorder(items: Item[] | null, onReorder: (ids: string[]) => v
     function onMove(event: PointerEvent) {
       if (press && event.pointerId === press.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > HOLD_SLOP) stopPress()
       if (drag && event.pointerId === drag.pointerId) {
+        drag.lastX = event.clientX
         drag.lastY = event.clientY
         update()
       }

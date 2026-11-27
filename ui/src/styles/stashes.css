@@ -1,0 +1,621 @@
+/* Stashes: the list, a stash's page, the money dialog, and the places of other pages that show a stash. Everything else on these screens is
+   the lists, cards, bars and charts of the other pages (primitives.css, dashboard.css, accounts.css). Colours are the app's tokens only. */
+
+/* -- the bar of a stash: a hairline track, a fill in the savings colour, full and green when the target is reached ------------------------- */
+.stash-bar {
+  --fill: var(--c-savings);
+  display: block;
+  flex: none;
+  width: 100%;
+  height: 0.5rem;
+  overflow: hidden;
+  background: var(--c-track);
+  box-shadow: inset 0 0 0 var(--hairline) var(--border);
+}
+
+.stash-bar.is-large {
+  height: 0.75rem;
+}
+
+.stash-fill {
+  display: block;
+  height: 100%;
+  background: var(--fill);
+  transition: width var(--t-med, 180ms) ease-out;
+}
+
+.stash-bar.is-reached {
+  --fill: var(--success);
+}
+
+.stash-bar.is-over {
+  --fill: var(--destructive);
+}
+
+/* -- what is below 0 -------------------------------------------------------------------------------------------------------------------- */
+.stash-saved.is-below,
+.stash-mini-figures.is-below {
+  color: var(--destructive);
+}
+
+/* -- the list: a tidy table on the computer (RowParts), flat rows on the phone ------------------------------------------------------------- */
+/* A ledger of columns, one value to a cell: the name, the account, what is saved, the bar with its figure (--meter: a bar of about 9rem and its
+   percent), the target, the date (a goal's target date, a deposit's maturity), where it stands, then the quick button and the "more" menu. A tidy table has
+   one line to a row: with less room a column goes (below), none is stacked under another. A row can be held and dragged, like an account: no text
+   selection or touch menu when it is held. The grip is there while the order can be changed (no filter chosen); the head's name starts where the names do.
+   --act is the room of the buttons: two of --control-sm. */
+.card-list.stash-list {
+  --act: calc(2 * var(--control-sm) + 0.25rem);
+  --meter: 12.5rem;
+  --grip-room: calc(var(--icon) + 0.5rem);
+  --cols: minmax(19ch, 3fr) minmax(15ch, 1fr) 11ch var(--meter) 10ch 9.5ch minmax(15ch, 1fr) var(--act);
+}
+
+.card-list.stash-list.no-account {
+  --cols: minmax(19ch, 3fr) 11ch var(--meter) 10ch 9.5ch minmax(15ch, 1fr) var(--act);
+}
+
+ul.card-list.stash-list > :is(li.card-item, li.list-head) {
+  column-gap: 0.75rem;
+}
+
+ul.card-list.stash-list > li.card-item {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.stash-list .row-grip {
+  width: var(--icon);
+  height: var(--icon);
+  flex: none;
+  margin-left: -0.625rem;
+  margin-right: 0.625rem;
+  color: var(--muted-foreground);
+  cursor: grab;
+}
+
+ul.card-list.stash-list.can-reorder > li.list-head > :first-child {
+  padding-left: var(--grip-room);
+}
+
+/* The archived ones, a group under the others in the same columns: no grip, so their names start where the others' do. */
+ul.card-list.stash-list.stash-archived > li.card-item > .cell-name {
+  padding-left: var(--grip-room);
+}
+
+/* What is saved and the target are the same figure in the same weight (normal, tabular), so neither stands out from the other. */
+ul.card-list.stash-list :is(.stash-saved, .stash-goal) {
+  font-size: 0.875rem;
+  font-weight: 400;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+ul.card-list.stash-list .stash-when {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A cell with nothing to say: a quiet dash, so the eye can skip it. */
+.stash-none {
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+
+/* The bar and its figure: a track that takes the room, the percent next to it in small grey numbers. */
+.stash-meter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.stash-meter > .stash-bar {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 2rem;
+}
+
+.stash-meter-figure {
+  flex: none;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+/* As wide as the longest figure ("100%", "365 d"), so the bars of all rows are as long as each other; the figure starts where its bar ends. */
+.stash-meter-figure {
+  width: 5ch;
+  text-align: left;
+}
+
+/* Where a stash stands: plain words to act on, quiet ones for nothing to do, green for good news, red for a warning. */
+.stash-list .tone-plain {
+  color: var(--foreground);
+}
+
+:is(.stash-list, .stash-phone) .tone-quiet {
+  color: var(--muted-foreground);
+}
+
+:is(.stash-list, .stash-phone) .tone-good {
+  color: var(--success);
+}
+
+:is(.stash-list, .stash-phone) .tone-late,
+:is(.stash-list, .stash-phone) .is-late {
+  color: var(--destructive);
+}
+
+/* The total under the rows: what they hold and their targets, set off by a solid line; not a row to open. */
+ul.card-list.stash-list > li.card-item.stash-total {
+  min-height: var(--row-min);
+  cursor: default;
+  border-top: var(--border-width) solid var(--border);
+}
+
+@media (hover: hover) {
+  ul.card-list.stash-list > li.card-item.stash-total:hover {
+    background: transparent;
+  }
+}
+
+.stash-total > .cell-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+ul.card-list.stash-list.can-reorder > li.stash-total > .cell-name {
+  padding-left: var(--grip-room);
+}
+
+/* The + (or return, or restore) beside the "more" button: low squares of --control-sm, so the rows stay low. The place of one that is not offered is as wide, so the others stay in line. */
+.stash-list .stash-step,
+.stash-list .cell-actions > .icon-slot {
+  flex: none;
+  width: var(--control-sm);
+  min-width: var(--control-sm);
+}
+
+.stash-step {
+  flex: none;
+  height: var(--control-sm);
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* With less room a column goes, never a line is added. In this order: the date, the account, where it stands, the target, the bar. The name and what is
+   saved stay at every width. Each width is what the columns of its row add up to (the row's padding and gaps too: with a character of 0.6em, 71 for
+   all eight) and a little more, so no row is wider than its list at any width, and the units are the list's own, so they follow the text size. Without the
+   account column the list starts one step in: it loses the date at 61.7em, where the one with an account has lost its account already. */
+@container (max-width: 71.5em) {
+  ul.card-list.stash-list:where(:not(.no-account)) > :is(li.card-item, li.list-head) {
+    --cols: minmax(19ch, 3fr) minmax(15ch, 1fr) 11ch var(--meter) 10ch minmax(15ch, 1fr) var(--act);
+  }
+
+  ul.card-list.stash-list:where(:not(.no-account)) :is(.stash-when, .head-date) {
+    display: none;
+  }
+}
+
+@container (max-width: 65em) {
+  ul.card-list.stash-list:where(:not(.no-account)) > :is(li.card-item, li.list-head) {
+    --cols: minmax(19ch, 3fr) 11ch var(--meter) 10ch minmax(15ch, 1fr) var(--act);
+  }
+
+  ul.card-list.stash-list :is(.stash-account, .head-account) {
+    display: none;
+  }
+}
+
+@container (max-width: 61.7em) {
+  ul.card-list.stash-list:where(.no-account) > :is(li.card-item, li.list-head) {
+    --cols: minmax(19ch, 3fr) 11ch var(--meter) 10ch minmax(15ch, 1fr) var(--act);
+  }
+
+  ul.card-list.stash-list:where(.no-account) :is(.stash-when, .head-date) {
+    display: none;
+  }
+}
+
+@container (max-width: 55.3em) {
+  ul.card-list.stash-list > :is(li.card-item, li.list-head) {
+    --cols: minmax(19ch, 3fr) 11ch var(--meter) 10ch var(--act);
+  }
+
+  ul.card-list.stash-list :is(.stash-status, .head-status) {
+    display: none;
+  }
+}
+
+@container (max-width: 45.5em) {
+  ul.card-list.stash-list > :is(li.card-item, li.list-head) {
+    --cols: minmax(19ch, 3fr) 11ch var(--meter) var(--act);
+  }
+
+  ul.card-list.stash-list :is(.stash-goal, .head-target) {
+    display: none;
+  }
+}
+
+@container (max-width: 38.8em) {
+  ul.card-list.stash-list > :is(li.card-item, li.list-head) {
+    --cols: minmax(5rem, 1fr) 11ch var(--act);
+  }
+
+  ul.card-list.stash-list :is(.stash-meter, .head-meter) {
+    display: none;
+  }
+}
+
+/* The archived ones are quiet: greyed. */
+ul.card-list > li.card-item.is-archived {
+  opacity: 0.7;
+}
+
+/* The phone: a thin bar under the name for a goal's progress (a deposit says its state in words there). */
+.stash-phone .row-toggle > .cell-meta > .stash-bar {
+  height: 0.25rem;
+  margin-top: 0.375rem;
+}
+
+/* The account, the kind and the status (a compact line with no labels) share a line on the phone, as wide as each other; with all three the account has
+   a line of its own, and the other two share the next. */
+html.is-phone .stashes-page .filter-bar {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+html.is-phone .stashes-page .filter-bar > .pick:first-child:nth-last-child(3) {
+  flex-basis: 100%;
+}
+
+html.is-phone .stashes-page .filter-bar > .pick {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+html.is-phone .stashes-page .filter-bar .pick-button {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* -- a small card on an account's page and on the dashboard ----------------------------------------------------------------------------- */
+.stash-mini-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.75rem;
+}
+
+html.is-phone .stash-mini-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.stash-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.625rem 0.75rem;
+  color: var(--foreground);
+  text-decoration: none;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+@media (hover: hover) {
+  .stash-mini:hover {
+    background: var(--muted);
+  }
+}
+
+/* The name at the left and the percent at the right of the first line, the figures under them. */
+.stash-mini-text {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.125rem 0.75rem;
+  min-width: 0;
+}
+
+.stash-mini-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stash-mini-percent {
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stash-mini-figures {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.stash-part-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+/* The dashboard card: the total, then up to three stashes in a column. */
+.dash-stashes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dash-stashes .stash-mini {
+  border: 0;
+  padding: 0;
+}
+
+/* -- one stash's page ---------------------------------------------------------------------------------------------------------------------- */
+/* The history, one value to a cell: the day, the note, the transfer that came with it, the amount, what the stash held after, then edit. One line to
+   a row; with less room the transfer goes (under 50em), then what the stash held after (under 38em). */
+.card-list.stash-history {
+  --cols: 12ch minmax(8rem, 1.6fr) minmax(10rem, 1.2fr) 14ch 14ch 2.25rem;
+}
+
+ul.card-list.stash-history > li.card-item {
+  cursor: pointer;
+}
+
+.stash-history .stash-held {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.stash-history .stash-held.is-below {
+  color: var(--destructive);
+}
+
+.stash-history .cell-actions {
+  min-width: 2.25rem;
+}
+
+.stash-note {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stash-history .cell-amount.is-income {
+  color: var(--success);
+}
+
+.stash-history .cell-amount.is-expense {
+  color: var(--destructive);
+}
+
+/* A link in a row that is itself a click target: it looks like a link and is its own stop. */
+.stash-link {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 0;
+  text-align: left;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.stash-transfer {
+  min-width: 0;
+  overflow: hidden;
+}
+
+@container (max-width: 50em) {
+  ul.card-list.stash-history > :is(li.card-item, li.list-head) {
+    --cols: 12ch minmax(8rem, 1fr) 14ch 14ch 2.25rem;
+  }
+
+  ul.card-list.stash-history :is(.stash-transfer, .head-transfer) {
+    display: none;
+  }
+}
+
+@container (max-width: 38em) {
+  ul.card-list.stash-history > :is(li.card-item, li.list-head) {
+    --cols: 12ch minmax(6rem, 1fr) 14ch 2.25rem;
+  }
+
+  ul.card-list.stash-history :is(.stash-held, .head-after) {
+    display: none;
+  }
+}
+
+/* The warning under what the account has: the stashes hold more than the account has. */
+.stash-warn {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--destructive);
+}
+
+/* -- the money dialog ----------------------------------------------------------------------------------------------------------------------- */
+.stash-money {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.stash-money-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+/* An amount that is not typed (all that is saved, for the break of a deposit; the amount of an entry of a deposit that is broken). */
+.stash-money-form input[readonly] {
+  color: var(--muted-foreground);
+  background: var(--muted);
+  cursor: default;
+}
+
+.stash-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: -0.25rem;
+}
+
+.stash-chip {
+  min-height: 0;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  background: transparent;
+  border: var(--border-width) solid var(--input);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .stash-chip:hover {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+}
+
+.stash-chip[aria-pressed='true'] {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 var(--hairline) var(--primary);
+}
+
+/* The live bar: the stash before (solid) and after (striped: green for money in, red for money out), under it what it would hold. */
+.stash-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.stash-track {
+  display: flex;
+  width: 100%;
+  height: 0.625rem;
+  overflow: hidden;
+  background: var(--c-track);
+  box-shadow: inset 0 0 0 var(--hairline) var(--border);
+}
+
+.stash-solid {
+  flex: none;
+  height: 100%;
+  background: var(--c-savings);
+  transition: width var(--t-fast) ease-out;
+}
+
+.stash-stripe {
+  flex: none;
+  height: 100%;
+  background: repeating-linear-gradient(135deg, var(--success) 0 0.1875rem, transparent 0.1875rem 0.375rem);
+  transition: width var(--t-fast) ease-out;
+}
+
+.stash-track.is-take .stash-stripe,
+.stash-track.is-broken .stash-stripe {
+  background: repeating-linear-gradient(135deg, var(--destructive) 0 0.1875rem, transparent 0.1875rem 0.375rem);
+}
+
+.stash-after {
+  margin: 0;
+  min-height: 1.4em;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.stash-after.is-broken {
+  color: var(--destructive);
+}
+
+/* "n/200" under the note, at the right. */
+.stash-count {
+  align-self: flex-end;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.stash-delete-transfer {
+  margin-top: 0.75rem;
+}
+
+/* A stash's dialog: the target date is a button until a date is chosen, then the picker and a button that clears it. */
+.stash-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stash-date-choose {
+  align-self: flex-start;
+}
+
+.field-error {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--destructive);
+}
+
+/* The button that deletes sits at the left of the row of buttons of a dialog, away from the two answers. */
+.modal-actions > .modal-lead {
+  margin-right: auto;
+}
+
+/* A title over an empty list's hint. */
+.empty-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* The dashed line at a stash's target on its chart. */
+.target-line {
+  stroke: var(--muted-foreground);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+/* An account's page: the part that holds its stashes. */
+.acct-stashes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.acct-stashes > .debts-heading {
+  margin: 0;
+}
+
+.acct-stashes > .debts-heading a {
+  color: inherit;
+  text-decoration: none;
+}

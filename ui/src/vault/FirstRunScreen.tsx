@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { currencyOptions } from '../api/currencies'
 import { cleanCategoryName } from '../api/categories'
 import { saveSenderName } from '../lib/senderName'
-import { formatExample, localeOptions, zoneOptions } from '../api/locales'
+import { formatExamples, localeOptions, zoneOptions } from '../api/locales'
+import Facts from '../components/Facts'
 import Dropdown from '../components/Dropdown'
 import { useI18n } from '../i18n/context'
 import type { MessageKey } from '../i18n/en'
@@ -15,7 +16,7 @@ import PasswordField from './PasswordField'
 import RecoveryKeyPanel from './RecoveryKeyPanel'
 import RestoreFromBackup from './RestoreFromBackup'
 import { defaultSettings, isCurrency, normalizeCurrency, passphraseProblem } from './rules'
-import Button from '../components/ui/Button'
+import { Button } from '../components/ui/button'
 import { Illustration, Logo, type PictureName } from '../components/ui/Pixel'
 
 /** What the app does, on the first screen. */
@@ -204,7 +205,10 @@ export default function FirstRunScreen({ onDone }: { onDone: () => void }) {
             placeholder={t('welcome.currencyChoose')}
           />
           <Dropdown label={t('welcome.format')} value={locale} options={localeOptions(locale)} onChange={setLocale} />
-          <p className="hint">{formatExample(locale, currency || 'EUR')}</p>
+          {(() => {
+            const sample = formatExamples(locale, currency || 'EUR')
+            return <Facts items={[{ label: t('tx.amount'), value: sample.amount }, { label: t('report.date'), value: sample.date }]} />
+          })()}
           <Dropdown label={t('welcome.timezone')} value={timezone} options={zoneOptions(timezone)} onChange={setTimezone} />
         </section>
 

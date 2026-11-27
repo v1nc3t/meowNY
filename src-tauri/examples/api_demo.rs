@@ -58,6 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     })?;
     seeded?;
+    meowny_lib::seed::seed_documents(&vault)?;
 
     let make = |name: &str, scope| {
         let input = NewToken { name: name.into(), scope, expires_in_days: 1 };

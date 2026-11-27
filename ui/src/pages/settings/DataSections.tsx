@@ -3,14 +3,14 @@ import { errorText, vault, type BackupSchedule } from '../../vault/api'
 import { whenText } from '../../api/locales'
 import { useT } from '../../i18n/context'
 import Dropdown from '../../components/Dropdown'
-import Button from '../../components/ui/Button'
+import { Button } from '../../components/ui/button'
 import PasswordField from '../../vault/PasswordField'
 import RecoveryKeyPanel from '../../vault/RecoveryKeyPanel'
 import { backupDoneLines, backupPassphraseProblem, BACKUPS_KEPT, includeDocumentsByDefault, type Settings } from '../../vault/rules'
 import { documents, type LibrarySize } from '../../api/documents'
 import { formatSize } from '../../lib/bytes'
 import type { Say } from '../../hooks/toast'
-import { Actions, Field, Rows, SwitchRow } from './layout'
+import { Actions, Field, Row, Rows, Subtitle, SwitchRow } from './layout'
 
 const EVERY_CHOICES = [
   { days: 1, labelKey: 'settings.scheduleDaily' },
@@ -150,7 +150,7 @@ export function BackupSection({ settings, say }: { settings: Settings; say: Say 
   return (
     <div className="settings-stack">
       {/* The three forms ask for the same passphrase, so each says which one it is. */}
-      <h3 className="settings-subtitle">{t('settings.backupManual')}</h3>
+      <Subtitle>{t('settings.backupManual')}</Subtitle>
       <form className="settings-form" onSubmit={onBackup}>
         <Rows>
           <Field>
@@ -168,20 +168,32 @@ export function BackupSection({ settings, say }: { settings: Settings; say: Say 
         </Actions>
       </form>
 
-      <h3 className="settings-subtitle">{t('settings.backupScheduled')}</h3>
+      <Subtitle
+        // how many backups are kept, and how much room the documents take in them
+        help={schedule?.includeDocuments ? <p>{t('settings.scheduleDocuments', { keep: BACKUPS_KEPT, size: formatSize((library?.heldBytes ?? 0) * BACKUPS_KEPT, locale) })}</p> : undefined}
+      >
+        {t('settings.backupScheduled')}
+      </Subtitle>
+      {/* what is scheduled now: a row for each thing, with the time of the last backup in red when it failed */}
+      {schedule && (
+        <Rows>
+          <Row label={t('settings.scheduleEvery')}>
+            <span className="settings-value">{everyLabel(schedule.everyDays)}</span>
+          </Row>
+          <Row label={t('settings.storedIn')}>
+            <span className="settings-value">{schedule.folder}</span>
+          </Row>
+          {schedule.lastAttemptAt && (
+            <Row label={t(schedule.lastOk ? 'settings.lastBackup' : 'settings.lastBackupFailed')}>
+              <span className={schedule.lastOk ? 'settings-value' : 'settings-value is-failed'}>{whenText(schedule.lastAttemptAt, locale, timezone)}</span>
+            </Row>
+          )}
+          <Row label={t('nav.documents')}>
+            <span className="settings-value">{t(schedule.includeDocuments ? 'common.yes' : 'common.no')}</span>
+          </Row>
+        </Rows>
+      )}
       <form className="settings-form" onSubmit={onSchedule}>
-        {schedule && (
-          <p className="hint">
-            {t('settings.scheduleOn', { every: everyLabel(schedule.everyDays), folder: schedule.folder })}{' '}
-            {schedule.lastAttemptAt &&
-              t(schedule.lastOk ? 'settings.scheduleLast' : 'settings.scheduleFailed', {
-                time: whenText(schedule.lastAttemptAt, locale, timezone),
-              })}{' '}
-            {schedule.includeDocuments
-              ? t('settings.scheduleDocuments', { keep: BACKUPS_KEPT, size: formatSize((library?.heldBytes ?? 0) * BACKUPS_KEPT, locale) })
-              : t('settings.scheduleNoDocuments')}
-          </p>
-        )}
         <Rows>
           <Field>
             <PasswordField label={t('settings.backupPassphrase')} name="schedule_passphrase" />
@@ -200,18 +212,18 @@ export function BackupSection({ settings, say }: { settings: Settings; say: Say 
           </Field>
         </Rows>
         <Actions>
-          <Button type="submit" disabled={busy}>
-            {t('settings.scheduleStart')}
-          </Button>
           {schedule && (
             <Button variant="outline" onClick={() => void onStopSchedule()}>
               {t('settings.scheduleStop')}
             </Button>
           )}
+          <Button type="submit" disabled={busy}>
+            {t('settings.scheduleStart')}
+          </Button>
         </Actions>
       </form>
 
-      <h3 className="settings-subtitle">{t('settings.restoreTitle')}</h3>
+      <Subtitle>{t('settings.restoreTitle')}</Subtitle>
       <form className="settings-form settings-danger" onSubmit={onRestore}>
         <p className="hint">{t('settings.restoreHint')}</p>
         <Rows>
@@ -258,9 +270,11 @@ export function DataSection({ say }: { say: Say }) {
   return (
     <div className="settings-stack">
       {location && (
-        <p className="hint">
-          {t('settings.storedIn')} <code>{location}</code>
-        </p>
+        <Rows>
+          <Row label={t('settings.storedIn')}>
+            <span className="settings-value">{location}</span>
+          </Row>
+        </Rows>
       )}
       <form className="settings-form settings-danger" onSubmit={onWipe}>
         <p className="hint">{t('settings.deleteHint')}</p>

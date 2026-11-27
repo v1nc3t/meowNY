@@ -24,17 +24,17 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(2.5rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(2.5rem + env(safe-area-inset-bottom, 0rem));
 }
 
-/* The card is the one pixel frame of the app, like a game's title screen: a 2px line in the text colour with its corner pixels left
+/* The card is the one pixel frame of the app, like a game's title screen: a thin line (--hairline-2) in the text colour with its corner pixels left
    out, on a hard shadow (box-shadows, no border), here for every password screen. */
 .gate > form,
 .gate > .panel {
   display: flex;
   flex-direction: column;
   width: min(100%, 24rem);
-  margin: 2px 6px 6px 2px;
+  margin: var(--hairline-2) 0.375rem 0.375rem var(--hairline-2);
   padding: 1.5rem;
   gap: 1rem;
   color: var(--card-foreground);
@@ -42,12 +42,12 @@
   border: 0;
   border-radius: var(--radius-xl);
   box-shadow:
-    0 -2px 0 var(--foreground),
-    0 2px 0 var(--foreground),
-    -2px 0 0 var(--foreground),
-    2px 0 0 var(--foreground),
-    6px 4px 0 var(--press-shadow),
-    4px 6px 0 var(--press-shadow);
+    0 calc(var(--hairline-2) * -1) 0 var(--foreground),
+    0 var(--hairline-2) 0 var(--foreground),
+    calc(var(--hairline-2) * -1) 0 0 var(--foreground),
+    var(--hairline-2) 0 0 var(--foreground),
+    0.375rem 0.25rem 0 var(--press-shadow),
+    0.25rem 0.375rem 0 var(--press-shadow);
 }
 
 .gate .brand-mark {
@@ -66,7 +66,7 @@
 .gate h1 {
   margin: 0;
   font-size: var(--pixel-md);
-  line-height: 33px;
+  line-height: 1.5;
 }
 
 /* The buttons of a screen are as wide as the card. */
@@ -91,7 +91,7 @@
 }
 
 html.is-phone .gate:has(> .app-footer) {
-  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0rem));
 }
 
 .gate > .app-footer {
@@ -119,7 +119,7 @@ html.is-phone .gate:has(> .app-footer) {
 .decrypting-line {
   width: 14rem;
   max-width: 100%;
-  height: 2px;
+  height: var(--hairline-2);
   overflow: hidden;
   background: var(--border);
 }
@@ -215,7 +215,7 @@ html.is-phone .gate:has(> .app-footer) {
   letter-spacing: 0.08em;
   color: var(--foreground);
   background: var(--muted);
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-md);
   overflow-wrap: anywhere;
   user-select: all;
@@ -238,7 +238,7 @@ html.is-phone .gate:has(> .app-footer) {
 .settings-block {
   width: 100%;
   min-width: 0;
-  margin: 0 0 1rem;
+  margin: 0 0 var(--page-gap);
   padding: 0;
   background: transparent;
   border: 0;
@@ -246,16 +246,16 @@ html.is-phone .gate:has(> .app-footer) {
   break-inside: avoid;
 }
 
-.settings-block .ui-card-content {
+.settings-block [data-slot='card-content'] {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--page-gap);
 }
 
 .settings-block form {
   width: 100%;
   margin: 0;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 /* This page is the phone's: a button is as wide as the fields above it, one under the other. */
@@ -277,92 +277,89 @@ html.is-phone .gate:has(> .app-footer) {
   margin: 0;
 }
 
-/* Settings page. Wide: a list of sections on the left, the chosen section on the right, across the whole width: the lines and rows
-   run to the right edge, while a control keeps a sensible width. Narrow: the list is a row of tabs above the section. Phone: the
-   list is the page, and a section opens in place of it. */
+/* Settings page. Wide: a list of sections at the left, with the look of the sidebar's rows (shell.css), and the chosen section at the right: its heading
+   (the small grey group heading of the lists) and under it its rows in one box with a thin line, like a table of the other pages: the name of a row small
+   and grey at the left, its one control or value in the column at the right, a hairline between the rows. The buttons of a form are under its box, at the
+   right, the main one last. Narrow: the list is a row of tabs above the section. Phone: the list is the page, and a section opens in place of it, as a flat
+   list with no box. */
 .settings-page {
-  /* The name of a row is a third of the section, but 14 to 26rem (cqw: of the section, so a row inside a box has the same). A control is
-     at most --control-max wide. */
-  --label-col: clamp(14rem, 30cqw, 26rem);
+  /* The name of a row is 12 to 22rem wide (cqw: of the section, so a row inside a box has the same). A control is at most --control-max wide. */
+  --label-col: clamp(12rem, 28cqw, 22rem);
   --control-max: 28rem;
 }
 
 .settings-layout {
   display: grid;
   grid-template-columns: 14rem minmax(0, 1fr);
-  gap: 2.5rem;
+  gap: var(--space-6);
   align-items: start;
   /* The pane is as tall as the page: the rows keep their height instead of sharing the rest. */
   align-content: start;
 }
 
+/* The rows of the list are the sidebar's `.nav-item`s: quiet text, and the section you are on in bold with a green mark. */
 .settings-nav {
   position: sticky;
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: var(--space-1);
 }
 
-.settings-nav-item {
-  display: flex;
-  align-items: center;
-  min-height: 2.5rem;
-  padding: 0.375rem 0.875rem;
-  font-size: 0.9375rem;
-  color: var(--muted-foreground);
-  text-decoration: none;
-  border-radius: var(--radius-md);
-}
-
-@media (hover: hover) {
-  .settings-nav-item:hover {
-    color: var(--foreground);
-    background: var(--accent);
-  }
-}
-
-/* The section you are on is marked like the page you are on in the sidebar: bold, with a green line on the left. */
-.settings-nav-item[aria-current='page'] {
-  font-weight: 600;
-  color: var(--foreground);
-  box-shadow: inset 2px 0 0 var(--primary);
+.settings-nav > .nav-item {
+  flex: none;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-2);
   width: 100%;
   min-width: 0;
   container-type: inline-size;
 }
 
-.settings-section-head h2 {
-  margin: 0;
-}
-
-.settings-back {
-  display: inline-flex;
+/* The heading of the section starts where the first row of the list does. */
+.settings-section-head {
+  display: flex;
   align-items: center;
-  gap: 0.25rem;
-  margin-bottom: 0.5rem;
-  color: var(--muted-foreground);
-  font-size: 0.875rem;
-  text-decoration: none;
+  gap: var(--space-1);
+  min-height: var(--control);
 }
 
-/* What a section holds: forms and rows, one below the other. */
+.settings-section-head > .acct-group {
+  margin: 0 var(--space-2) 0 0;
+}
+
+/* What a section holds when it has more than one part: the parts (a heading, a box, its buttons), one below the other; a heading has the room
+   of a group over it and the room of a heading under it. */
 .settings-stack {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-3);
   min-width: 0;
 }
 
-/* Forms of one section are told apart by the room between them. */
-.settings-stack > .settings-form + .settings-form {
-  margin-top: 0.5rem;
+.settings-subhead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: calc(var(--group-gap) - var(--space-3)) 0 calc(var(--space-2) - var(--space-3));
+}
+
+.settings-subhead > .acct-group {
+  margin: 0;
+}
+
+.settings-stack > .settings-subhead:first-child {
+  margin-top: 0;
+}
+
+/* Two boxes one after the other (the rows of what is set, then the form that sets it) are told apart by the room between them. */
+.settings-stack > :is(.settings-rows, .card-list) + :is(.settings-rows, .settings-form, .card-list) {
+  margin-top: var(--space-2);
 }
 
 .settings-form {
@@ -371,13 +368,17 @@ html.is-phone .gate:has(> .app-footer) {
   align-items: stretch;
   width: 100%;
   margin: 0;
-  gap: 1rem;
+  gap: var(--space-3);
 }
 
-/* The rows: a line above the first, and one under each. */
+/* The rows: one box, like the tables of the other pages (primitives.css: `.card-list`), a hairline between the rows. */
 .settings-rows {
   width: 100%;
-  border-top: 1px solid var(--border);
+  overflow: hidden;
+  color: var(--card-foreground);
+  background: var(--card);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
 .settings-row {
@@ -385,11 +386,15 @@ html.is-phone .gate:has(> .app-footer) {
   display: grid;
   grid-template-columns: var(--row-cols);
   align-items: center;
-  gap: 0.5rem 2rem;
+  gap: var(--space-2) var(--space-5);
   width: 100%;
-  min-height: 3.5rem;
-  padding: 0.875rem 0;
-  border-bottom: 1px solid var(--border);
+  min-height: var(--row-min);
+  padding: var(--space-2) var(--space-4);
+  border-top: var(--hairline) dashed var(--border);
+}
+
+.settings-row:first-child {
+  border-top: 0;
 }
 
 /* A section with no room for a name beside its control (a narrow window with the sidebar open): the name goes above the control, which
@@ -402,20 +407,21 @@ html.is-phone .gate:has(> .app-footer) {
 
   .settings-row.is-switch {
     --row-cols: minmax(0, 1fr) auto;
-    column-gap: 1rem;
+    column-gap: var(--space-4);
   }
 }
 
-/* A field brings its own label; it fills the row and lines up with the others. */
+/* A field brings its own label; it fills the row and lines up with the others. The label is the row's name: small and grey. */
 .settings-row > label,
 .settings-row > .pick.field,
 .settings-row > details > label {
   display: grid;
   grid-template-columns: var(--row-cols);
   align-items: center;
-  gap: 0.5rem 2rem;
+  gap: var(--space-2) var(--space-5);
   width: 100%;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
 }
 
 .settings-row > label,
@@ -425,12 +431,13 @@ html.is-phone .gate:has(> .app-footer) {
 }
 
 .settings-row > details > summary {
-  padding: 0.25rem 0;
-  font-size: 0.875rem;
+  padding: var(--space-1) 0;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
 }
 
 .settings-row > details[open] > summary {
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--space-2);
 }
 
 .settings-row > details > label {
@@ -441,24 +448,14 @@ html.is-phone .gate:has(> .app-footer) {
   width: 100%;
   max-width: var(--control-max);
   font-size: 0.875rem;
-}
-
-.settings-row-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.settings-row-label {
-  font-size: 0.9375rem;
-  line-height: 1.4;
   color: var(--foreground);
 }
 
-.settings-row-hint {
-  font-size: 0.875rem;
-  line-height: 1.5;
+/* The name of a row: small and grey, as the heads of the tables. */
+.settings-row-label {
+  min-width: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
   color: var(--muted-foreground);
   overflow-wrap: anywhere;
 }
@@ -467,7 +464,7 @@ html.is-phone .gate:has(> .app-footer) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 0.75rem;
+  gap: var(--space-2) var(--space-3);
   min-width: 0;
   max-width: var(--control-max);
 }
@@ -477,9 +474,15 @@ html.is-phone .gate:has(> .app-footer) {
 }
 
 .settings-value {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: var(--foreground);
   overflow-wrap: anywhere;
+}
+
+/* A figure beside a slider: as wide as its widest (100%), so the slider does not change length while it moves. */
+.settings-value.is-figure {
+  min-width: 4ch;
+  text-align: right;
 }
 
 /* A yes-or-no row is a label: the whole row can be pressed. */
@@ -494,7 +497,7 @@ html.is-phone .gate:has(> .app-footer) {
   min-width: 2.25rem;
   height: 1.25rem;
   background: var(--input);
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-md);
   transition: background-color 0.15s, border-color 0.15s;
 }
@@ -502,10 +505,10 @@ html.is-phone .gate:has(> .app-footer) {
 .settings-rows input.settings-switch[type='checkbox']::before {
   content: '';
   position: absolute;
-  top: 1px;
-  left: 1px;
-  width: calc(1.25rem - 4px);
-  height: calc(1.25rem - 4px);
+  top: var(--hairline);
+  left: var(--hairline);
+  width: calc(1.25rem - var(--hairline) * 4);
+  height: calc(1.25rem - var(--hairline) * 4);
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--muted-foreground);
@@ -528,9 +531,12 @@ html.is-phone .gate:has(> .app-footer) {
 }
 
 /* The text size slider: a flat track and a square knob in the main colour, like the switch. The app runs in WebKit and Chromium web views.
-   Its 2px margin of its own is gone, so the track runs from edge to edge of the fields above it. */
+   Its small margin of its own is gone, so the track runs from edge to edge of the fields above it. */
 .settings-rows input.settings-range {
   appearance: none;
+  flex: 1 1 8rem;
+  width: auto;
+  min-width: 0;
   margin-inline: 0;
   padding: 0;
   border: 0;
@@ -540,7 +546,7 @@ html.is-phone .gate:has(> .app-footer) {
 }
 
 .settings-range::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 0.25rem;
   background: var(--input);
 }
 
@@ -548,16 +554,18 @@ html.is-phone .gate:has(> .app-footer) {
   appearance: none;
   width: 1rem;
   height: 1rem;
-  margin-top: calc(2px - 0.5rem);
+  margin-top: -0.375rem;
   background: var(--primary);
   border: 0;
   border-radius: 0;
 }
 
+/* The buttons of a form: under its box, at the right, the main one last (the order of the buttons of a dialog). */
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }
 
 .settings-section code {
@@ -574,25 +582,22 @@ html.is-phone .gate:has(> .app-footer) {
   font-size: 0.875rem;
 }
 
-/* What cannot be undone: a red outline round the form. Its edge (the padding and the line) takes room from the name column, so the fields
-   inside start where the fields of the rows outside it do. */
-.settings-danger {
-  --label-col: calc(clamp(14rem, 30cqw, 26rem) - 1rem - 1px);
-  padding: 1rem;
-  border: 1px solid var(--destructive);
-  border-radius: var(--radius-lg);
+/* What cannot be undone: its one line of warning over the box, and the box and the button in red. */
+.settings-danger .settings-rows {
+  border-color: var(--destructive);
 }
 
+/* A title inside a panel (the six digits to compare). */
 .settings-subtitle {
-  margin: 0.5rem 0 -0.5rem;
+  margin: 0;
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1.4;
   color: var(--foreground);
 }
 
-.settings-stack > .settings-subtitle:first-child {
-  margin-top: 0;
+.settings-value.is-failed {
+  color: var(--destructive);
 }
 
 /* The foot of the settings (components/AppFooter.tsx), across the whole page. The page lines its children up at the start, so the
@@ -613,8 +618,11 @@ html.is-phone .gate:has(> .app-footer) {
 /* The tokens: the name takes what the rest leaves (a long one wraps), the access and each time are columns in ch (the width of a character
    of 1rem: "read and write" is 14 characters and "19 Dec 2026, 10:30" 18, of 0.875rem), and the last column is as wide as its button (the
    head has a hidden copy of the word, so both are the same in every language). The columns need 52em; a narrower table is lines (below). */
+/* The access tokens, one value to a cell: the name takes what the rest leaves, then its access, when it expires ("expired 1 Jun 2026, 11:30" is 25
+   characters of 0.875rem), when it was last used, and the button that revokes it with the chevron that opens the details. One line to a row: with less
+   room the last use goes (under 52em), then the access (under 40em); the details have them. */
 .card-list.token-table {
-  --cols: minmax(0, 1fr) 13ch 17ch 17ch max-content;
+  --cols: minmax(0, 1fr) 13ch 22ch 17ch max-content;
 }
 
 ul.card-list.token-table > li.card-item,
@@ -622,36 +630,51 @@ ul.card-list.token-table > li.list-head {
   column-gap: 0.75rem;
 }
 
-.token-table .cell-name > .card-name {
-  white-space: normal;
-  overflow-wrap: anywhere;
+@container (max-width: 52em) {
+  ul.card-list.token-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(0, 1fr) 13ch 22ch max-content;
+  }
+
+  ul.card-list.token-table :is(.token-used, .head-used) {
+    display: none;
+  }
 }
 
-.token-table .head-spacer {
-  padding-inline: calc(0.75rem + 1px);
-  font-size: 0.875rem;
-  visibility: hidden;
+@container (max-width: 40em) {
+  ul.card-list.token-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(0, 1fr) 22ch max-content;
+  }
+
+  ul.card-list.token-table :is(.token-scope, .head-scope) {
+    display: none;
+  }
 }
 
-/* The paired phones: the name takes what the rest leaves. Each date is a column of 17ch (a column in ch is the width of a character of 1rem,
-   and "20 Oct 2026, 11:30" is 18 characters of 0.875rem), so a date is on one line, and the button is as wide as "entfernen", the longest
-   of "remove" in the languages. Longer dates (with AM and PM) wrap at their comma. */
+/* The paired phones, one value to a cell: the name takes what the rest leaves, then when it was paired, its last sync (each 19ch: "20 Oct 2026, 11:30" is 18
+   characters of 0.875rem), the changes waiting, and the button that removes it. One line to a row: with less room the day it was paired goes (under 52em), then the
+   changes waiting (under 40em). */
 .card-list.device-table {
-  --cols: minmax(0, 1fr) 17ch 17ch 7rem;
+  --cols: minmax(0, 1fr) 19ch 19ch 9ch 2.25rem;
 }
 
-.token-table .cell-sub,
-.token-table .cell-sub-end,
-.device-table .cell-sub,
-.device-table .cell-sub-end {
-  overflow: visible;
-  white-space: normal;
+@container (max-width: 52em) {
+  ul.card-list.device-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(0, 1fr) 19ch 9ch 2.25rem;
+  }
+
+  ul.card-list.device-table :is(.device-paired, .head-paired) {
+    display: none;
+  }
 }
 
-.cell-extra {
-  min-width: 0;
-  font-size: 0.875rem;
-  color: var(--muted-foreground);
+@container (max-width: 40em) {
+  ul.card-list.device-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(0, 1fr) 19ch 2.25rem;
+  }
+
+  ul.card-list.device-table :is(.device-waiting, .head-waiting) {
+    display: none;
+  }
 }
 
 /* The question to remove a phone is under its row: the words at the left, the two answers at the right, where the button of the row above
@@ -673,71 +696,6 @@ ul.card-list.token-table > li.list-head {
   margin-left: auto;
 }
 
-/* A table with no room for its columns: no head, and a row is the name with its button, then a line for each of the others, which say
-   what they are (the generic rules for 40em, in primitives.css, do the same with two lines). */
-@container (max-width: 52em) {
-  ul.card-list.token-table > li.list-head {
-    display: none;
-  }
-
-  ul.card-list.token-table > li.list-head + li {
-    border-top: 0;
-  }
-
-  ul.card-list.token-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'name actions'
-      'sub sub'
-      'sub-end sub-end'
-      'extra extra';
-    row-gap: 0;
-  }
-
-  .token-table .cell-name {
-    grid-area: name;
-  }
-
-  .token-table .cell-sub {
-    grid-area: sub;
-  }
-
-  .token-table .cell-sub-end {
-    grid-area: sub-end;
-    text-align: left;
-  }
-
-  .token-table .cell-extra {
-    grid-area: extra;
-  }
-
-  .token-table .cell-actions {
-    grid-area: actions;
-  }
-
-  .token-table [data-label]::before {
-    content: attr(data-label) ' ';
-  }
-}
-
-@container (max-width: 40em) {
-  ul.card-list.device-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'name actions'
-      'sub sub'
-      'sub-end sub-end';
-  }
-
-  ul.card-list.device-table .cell-sub-end {
-    text-align: left;
-  }
-
-  .device-table [data-label]::before {
-    content: attr(data-label) ' ';
-  }
-}
-
 .settings-section .ui-badge {
   max-width: 100%;
   white-space: normal;
@@ -757,51 +715,49 @@ ul.card-list.token-table > li.list-head {
 
   .settings-row.is-switch {
     --row-cols: minmax(0, 1fr) auto;
-    column-gap: 1rem;
+    column-gap: var(--space-4);
   }
 
   .settings-layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: 1rem;
+    gap: var(--space-4);
   }
 
   .settings-nav {
     z-index: 2;
     flex-direction: row;
-    gap: 0.25rem;
-    padding-bottom: 0.5rem;
+    gap: var(--space-1);
+    padding-bottom: var(--space-2);
     overflow-x: auto;
     white-space: nowrap;
     background: var(--background);
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--hairline) solid var(--border);
     scrollbar-width: thin;
   }
 
-  .settings-nav-item {
+  .settings-nav > .nav-item {
     flex: 0 0 auto;
+    width: auto;
   }
 
   /* In a row of tabs the mark is a line under the one you are on. */
-  .settings-nav-item[aria-current='page'] {
-    box-shadow: inset 0 -2px 0 var(--primary);
+  .settings-nav > .nav-item.active {
+    box-shadow: inset 0 calc(var(--hairline-2) * -1) 0 var(--primary);
   }
 }
 
-/* The phone: a grouped list of sections, then one section at a time with fields stacked and full width. The foot ends the page: at
-   the bottom when the page is short, after the last row when it is long. */
+/* The phone: a flat list of sections (a hairline between the rows, no box, as the lists of the other pages), then one section at a time with
+   its rows stacked, the name over the control, and its buttons at the end. The foot ends the page: at the bottom when the page is short, after
+   the last row when it is long. */
 .settings-page.on-phone {
   --control-max: none;
-}
-
-.settings-page.on-phone .settings-row {
-  --row-cols: minmax(0, 1fr);
 }
 
 .settings-page.on-phone .settings-layout {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 1rem;
+  gap: var(--page-gap);
 }
 
 .settings-page.on-phone .settings-layout > * {
@@ -809,7 +765,7 @@ ul.card-list.token-table > li.list-head {
 }
 
 /* A phone has overlay scroll bars: no wide gutter on the right, so the list is as far from the edge on both sides. These pages have no round
-   add button, so the room that the lists keep under their last row for it is not kept here: the foot sits right above the tabs. (The long
+   add button, so the room that the lists keep under their last row for it is not kept here: the foot ends the page. (The long
    selector is to be above the lists' rule in phone.css.) */
 .app-shell.is-phone .app-main > main > section.settings-page > .tx-pane.wide {
   padding-right: var(--edge);
@@ -822,66 +778,81 @@ ul.card-list.token-table > li.list-head {
 }
 
 .settings-list {
-  overflow: hidden;
-  color: var(--card-foreground);
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
 }
 
 .settings-list-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: var(--space-3);
   min-height: 3.25rem;
-  padding: 0 1rem;
-  font-size: 0.9375rem;
+  padding: 0;
+  font-size: 1rem;
   color: var(--foreground);
   text-decoration: none;
-  border-top: 1px solid var(--border);
+  border-top: var(--border-width) solid var(--border);
 }
 
-.settings-list-item:first-child {
-  border-top: 0;
+.settings-list-item:last-child {
+  border-bottom: var(--border-width) solid var(--border);
 }
 
 .settings-list-item:active {
-  background: var(--accent);
+  background: var(--muted);
 }
 
+/* The chevron of the rows that open (primitives.css), turned to the right: this row opens the next screen. */
 .settings-chevron {
-  font-size: 1.5rem;
-  line-height: 1;
+  width: var(--icon);
+  height: var(--icon);
+  flex: none;
   color: var(--muted-foreground);
+  transform: rotate(-90deg);
 }
 
-.settings-page.on-phone .settings-back {
-  min-height: 2.75rem;
-  margin-bottom: 0;
-  font-size: 1rem;
+.settings-page.on-phone .settings-section {
+  gap: var(--space-3);
+}
+
+.settings-page.on-phone .settings-stack {
+  gap: var(--space-3);
+}
+
+.settings-page.on-phone .settings-rows {
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .settings-page.on-phone .settings-row {
-  gap: 0.5rem;
+  gap: var(--space-2);
   min-height: 3.25rem;
+  padding: var(--space-3) 0;
+  border-top: var(--border-width) solid var(--border);
+}
+
+.settings-page.on-phone .settings-row:last-child {
+  border-bottom: var(--border-width) solid var(--border);
 }
 
 .settings-page.on-phone .settings-row.is-switch {
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .settings-page.on-phone .settings-row-control {
   width: 100%;
 }
 
-.settings-page.on-phone .settings-actions {
-  flex-direction: column;
+.settings-page.on-phone .settings-danger .settings-rows .settings-row:first-child {
+  border-top-color: var(--destructive);
 }
 
-.settings-page.on-phone .settings-actions > .ui-btn {
-  width: 100%;
+.settings-page.on-phone .settings-danger .settings-rows .settings-row:last-child {
+  border-bottom-color: var(--destructive);
 }
 
 /* Phone and sync (phase 8) */
@@ -899,7 +870,7 @@ ul.card-list.token-table > li.list-head {
 .sync-panel {
   width: 100%;
   padding: 1.25rem;
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-lg);
 }
 
@@ -951,7 +922,7 @@ html.is-phone .sync-panel {
   align-self: flex-start;
   margin: 0;
   padding: 0.75rem 1.5rem;
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-md);
   background: var(--muted);
   font-family: var(--font);
@@ -997,7 +968,7 @@ html.is-scanning #root {
   flex-direction: column;
   align-items: center;
   gap: 1rem;
-  padding: 1.25rem 1rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  padding: 1.25rem 1rem calc(1.25rem + env(safe-area-inset-bottom, 0rem));
   background: rgba(0, 0, 0, 0.8); /* fixed: the camera view is dark whatever the theme */
   visibility: visible;
   text-align: center;
@@ -1008,21 +979,21 @@ html.is-scanning #root {
    visible height (the address-bar-free `dvh`). */
 html.is-phone .gate {
   min-height: 100dvh;
-  padding-top: calc(10dvh + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+  padding-top: calc(10dvh + env(safe-area-inset-top, 0rem));
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0rem));
 }
 
 html.is-phone .gate > .decrypting:not(.is-below) {
-  min-height: calc(100dvh - 10dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  min-height: calc(100dvh - 10dvh - 2rem - env(safe-area-inset-top, 0rem) - env(safe-area-inset-bottom, 0rem));
 }
 
-/* The card of a password screen is as wide as the boxes of the other pages: its frame and shadow take the 8px of its margins, so they
-   end on the page's 14px sides (at 390px; at 360px it is already as wide as the screen allows). */
+/* The card of a password screen is as wide as the boxes of the other pages: its frame and shadow take the 0.5rem of its margins, so they
+   end on the page's 0.875rem sides (on a phone of the usual width; on a narrower one it is already as wide as the screen allows). */
 html.is-phone .gate > :is(form:not(.onboard-form), .panel:not(.onboard-welcome)) {
-  width: calc(100% - 8px);
+  width: calc(100% - 0.5rem);
 }
 
-/* The show button fills the 44px field. */
+/* The show button fills the field. */
 html.is-phone .field-input button {
   top: 0;
   right: 0;
@@ -1073,7 +1044,7 @@ fieldset.conflict {
   margin: 0;
   padding: 0.75rem 0 0;
   border: 0;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
 }
 
 .conflict legend {
@@ -1115,7 +1086,7 @@ fieldset.conflict {
 .conflict-version[aria-pressed='true'] {
   background: var(--accent);
   border-color: var(--ring);
-  box-shadow: 0 0 0 1px var(--ring);
+  box-shadow: 0 0 0 var(--hairline) var(--ring);
 }
 
 .conflict-version[aria-pressed='true'] .conflict-who::before {
@@ -1136,7 +1107,7 @@ fieldset.conflict {
 }
 
 .conflict-field > span:first-child {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--muted-foreground);
 }
 

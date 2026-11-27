@@ -34,6 +34,7 @@ mod http;
 mod prompt;
 mod read;
 pub mod routes;
+mod stashes;
 mod write;
 
 pub use prompt::{Approval, Prompter, Show};
@@ -483,6 +484,8 @@ mod documents_tests;
 mod robust_tests;
 #[cfg(test)]
 mod read_tests;
+#[cfg(test)]
+mod stashes_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

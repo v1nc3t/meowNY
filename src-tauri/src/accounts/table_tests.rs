@@ -202,12 +202,12 @@ fn an_account_has_a_name_of_one_to_fifty_characters_and_two_may_share_one() {
 }
 
 #[test]
-fn an_account_is_of_one_of_four_kinds() {
+fn an_account_is_of_one_of_seven_kinds() {
     let w = world();
-    for kind in ["CHECKING", "SAVINGS", "CASH", "CREDIT_CARD"] {
+    for kind in ["CHECKING", "SAVINGS", "CASH", "CREDIT_CARD", "CREDIT", "LOAN", "MORTGAGE"] {
         assert!(exec(&w.conn, &format!("INSERT INTO accounts (name, kind, opening_date) VALUES ('A', '{kind}', '2026-01-01')")).is_ok(), "{kind}");
     }
-    for kind in ["checking", "LOAN", "CREDIT CARD", ""] {
+    for kind in ["checking", "loan", "CREDIT CARD", "DEPOSIT", ""] {
         assert!(exec(&w.conn, &format!("INSERT INTO accounts (name, kind, opening_date) VALUES ('A', '{kind}', '2026-01-01')")).is_err(), "{kind}");
     }
     assert!(exec(&w.conn, "INSERT INTO accounts (name, opening_date) VALUES ('A', '2026-01-01')").is_err(), "a kind is needed");
@@ -1467,4 +1467,195 @@ fn every_account_balance_equals_a_plain_sum_for_random_rows_in_a_mix_of_currenci
             }
         }
     }
+}
+
+// ---- migration 0022: accounts is rebuilt for the liability kinds, a rate and an installment (`docs/loans-deposits-design.md`, section 4.1) ----
+
+/// The nineteen columns of an account at 0021, as one line each, so that "nothing moved" is one comparison.
+fn columns_at_21(conn: &Connection) -> Vec<String> {
+    conn.prepare(
+        "SELECT id || '|' || sync_id || '|' || COALESCE(stamp, 'none') || '|' || name || '|' || kind || '|' || COALESCE(number, 'none') || '|' || opening_balance_minor || '|' || opening_date
+                || '|' || archived || '|' || position || '|' || created_at || '|' || updated_at || '|' || COALESCE(bic, 'none') || '|' || COALESCE(notes, 'none') || '|' || COALESCE(group_name, 'none')
+                || '|' || include_net_worth || '|' || virtual_balance_minor || '|' || COALESCE(currency, 'none') || '|' || COALESCE(rate, 'none') FROM accounts ORDER BY id",
+    )
+    .unwrap()
+    .query_map([], |r| r.get::<_, String>(0))
+    .unwrap()
+    .map(Result::unwrap)
+    .collect()
+}
+
+/// The recurring items, the stashes and their entries as they were at 0021: the rows that point at an account and are not in `around`.
+fn pointing_at_accounts(conn: &Connection) -> Vec<String> {
+    let mut all = Vec::new();
+    for sql in [
+        "SELECT id || ' ' || sync_id || ' ' || stamp || ' ' || updated_at || ' ' || account_id FROM recurring_transactions ORDER BY id",
+        "SELECT id || ' ' || sync_id || ' ' || stamp || ' ' || updated_at || ' ' || name || ' ' || account_id || ' ' || COALESCE(target_minor, 'none') FROM stashes ORDER BY id",
+        "SELECT id || ' ' || sync_id || ' ' || stamp || ' ' || updated_at || ' ' || stash_id || ' ' || amount_minor || ' ' || COALESCE(transfer_id, 'none') FROM stash_entries ORDER BY id",
+    ] {
+        all.extend(conn.prepare(sql).unwrap().query_map([], |r| r.get::<_, String>(0)).unwrap().map(Result::unwrap));
+    }
+    all
+}
+
+/// Every trigger, view and index of the database, by kind and name.
+fn schema_names(conn: &Connection) -> std::collections::BTreeSet<(String, String)> {
+    conn.prepare("SELECT type, name FROM sqlite_master WHERE type IN ('trigger', 'view', 'index')")
+        .unwrap()
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+}
+
+/// A database at 0021 with accounts of every state (one in another currency, one archived, one deleted), transfers, rows, stashes with entries, and an
+/// edited or untouched main account.
+fn database_at_21(edit_main: bool) -> Connection {
+    let mut conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+    crate::migrate::run_up_to(&mut conn, 21).unwrap();
+    assert_eq!(one(&conn, "PRAGMA user_version"), 21);
+    conn.execute_batch(
+        "INSERT INTO categories (type, name) VALUES ('EXPENSE', 'Food'), ('INCOME', 'Salary');
+         INSERT INTO people (name) VALUES ('Anna');
+         INSERT INTO accounts (name, kind, number, opening_balance_minor, opening_date, bic, notes, group_name, include_net_worth, virtual_balance_minor)
+           VALUES ('Savings', 'SAVINGS', 'IE29', 150000, '2026-01-01', 'DEUTDEFF', 'rainy day', 'Bank', 1, 0), ('Cash', 'CASH', NULL, 0, '2026-02-01', NULL, NULL, NULL, 0, 0), ('Card', 'CREDIT_CARD', NULL, -24000, '2026-03-01', NULL, NULL, NULL, 1, 100000);
+         INSERT INTO accounts (name, kind, opening_balance_minor, opening_date, currency, rate) VALUES ('Lei', 'CHECKING', 10000, '2026-01-01', 'RON', '5.00');
+         UPDATE accounts SET archived = 1 WHERE name = 'Card';
+         INSERT INTO accounts (name, kind, opening_date) VALUES ('Gone', 'CASH', '2026-04-01');
+         DELETE FROM accounts WHERE name = 'Gone';
+         INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, note) VALUES (2, 3, 5000, '2026-05-01', 'pocket'), (3, 1, 700, '2026-05-02', NULL);
+         INSERT INTO transfers (from_account_id, to_account_id, amount_minor, transfer_date, to_amount_minor) VALUES (1, 5, 1000, '2026-05-06', 5000);
+         INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id) VALUES (1, 'Shop', 1250, '2026-05-03', 2), (2, 'Pay', 200000, '2026-05-04', 1);
+         INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id, native_amount_minor) VALUES (1, 'Kiosk', 200, '2026-05-07', 5, 1000);
+         INSERT INTO ledger_entries (person_id, kind, amount_minor, entry_date, account_id) VALUES (1, 'LENT', 2000, '2026-05-05', 3);
+         INSERT INTO recurring_transactions (category_id, name, amount_minor, start_date, interval_unit, next_due_date, account_id) VALUES (1, 'Rent', 90000, '2026-01-01', 'MONTH', '2026-02-01', 2);
+         INSERT INTO stashes (name, account_id, target_minor) VALUES ('Holiday', 2, 100000), ('Rainy', 5, NULL);
+         INSERT INTO stash_entries (stash_id, amount_minor, entry_date, transfer_id) VALUES (1, 20000, '2026-05-08', 1), (1, -5000, '2026-05-09', NULL), (2, 1000, '2026-05-10', NULL);",
+    )
+    .unwrap();
+    if edit_main {
+        conn.execute("UPDATE accounts SET name = 'Current account', notes = 'mine' WHERE id = 1", []).unwrap();
+    }
+    conn
+}
+
+#[test]
+fn rebuilding_accounts_keeps_every_row_id_stamp_key_trigger_view_and_index() {
+    for edit_main in [false, true] {
+        let mut conn = database_at_21(edit_main);
+        let (accounts_before, around_before, pointing_before) = (columns_at_21(&conn), around(&conn), pointing_at_accounts(&conn));
+        let (names_before, balances_before) = (schema_names(&conn), [1, 2, 3, 4, 5].map(|id| balance(&conn, id, "2026-12-31")));
+        assert_eq!(accounts_before.len(), 5, "the main account and four of the person's");
+        assert_eq!(accounts_before[0].contains(UNSET_STAMP), !edit_main, "the main account has its constant stamp, or a real one once it was edited");
+        assert_eq!(one(&conn, "SELECT count(*) FROM sync_deleted WHERE kind = 'accounts'"), 1, "a marker of the deleted account is there to be kept");
+
+        crate::migrate::run(&mut conn).unwrap();
+
+        assert_eq!(one(&conn, "PRAGMA user_version"), i64::from(crate::migrate::latest_version()));
+        assert!(conn.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, bool>(0)).unwrap(), "foreign keys are back on");
+        assert_eq!(one(&conn, "SELECT count(*) FROM pragma_foreign_key_check"), 0, "no row points at an account that is not there");
+        assert_eq!(columns_at_21(&conn), accounts_before, "id, sync id, stamp, dates and every other column of every account (main edited: {edit_main})");
+        assert_eq!(around(&conn), around_before, "no transfer, row, marker, history row or tick of the clock moved");
+        assert_eq!(pointing_at_accounts(&conn), pointing_before, "nor a recurring item, a stash or an entry");
+        assert_eq!(schema_names(&conn), names_before, "the same triggers, views and indexes by name: none lost and none made twice");
+        assert_eq!(one(&conn, "SELECT count(*) FROM sqlite_master WHERE name = 'accounts_new'"), 0);
+        assert_eq!([1, 2, 3, 4, 5].map(|id| balance(&conn, id, "2026-12-31")), balances_before, "the view made again gives the numbers it gave");
+        assert_eq!(one(&conn, "SELECT count(*) FROM accounts WHERE rate_milli IS NULL AND rate_period IS NULL AND installment_minor IS NULL"), 5, "the new columns are empty everywhere");
+        if !edit_main {
+            assert_eq!(columns_at_21(&conn)[0], format!("1|{MAIN_SYNC_ID}|{UNSET_STAMP}|{MAIN_NAME}|CHECKING|none|0|1970-01-01|0|0|1970-01-01T00:00:00.000Z|1970-01-01T00:00:00.000Z|none|none|none|1|0|none|none"));
+        }
+        assert!(super::check(&conn).unwrap());
+        // the keys were not left pointing at the dropped table: they hold on the new one
+        let missing = exec(&conn, "INSERT INTO transactions (category_id, name, amount_minor, payment_date, account_id) VALUES (1, 'x', 1, '2026-01-01', 99)");
+        assert!(missing.unwrap_err().to_string().contains("FOREIGN KEY"));
+        for account in [2, 3, 5] {
+            assert!(exec(&conn, &format!("DELETE FROM accounts WHERE id = {account}")).unwrap_err().to_string().contains("FOREIGN KEY"), "account {account} has rows");
+        }
+        assert!(exec(&conn, "DELETE FROM accounts WHERE id = 1").unwrap_err().to_string().contains("never deleted"), "and the main account is still kept by its trigger");
+    }
+}
+
+#[test]
+fn after_the_rebuild_a_change_of_an_account_still_stamps_and_writes_history_that_has_the_new_columns() {
+    let mut conn = database_at_21(false);
+    crate::migrate::run(&mut conn).unwrap();
+    // a liability, written the way a sync would bring it: plain SQL
+    conn.execute("INSERT INTO accounts (name, kind, opening_balance_minor, opening_date) VALUES ('Flat', 'MORTGAGE', -18000000, '2026-01-01')", []).unwrap();
+    let flat = conn.last_insert_rowid();
+    let (_, new_values) = latest_values(&conn, "accounts", flat);
+    assert!(stamp_of(&conn, "accounts", flat).as_str() > UNSET_STAMP, "the insert is stamped");
+    for key in ["rate_milli", "rate_period", "installment_minor"] {
+        assert_eq!(new_values[key], serde_json::Value::Null, "the history of an insert names {key}");
+    }
+    // each change alone, on an account of an old row and on the new one: the stamp, `updated_at` and one more line of history, whose old and new
+    // values carry the three columns
+    let cases = [
+        (2, "name = 'Savings 2'", "name"),
+        (2, "rate_milli = 3250, rate_period = 'YEARLY'", "rate_milli"),
+        (2, "rate_period = 'MONTHLY'", "rate_period"),
+        (3, "rate_milli = 0, rate_period = 'MONTHLY'", "rate_milli"),
+        (flat, "installment_minor = 95000", "installment_minor"),
+        (flat, "installment_minor = 90000", "installment_minor"),
+        (flat, "rate_milli = 3900, rate_period = 'YEARLY', kind = 'LOAN'", "rate_milli"),
+    ];
+    for (id, change, key) in cases {
+        conn.execute(&format!("UPDATE accounts SET updated_at = '{OLD}' WHERE id = {id}"), []).unwrap();
+        let (stamp, lines) = (stamp_of(&conn, "accounts", id), lines_of(&conn, "accounts", id));
+        conn.execute(&format!("UPDATE accounts SET {change} WHERE id = {id}"), []).unwrap();
+        assert!(stamp_of(&conn, "accounts", id) > stamp, "{change}: a new stamp");
+        assert_ne!(updated_at_of(&conn, "accounts", id), OLD, "{change}: `updated_at` moved");
+        assert_eq!(lines_of(&conn, "accounts", id), lines + 1, "{change}: one more line of history");
+        let (old, new) = latest_values(&conn, "accounts", id);
+        for column in ["rate_milli", "rate_period", "installment_minor"] {
+            assert!(old.get(column).is_some() && new.get(column).is_some(), "{change}: the line has {column} on both sides");
+        }
+        assert_ne!(old[key], new[key], "{change}: it says what changed");
+    }
+    let (old, new) = latest_values(&conn, "accounts", flat);
+    assert_eq!((&old["rate_milli"], &new["rate_milli"], &new["rate_period"], &new["kind"]), (&serde_json::Value::Null, &serde_json::json!(3900), &serde_json::json!("YEARLY"), &serde_json::json!("LOAN")));
+    // the same value again is not a change
+    let (stamp, lines) = (stamp_of(&conn, "accounts", flat), lines_of(&conn, "accounts", flat));
+    conn.execute("UPDATE accounts SET installment_minor = 90000, rate_milli = 3900, rate_period = 'YEARLY' WHERE id = ?1", [flat]).unwrap();
+    assert_eq!((stamp_of(&conn, "accounts", flat), lines_of(&conn, "accounts", flat)), (stamp, lines));
+    // a delete still leaves a marker and a line of history with the columns
+    let sync_id = text(&conn, &format!("SELECT sync_id FROM accounts WHERE id = {flat}"));
+    conn.execute("DELETE FROM accounts WHERE id = ?1", [flat]).unwrap();
+    assert_eq!(one(&conn, &format!("SELECT count(*) FROM sync_deleted WHERE sync_id = '{sync_id}' AND kind = 'accounts'")), 1);
+    assert_eq!(latest_values(&conn, "accounts", flat).0["installment_minor"], serde_json::json!(90000));
+}
+
+#[test]
+fn the_widened_kind_and_the_three_new_columns_refuse_their_bad_values_in_plain_sql() {
+    let w = world();
+    let insert = |columns: &str, values: &str| exec(&w.conn, &format!("INSERT INTO accounts (name, opening_date, {columns}) VALUES ('A', '2026-01-01', {values})"));
+    // the rate: a percent times 1000, 0 to 100000, with a period or none
+    for ok in ["0, 'MONTHLY'", "100000, 'YEARLY'", "3250, 'YEARLY'"] {
+        assert!(insert("kind, rate_milli, rate_period", &format!("'SAVINGS', {ok}")).is_ok(), "{ok}");
+    }
+    for bad in ["-1, 'YEARLY'", "100001, 'YEARLY'", "3250, 'WEEKLY'", "3250, 'monthly'", "3250, NULL", "NULL, 'YEARLY'", "'3.25', 'YEARLY'"] {
+        assert!(insert("kind, rate_milli, rate_period", &format!("'SAVINGS', {bad}")).is_err(), "{bad}");
+    }
+    // an installment: 1 to the largest amount, and only on a liability
+    for kind in ["CREDIT", "LOAN", "MORTGAGE"] {
+        for ok in ["1", "999999999999"] {
+            assert!(insert("kind, installment_minor", &format!("'{kind}', {ok}")).is_ok(), "{kind} {ok}");
+        }
+        for bad in ["0", "-5", "1000000000000", "1.5", "'x'"] {
+            assert!(insert("kind, installment_minor", &format!("'{kind}', {bad}")).is_err(), "{kind} {bad}");
+        }
+    }
+    for kind in ["CHECKING", "SAVINGS", "CASH", "CREDIT_CARD"] {
+        assert!(insert("kind, installment_minor", &format!("'{kind}', 5000")).is_err(), "{kind}: no installment on an asset");
+        assert!(insert("kind, installment_minor", &format!("'{kind}', NULL")).is_ok(), "{kind}");
+    }
+    // a liability that has one cannot become an asset by an update either
+    insert("kind, installment_minor", "'LOAN', 300").unwrap();
+    let id = w.conn.last_insert_rowid();
+    assert!(exec(&w.conn, &format!("UPDATE accounts SET kind = 'CASH' WHERE id = {id}")).is_err());
+    assert!(exec(&w.conn, &format!("UPDATE accounts SET kind = 'MORTGAGE' WHERE id = {id}")).is_ok());
+    // the checks of the columns that were there are still there
+    assert!(insert("kind, currency", "'CASH', 'ron'").is_err());
+    assert!(insert("kind, currency, rate", "'CASH', 'RON', '5.00'").is_ok());
+    assert!(exec(&w.conn, "UPDATE accounts SET archived = 1 WHERE id = 1").is_err(), "the main account is never archived");
 }

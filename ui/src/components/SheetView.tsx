@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useT } from '../i18n/context'
 import { columnName, looksNumeric } from '../lib/preview/grid'
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs'
 
 /** Rows of cells drawn as a sheet is: letters over the columns, numbers beside the rows, a line round every cell, numbers to the right. */
 export function SheetGrid({ rows }: { rows: string[][] }) {
@@ -48,13 +49,15 @@ export function Sheets({ sheets }: { sheets: { name: string; rows: string[][]; c
     <>
       <SheetGrid rows={sheet.rows} />
       {sheets.length > 1 ? (
-        <div className="sheet-tabs ui-tabs" role="tablist" aria-label={t('docs.previewSheets')}>
-          {sheets.map((each, at) => (
-            <button key={at} type="button" role="tab" aria-selected={at === open} onClick={() => setOpen(at)}>
-              {each.name}
-            </button>
-          ))}
-        </div>
+        <Tabs asChild value={String(open)} onValueChange={(at) => setOpen(Number(at))}>
+          <TabsList className="sheet-tabs" aria-label={t('docs.previewSheets')}>
+            {sheets.map((each, at) => (
+              <TabsTrigger key={at} value={String(at)} aria-controls={undefined}>
+                {each.name}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       ) : null}
     </>
   )

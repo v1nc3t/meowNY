@@ -55,3 +55,11 @@ export function slicePath(from: number, to: number): string {
   const large = to - from > 0.5 ? 1 : 0
   return `M${n(x1)} ${n(y1)}A${outer} ${outer} 0 ${large} 1 ${n(x2)} ${n(y2)}L${n(x3)} ${n(y3)}A${inner} ${inner} 0 ${large} 0 ${n(x4)} ${n(y4)}Z`
 }
+
+/** `part` as a percent of `whole` with one decimal, below 0 when `part` is. Null when there is no whole to measure against (no income, no budget). */
+export function ratePercent(part: string, whole: string): number | null {
+  const minor = toMinor(part)
+  if (minor === null) return null
+  const share = usedPercent(minor < 0n ? part.slice(1) : part, whole)
+  return share === null ? null : minor < 0n ? -share : share
+}

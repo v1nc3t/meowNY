@@ -24,38 +24,55 @@
 
 ## About
 
-meowNY tracks income and expenses against monthly budgets. It is a [Tauri](https://tauri.app) app: a Rust core and a React UI, with all data in one encrypted SQLite file on your machine. A phone app (Android; iPhone later) keeps a full offline copy and syncs with the computer over your home wifi. A command line program, `meowny`, lets scripts and AI agents use the running app.
+meowNY is a local-first budget app for your computer and your phone. It is a [Tauri](https://tauri.app) app: a Rust core and a React UI, with all data in one encrypted SQLite file on your machine.
 
-- **Budgeting:** categories, transactions (expense, income and transfer in one add dialog), monthly budgets, recurring items, statistics. Accounts (bank, savings, cash, credit card) with groups, a balance each, an account in another currency if you have one, transfers between them, and net worth. Seven languages, light and dark themes, keyboard shortcuts.
+## Features
+
+- **Budgeting:** categories, monthly budgets, recurring items and statistics. Expense, income and transfer share one add dialog.
+- **Dashboard:** a dashboard you arrange, with 18 widgets.
+- **Accounts:** bank, savings, cash and credit card, with groups, other currencies, return rates, transfers and net worth.
+- **Stashes:** money set aside in an account for a goal, or a term deposit at a rate.
 - **Documents:** receipts and invoices attached to transactions, encrypted, previewed inside the app.
-- **Debts and shared bills:** a ledger per friend, split bills (budgets count only your part), QR bill codes, reminders.
-- **Phone:** a full offline copy that syncs straight to the computer, with no server.
-- **Backup and export:** encrypted backups, on a schedule if you like; exports to JSON, CSV, Excel and PDF.
-
-Everything is explained on the [website](https://v1nc3t.github.io/meowNY/guide.html).
+- **Debts and shared bills:** a ledger per friend, split bills, QR bill codes and reminders. Loans and mortgages, with the payoff month.
+- **Phone:** an Android app with a full offline copy. It syncs straight to the computer over your home wifi.
+- **Backup and export:** encrypted backups, on a schedule if you like. Exports to JSON, CSV, Excel and PDF.
+- **Command line:** `meowny` lets scripts and AI agents use the running app.
+- Seven languages, light and dark themes, keyboard shortcuts.
 
 ## Install
 
-Linux (`.deb`, AppImage), Windows and Android builds are on the [releases page](https://github.com/v1nc3t/meowNY/releases/latest). Step-by-step install and update: [the guide](https://v1nc3t.github.io/meowNY/guide.html#install). iPhone and Mac are not available yet: see [support](#support). To build it yourself: [develop](https://v1nc3t.github.io/meowNY/develop.html).
+1. Download the build for your system from the [releases page](https://github.com/v1nc3t/meowNY/releases/latest): Linux (`.deb`, AppImage), Windows or Android.
+2. Install it: [step by step](https://v1nc3t.github.io/meowNY/guide.html#install).
+3. Open meowNY and press **get started**.
+
+iPhone and Mac are not available yet: see [support](#support).
 
 **Pre-release.** Tried on a real Android phone, not yet on a real iPhone. The desktop installers are not signed yet. Nobody outside the project has reviewed the sync protocol; that review comes before 1.0.
 
+## Run from source
+
+1. Install Node.js 22 or newer, Rust stable and the [Tauri system libraries](https://v2.tauri.app/start/prerequisites/).
+2. Run `npm install`.
+3. Run `npm run tauri dev`. Edits to `ui/src` reload the app.
+
+To build installers, run the tests or add a feature: [develop](https://v1nc3t.github.io/meowNY/develop.html).
+
 ## Privacy and security
 
-No server, no account, no telemetry. The database is encrypted with a key kept in your system keychain, the app locks when idle, and a CI check fails on any new network code. What is stored where and what ever leaves the device: [privacy](https://v1nc3t.github.io/meowNY/guide.html#privacy).
+- No server, no account, no telemetry.
+- The database is encrypted with a key kept in your system keychain. The app locks when idle.
+- A CI check fails on any new network code.
 
-To report a security problem, see [SECURITY.md](SECURITY.md). To help: [CONTRIBUTING.md](CONTRIBUTING.md).
+What is stored where, and what ever leaves the device: [privacy](https://v1nc3t.github.io/meowNY/guide.html#privacy). To report a security problem, see [SECURITY.md](SECURITY.md). To help, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentation
 
-| Where | What |
-|---|---|
-| [Website](https://v1nc3t.github.io/meowNY/) | The guide, the command line reference (also as [Markdown](https://v1nc3t.github.io/meowNY/CLI.md)) and the develop page |
-| [docs/sync-design.md](docs/sync-design.md), [docs/documents-design.md](docs/documents-design.md), [docs/debts-design.md](docs/debts-design.md), [docs/accounts-design.md](docs/accounts-design.md) | How sync, documents, debts and accounts are built |
+- [Website](https://v1nc3t.github.io/meowNY/): the guide, the command line reference (also as [Markdown](https://v1nc3t.github.io/meowNY/CLI.md)) and the develop page.
+- Design notes, for how it is built and how the screens are laid out: [sync](docs/sync-design.md), [documents](docs/documents-design.md), [debts](docs/debts-design.md), [accounts](docs/accounts-design.md), [stashes](docs/stash-design.md), [loans and deposits](docs/loans-deposits-design.md), [UI](docs/ui-design.md).
 
 ## Support
 
-meowNY is free and stays free. Putting it on the App Store and Google Play costs money: the developer accounts and the yearly fees. If you would like to see it there, [support it on Ko-fi](https://ko-fi.com/v1nc3t). Questions, bugs and ideas: [discussions](https://github.com/v1nc3t/meowNY/discussions).
+meowNY is free and stays free. The App Store and Google Play need paid developer accounts. To help put it there, [support it on Ko-fi](https://ko-fi.com/v1nc3t). Questions, bugs and ideas: [discussions](https://github.com/v1nc3t/meowNY/discussions).
 
 ## License
 

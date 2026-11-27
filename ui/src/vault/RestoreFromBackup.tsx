@@ -6,7 +6,7 @@ import { errorText, vault } from './api'
 import PasswordField from './PasswordField'
 import { passphraseProblem } from './rules'
 import { UpdateLink } from '../components/AppFooter'
-import Button from '../components/ui/Button'
+import { Button } from '../components/ui/button'
 import { Logo } from '../components/ui/Pixel'
 
 /** First run from a backup: the backup's passphrase, and the app passphrase for this new install. */

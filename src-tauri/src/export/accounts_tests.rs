@@ -90,17 +90,25 @@ fn the_json_has_every_account_with_what_it_holds_and_every_transfer_and_the_acco
     assert_eq!(named(&file["accounts"]), ["Main account", "Savings", "Cash", "Credit card", "Old savings"], "in the person's order, the archived one last");
     let balances: Vec<&str> = file["accounts"].as_array().unwrap().iter().map(|a| a["balance"].as_str().unwrap()).collect();
     assert_eq!(balances, ["1800.00", "1700.00", "150.00", "-945.50", "200.00"], "what each holds on the day of the export");
-    // every field of an account but its row count and what is worked out from two others in the file (`available`)
+    // every field of an account but its row count and what is worked out from two others in the file (`available` and `free`)
     assert_eq!(
         file["accounts"][2],
         json!({ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH", "number": null, "openingBalance": "250.00", "openingDate": "2025-12-01", "archived": false,
                 "isMain": false, "balance": "150.00", "changeThisMonth": "0.00", "lastActivity": "2026-02-15",
                 "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00",
-                "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "150.00" })
+                "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "150.00", "setAside": "0.00" , "interestRate": null, "interestPeriod": null, "installment": null })
     );
     assert_eq!(file["accounts"][3]["openingBalance"], "-240.00");
     assert_eq!((file["accounts"][1]["number"].as_str(), file["accounts"][4]["archived"].as_bool(), file["accounts"][0]["isMain"].as_bool()), (Some("IE29 AIBK 9311 5212 3456 78"), Some(true), Some(true)));
-    assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.get("entries").is_none() && a.get("available").is_none()));
+    assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.get("entries").is_none() && a.get("available").is_none() && a.get("free").is_none() && a.get("liability").is_none() && a.get("returnPerMonth").is_none()));
+    // the rate and the installment are facts of an account, written as the screens write them (a debt is made by hand here: the core has no way from a card)
+    accounts::update(&c.conn, c.savings, &accounts::AccountPatch { interest_rate: Some(Some("2.5".into())), interest_period: Some(crate::rates::Period::Yearly), ..Default::default() }, TODAY).unwrap();
+    c.conn.execute("UPDATE accounts SET kind = 'LOAN', rate_milli = 500, rate_period = 'MONTHLY', installment_minor = 30000 WHERE id = ?1", [c.card]).unwrap();
+    let file = self::file(&c.conn, &Selection::default());
+    let (savings, card) = (account_named(&file, "Savings"), account_named(&file, "Credit card"));
+    assert_eq!((&savings["interestRate"], &savings["interestPeriod"], &savings["installment"]), (&json!("2.5"), &json!("YEARLY"), &Value::Null));
+    assert_eq!((&card["kind"], &card["interestRate"], &card["interestPeriod"], &card["installment"]), (&json!("LOAN"), &json!("0.5"), &json!("MONTHLY"), &json!("300.00")));
+    assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.get("liability").is_none() && a.get("returnPerMonth").is_none()), "what is worked out from them is not in the file");
 
     let transfers = file["transfers"].as_array().unwrap();
     assert_eq!(transfers.len(), 3);
@@ -371,7 +379,7 @@ fn the_json_has_the_five_details_of_every_account_and_not_the_amount_worked_out_
         &json!({ "id": c.cash.to_string(), "name": "Cash", "kind": "CASH", "number": null, "openingBalance": "250.00", "openingDate": "2025-12-01", "archived": false,
                  "isMain": false, "balance": "150.00", "changeThisMonth": "0.00", "lastActivity": "2026-02-15",
                  "bic": "COBADEFFXXX", "notes": AWKWARD_NOTES, "group": "Everyday", "includeInNetWorth": false, "virtualBalance": "0.00",
-                 "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "150.00" }),
+                 "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "150.00", "setAside": "0.00" , "interestRate": null, "interestPeriod": null, "installment": null }),
         "the JSON holds the text as it is: the line break, the comma, the quotes and the `=` are not touched"
     );
     let card = account_named(&file, "Credit card");
@@ -387,15 +395,15 @@ fn the_json_has_the_five_details_of_every_account_and_not_the_amount_worked_out_
     let keys = |a: &Value| -> BTreeSet<String> { a.as_object().unwrap().keys().cloned().collect() };
     let expected: BTreeSet<String> = [
         "id", "name", "kind", "number", "openingBalance", "openingDate", "archived", "isMain", "balance", "changeThisMonth", "lastActivity", "bic", "notes", "group", "includeInNetWorth", "virtualBalance", "currency",
-        "foreign", "rate", "balanceInMain",
+        "foreign", "rate", "balanceInMain", "setAside", "interestRate", "interestPeriod", "installment",
     ]
     .map(String::from)
     .into();
     for a in file["accounts"].as_array().unwrap() {
         assert_eq!(keys(a), expected, "{}", a["name"]);
     }
-    // it is a figure the file can work out: the balance and the virtual balance are both in it
-    assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.get("available").is_none()));
+    // they are figures the file can work out: the balance and the virtual balance are both in it, and so are the balance and what the stashes set aside
+    assert!(file["accounts"].as_array().unwrap().iter().all(|a| a.get("available").is_none() && a.get("free").is_none()));
 }
 
 #[test]
@@ -420,7 +428,7 @@ fn a_limited_export_gives_an_account_no_detail_in_the_json_and_the_csv_has_none_
             }
         }
         let text = serde_json::to_string(&limited).unwrap();
-        for hidden in secrets.iter().chain(["\"bic\"", "\"notes\"", "\"group\"", "\"includeInNetWorth\"", "\"virtualBalance\"", "\"available\""].iter()) {
+        for hidden in secrets.iter().chain(["\"bic\"", "\"notes\"", "\"group\"", "\"includeInNetWorth\"", "\"virtualBalance\"", "\"available\"", "\"free\"", "\"setAside\"", "\"stashes\""].iter()) {
             assert!(!text.contains(hidden), "{selection:?}: {hidden:?} leaked into a limited export");
         }
     }
@@ -629,7 +637,7 @@ fn the_json_says_the_currency_rate_and_worth_of_each_account_and_what_each_row_r
         &json!({ "id": lei.to_string(), "name": "Lei account", "kind": "CHECKING", "number": null, "openingBalance": "100.00", "openingDate": "2025-12-01", "archived": false,
                  "isMain": false, "balance": "30.50", "changeThisMonth": "0.00", "lastActivity": "2026-03-04",
                  "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00",
-                 "currency": "RON", "foreign": true, "rate": "5.00", "balanceInMain": "6.10" }),
+                 "currency": "RON", "foreign": true, "rate": "5.00", "balanceInMain": "6.10", "setAside": "0.00" , "interestRate": null, "interestPeriod": null, "installment": null }),
         "every amount of it is in lei, and what it is worth in the app's currency is beside them"
     );
     // an account in the app's currency says so: its code, no rate, and its worth is its balance

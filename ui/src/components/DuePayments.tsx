@@ -1,17 +1,18 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { Due, DuePayment } from '../api/debts'
 import { useProfile } from '../hooks/profile'
 import { useOpenRow } from '../hooks/useOpenRow'
 import { useT } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
-import { Row, Table, TapRow } from './RowParts'
-import Button from './ui/Button'
-import { buttonClass } from './ui/cn'
+import Facts from './Facts'
+import { IconAction, ListGroup, NameMark, PanelActions, Row, Table, TapRow } from './RowParts'
+import { Badge } from './ui/badge'
 
 /**
  * The recurring payments that are overdue and not paid or skipped, one row for each occurrence that was missed, the oldest first; an
  * income that was not received is listed too, in green. A payment is a debt only once its day has gone by: one that falls due today is
- * not here yet. Each row can be paid or skipped on its own, and every name leads to the item in the list.
+ * not here yet. Each row can be paid or skipped on its own, and every name leads to the item in the list. What the payments come to is in
+ * the page's header; the income that was not received and the bills with no amount are here, over the list, when there are any.
  */
 export default function DuePayments({
   due,
@@ -28,6 +29,7 @@ export default function DuePayments({
 }) {
   const t = useT()
   const phone = useProfile() === 'phone'
+  const navigate = useNavigate()
   const rows = useOpenRow()
   const money = (amount: string) => formatMoney(amount, currency, locale)
   const keyOf = (payment: DuePayment) => `${payment.recurringId}-${payment.dueDate}`
@@ -40,6 +42,7 @@ export default function DuePayments({
 
   const late = (payment: DuePayment) => t('debts.daysLate', { count: payment.daysOverdue })
 
+  // A phone row: the name (an income says so) and the amount, how late under the name. It opens to its category and day, and the buttons.
   function tapRow(payment: DuePayment) {
     const key = keyOf(payment)
     return (
@@ -48,43 +51,34 @@ export default function DuePayments({
         id={rows.panelId(key)}
         open={rows.isOpen(key)}
         onToggle={() => rows.toggle(key)}
-        name={payment.name}
+        name={<NameMark mark={payment.income ? <Badge variant="success">{t('common.income')}</Badge> : null}>{payment.name}</NameMark>}
         amount={amount(payment)}
-        sub={
-          <>
-            <span>{payment.category}</span>
-            <span>{formatDate(payment.dueDate, locale)}</span>
-            <span className="due-late">{late(payment)}</span>
-          </>
-        }
+        meta={<span className="due-late">{late(payment)}</span>}
+        facts={[
+          { label: t('common.category'), value: payment.category },
+          { label: t('debts.colDue'), value: formatDate(payment.dueDate, locale) },
+        ]}
       >
-        <div className="row-panel-actions">
-          <Button variant="outline" onClick={() => onPay(payment)}>
-            {t('rec.pay')}
-          </Button>
-          <Button variant="outline" onClick={() => onSkip(payment)}>
-            {t('rec.skip')}
-          </Button>
-          <Link to={{ search: '' }} state={focus(payment)} className={buttonClass('outline')}>
-            {t('common.details')}
-          </Link>
-        </div>
+        <PanelActions
+          actions={[
+            { label: t('rec.pay'), icon: 'check', onClick: () => onPay(payment) },
+            { label: t('rec.skip'), icon: 'skip', onClick: () => onSkip(payment) },
+            { label: t('common.details'), icon: 'eye', onClick: () => navigate({ search: '' }, { state: focus(payment) }) },
+          ]}
+        />
       </TapRow>
     )
   }
 
+  // A desktop row: name, category, the day, how late it is, the amount, then skip and mark as paid as icon buttons.
   function tableRow(payment: DuePayment) {
     return (
       <Row
         key={keyOf(payment)}
         actions={
           <>
-            <Button variant="ghost" size="sm" onClick={() => onSkip(payment)}>
-              {t('rec.skip')}
-            </Button>
-            <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => onPay(payment)}>
-              {t('rec.pay')}
-            </Button>
+            <IconAction icon="skip" label={`${t('rec.skip')}: ${payment.name}`} onClick={() => onSkip(payment)} />
+            <IconAction icon="check" label={`${t('rec.pay')}: ${payment.name}`} className="icon-btn rec-pay" data-row-focus onClick={() => onPay(payment)} />
           </>
         }
       >
@@ -94,11 +88,9 @@ export default function DuePayments({
           </Link>
           {payment.income ? <span className="row-mark">{t('common.income')}</span> : null}
         </div>
-        <span className="cell-sub">{payment.category}</span>
-        <span className="cell-sub-end due-date">
-          {formatDate(payment.dueDate, locale)}
-          <span className="due-late">{late(payment)}</span>
-        </span>
+        <span className="cell-sub due-cat">{payment.category}</span>
+        <span className="cell-sub-end due-date">{formatDate(payment.dueDate, locale)}</span>
+        <span className="cell-sub due-late">{late(payment)}</span>
         {amount(payment)}
       </Row>
     )
@@ -106,29 +98,19 @@ export default function DuePayments({
 
   return (
     <>
-      <div className="debts-stats">
-        <div className="debts-stat">
-          <span className="debts-stat-label">{t('debts.dueTotal')}</span>
-          <span className={`debts-stat-value ${Number(due.total) > 0 ? 'debt-owe' : 'debt-even'}`}>{money(due.total)}</span>
-        </div>
-        {due.payments.some((payment) => payment.income) ? (
-          <div className="debts-stat">
-            <span className="debts-stat-label">{t('debts.dueIncome')}</span>
-            <span className="debts-stat-value debt-owed">{money(due.incomeTotal)}</span>
-          </div>
-        ) : null}
-        {due.unknown > 0 ? (
-          <div className="debts-stat">
-            <span className="debts-stat-label">{t('debts.dueUnknown', { count: due.unknown })}</span>
-          </div>
-        ) : null}
-      </div>
+      <Facts
+        className="acct-facts"
+        items={[
+          due.payments.some((payment) => payment.income) ? { label: t('debts.dueIncome'), value: money(due.incomeTotal), tone: 'positive' } : null,
+          due.unknown > 0 ? { label: t('debts.noFixedAmount'), value: due.unknown } : null,
+        ]}
+      />
       {due.payments.length === 0 ? <p className="hint">{t('debts.dueEmpty')}</p> : null}
       {due.payments.length > 0 ? (
         phone ? (
-          <ul className="card-list">{due.payments.map(tapRow)}</ul>
+          <ListGroup>{due.payments.map(tapRow)}</ListGroup>
         ) : (
-          <Table className="has-action due-table" heads={[t('common.name'), t('common.category'), t('debts.colDue'), { label: t('tx.amount'), className: 'is-end' }, '']}>
+          <Table className="due-table" tidy heads={[t('common.name'), { label: t('common.category'), className: 'head-cat' }, t('debts.colDue'), '', { label: t('tx.amount'), className: 'is-end' }, '']}>
             {due.payments.map(tableRow)}
           </Table>
         )

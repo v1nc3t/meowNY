@@ -11,7 +11,7 @@ import { Rows } from '../pages/settings/layout'
 import Modal from './Modal'
 import { IconAction, TapRow } from './RowParts'
 import SectionTabs from './SectionTabs'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 type Tab = 'list' | 'settings'
 
@@ -43,7 +43,7 @@ export default function DebtNotificationsModal({
   }, [due.length])
 
   return (
-    <Modal title={t('debts.notifications')} onClose={onClose} cancelLabel={t('common.close')} readOnly>
+    <Modal title={t('debts.notifications')} onClose={onClose} cancelLabel={t('common.close')} readOnly help={<p>{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>}>
       <SectionTabs
         label={t('debts.notifications')}
         value={tab}
@@ -75,7 +75,7 @@ export default function DebtNotificationsModal({
                       </Link>
                     }
                     action={<IconAction icon="x" label={t('debts.dismissReminder', { name: friend.name })} onClick={() => onDismiss([friend])} />}
-                    sub={<span>{t('debts.dueBadge', { date: formatDate(friend.dueOn, locale) })}</span>}
+                    meta={t('debts.dueBadge', { date: formatDate(friend.dueOn, locale) })}
                   />
                 ))}
               </ul>
@@ -87,7 +87,6 @@ export default function DebtNotificationsModal({
           <Rows>
             <DebtReminderFields phone={phone} say={say} />
           </Rows>
-          <p className="hint">{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
         </div>
       )}
     </Modal>

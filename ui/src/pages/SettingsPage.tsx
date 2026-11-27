@@ -2,9 +2,12 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { errorText, inDesktopApp, vault, type LockPrefs } from '../vault/api'
 import { useI18n } from '../i18n/context'
+import PageHeader from '../components/PageHeader'
 import AppFooter from '../components/AppFooter'
 import ChangeCurrencyModal from '../components/ChangeCurrencyModal'
 import CommandApiBlock from '../components/CommandApiBlock'
+import HelpButton from '../components/HelpButton'
+import Icon from '../components/NavIcon'
 import PhoneSyncBlock from '../components/PhoneSyncBlock'
 import { cn } from '../components/ui/cn'
 import type { Settings } from '../vault/rules'
@@ -76,6 +79,15 @@ export default function SettingsPage() {
     }
   }
 
+  const currencyLocked = (accountList ?? []).some((account) => account.foreign)
+
+  /** What a section explains, behind a help button: beside its name on the computer, beside the title of the page on a phone. */
+  function helpFor(id: SectionId): ReactNode {
+    if (id === 'region') return phone ? <p>{t('settings.currencyOnDesktop')}</p> : currencyLocked ? <p>{t('settings.currencyLocked')}</p> : undefined
+    if (id === 'notifications') return <p>{t(phone ? 'settings.reminderPhone' : 'settings.reminderDesktop')}</p>
+    return undefined
+  }
+
   function body(id: SectionId): ReactNode {
     switch (id) {
       case 'region':
@@ -86,7 +98,7 @@ export default function SettingsPage() {
               phone={phone}
               onSaved={setSettings}
               onChangeCurrency={() => setChangingCurrency(true)}
-              currencyLocked={(accountList ?? []).some((account) => account.foreign)}
+              currencyLocked={currencyLocked}
               say={say}
             />
           )
@@ -114,9 +126,12 @@ export default function SettingsPage() {
 
   return (
     <section className={cn('tx-page', 'settings-page', phone && 'on-phone')}>
-      <div className="tx-title">
-        <h1>{t('settings.title')}</h1>
-      </div>
+      <PageHeader
+        // on a phone a section opens in place of the list: the header has its name, and a way back to the list
+        title={phone && current ? t(current.title) : t('settings.title')}
+        back={phone && current ? '/app/settings' : undefined}
+        help={phone && current ? helpFor(current.id) : undefined}
+      />
 
       {changingCurrency && settings ? (
         <ChangeCurrencyModal
@@ -141,9 +156,7 @@ export default function SettingsPage() {
               {sections.map((section) => (
                 <Link key={section.id} className="settings-list-item" to={{ search: `?section=${section.id}` }}>
                   <span>{t(section.title)}</span>
-                  <span className="settings-chevron" aria-hidden="true">
-                    ›
-                  </span>
+                  <Icon name="chevron-down" className="settings-chevron" />
                 </Link>
               ))}
             </nav>
@@ -151,9 +164,10 @@ export default function SettingsPage() {
         ) : (
           <nav className="settings-nav" aria-label={t('settings.title')}>
             {sections.map((section) => (
+              // a row of the sidebar's look (shell.css): quiet text, the one you are on bold with a green mark
               <Link
                 key={section.id}
-                className="settings-nav-item"
+                className={cn('nav-item', section.id === currentId && 'active')}
                 to={{ search: `?section=${section.id}` }}
                 replace
                 aria-current={section.id === currentId ? 'page' : undefined}
@@ -166,14 +180,12 @@ export default function SettingsPage() {
 
         {current ? (
           <div className="settings-section">
-            <header className="settings-section-head">
-              {phone ? (
-                <Link className="settings-back" to={{ search: '' }}>
-                  <span aria-hidden="true">‹</span> {t('settings.title')}
-                </Link>
-              ) : null}
-              <h2>{t(current.title)}</h2>
-            </header>
+            {phone ? null : (
+              <header className="settings-section-head">
+                <h2 className="acct-group">{t(current.title)}</h2>
+                {helpFor(current.id) ? <HelpButton>{helpFor(current.id)}</HelpButton> : null}
+              </header>
+            )}
             {body(current.id)}
           </div>
         ) : null}

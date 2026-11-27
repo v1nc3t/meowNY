@@ -1,0 +1,529 @@
+/* The dashboard as a grid of widgets (components/dashboard, docs/dashboard-design.md): the grid, the frame every widget has, the edit mode,
+   and the dialogs of the edit mode. The charts, bars and tables inside a widget are dashboard.css's. */
+
+/* -- the grid: 12 columns, 6 under 48em (where the spans halve), 2 on the phone; rows of --dash-row, packed without holes ------------------ */
+.dash-grid-box {
+  container-type: inline-size;
+  width: 100%;
+}
+
+.dash-widgets {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: var(--dash-row);
+  grid-auto-flow: row dense;
+  gap: var(--page-gap);
+}
+
+.dash-widgets[data-profile='phone'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dash-cell {
+  position: relative;
+  grid-column: span var(--w);
+  grid-row: span var(--h);
+  min-width: 0;
+  min-height: 0;
+}
+
+@container (max-width: 48em) {
+  .dash-widgets[data-profile='desktop'] {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .dash-widgets[data-profile='desktop'] > .dash-cell {
+    grid-column: span var(--w-half);
+  }
+}
+
+.dash-cell-body {
+  height: 100%;
+  min-width: 0;
+}
+
+/* -- the frame of a widget --------------------------------------------------------------------------------------------------------------- */
+.dash-widget {
+  height: 100%;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  overflow: hidden;
+  border: var(--border-width) solid var(--border);
+}
+
+.dash-widget-head {
+  align-items: baseline;
+  min-width: 0;
+  /* room between the title line and what the widget shows */
+  padding-bottom: var(--space-3);
+}
+
+/* A narrow widget (one column on a phone) gives the whole title line to its name: the period at its right goes. */
+.dash-widget {
+  container: widget / inline-size;
+}
+
+@container widget (max-width: 13rem) {
+  .dash-aside {
+    display: none;
+  }
+}
+
+.dash-widget .dash-widget-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-aside {
+  font-size: 0.75rem;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+
+/* The body takes the rest of the widget and scrolls when it holds more than fits. It measures its own width for the tables and the figures inside. */
+.dash-widget-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: var(--space-2);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* it measures both its width and its height: a widget drops what is secondary when it is narrow (a phone) or short (one row) */
+  container-type: size;
+}
+
+.dash-widget-body > .dash-empty {
+  margin: auto 0;
+  padding: 0;
+}
+
+/* Every widget keeps what scrolls out of sight within itself. */
+.dash-widget-body > * {
+  flex: none;
+}
+
+.dash-widget-body > .dash-year,
+.dash-widget-body > .dash-spark {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.dash-year .dash-chart {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.dash-year .year-readout {
+  min-height: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+/* A widget is one row high at least: the summary's figures are smaller, side by side or two by two. */
+.dash-widget[data-widget='summary'] .dash-stats {
+  gap: var(--space-2) var(--space-4);
+}
+
+.dash-widget[data-widget='summary'] .dash-stat-value {
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+
+@container (max-width: 34rem) {
+  .dash-widget[data-widget='summary'] .dash-stat-value {
+    font-size: 1.0625rem;
+  }
+}
+
+@container (max-width: 30rem) {
+  .dash-widget[data-widget='summary'] .dash-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .dash-widget[data-widget='summary'] .dash-stats > .dash-stat {
+    flex-flow: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
+  }
+
+  .dash-widget[data-widget='summary'] .dash-stat-label {
+    font-size: 0.6875rem;
+    line-height: 1.25;
+  }
+
+  .dash-widget[data-widget='summary'] .dash-stat-value {
+    font-size: 1rem;
+    line-height: 1.25;
+  }
+
+  .dash-widget[data-widget='summary'] .dash-delta {
+    display: none;
+  }
+}
+
+.dash-widget .dash-facts {
+  row-gap: var(--space-1);
+}
+
+/* The net worth: a wide widget has its figures side by side, each a small word over its value; a short one (one row) is a tight list. */
+@container (min-width: 30rem) {
+  .dash-widget .dash-facts.is-sum {
+    grid-template-columns: none;
+    grid-template-rows: auto auto;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, max-content);
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-4);
+  }
+
+  .dash-widget .dash-facts.is-sum > dd {
+    text-align: left;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .dash-widget .dash-facts.is-sum > dd b {
+    font-size: inherit;
+  }
+}
+
+@container (max-width: 30rem) and (max-height: 6.5rem) {
+  .dash-widget .dash-facts.is-sum {
+    row-gap: 0;
+    font-size: 0.75rem;
+    line-height: 1.3;
+  }
+
+  .dash-widget .dash-facts.is-sum > dt {
+    font-size: 0.75rem;
+  }
+
+  .dash-widget .dash-facts.is-sum > dd b {
+    font-size: 0.875rem;
+  }
+}
+
+.dash-widget .stash-mini {
+  padding: var(--space-1) 0;
+  border: 0;
+  border-top: var(--hairline) solid var(--border);
+  border-radius: 0;
+}
+
+.dash-widget .dash-legend {
+  flex: none;
+}
+
+.dash-widget .dash-budgets {
+  gap: var(--space-3);
+}
+
+/* -- edit mode --------------------------------------------------------------------------------------------------------------------------- */
+.dash-editbar {
+  position: sticky;
+  top: calc(var(--edge) * -1);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  background: var(--background);
+  border-bottom: var(--hairline) solid var(--border);
+}
+
+.dash-editbar-gap {
+  flex: 1;
+}
+
+.dash-widgets.is-editing > .dash-cell {
+  outline: var(--hairline) dashed var(--input);
+  outline-offset: calc(var(--hairline) * -1);
+}
+
+.dash-widgets.is-editing > .dash-cell:focus-visible {
+  outline: var(--hairline-2) solid var(--ring);
+  outline-offset: var(--hairline-2);
+}
+
+.dash-widgets.is-editing .dash-cell-body {
+  opacity: 0.45;
+}
+
+.dash-widgets.is-dragging {
+  user-select: none;
+}
+
+.dash-cell.is-lifted {
+  z-index: 4;
+  box-shadow: var(--shadow-lg);
+  cursor: grabbing;
+}
+
+.dash-cell.is-lifted .dash-cell-body {
+  opacity: 0.9;
+}
+
+/* The bar over the top of a widget: the handle, the name, the size, the settings and the remove button. It covers the title line. */
+.dash-controls {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--card);
+  border: var(--hairline) solid var(--border);
+}
+
+.dash-controls-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-handle {
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: var(--control);
+  height: var(--control);
+  padding: 0;
+  color: var(--foreground);
+  cursor: grab;
+  background: transparent;
+  border: var(--hairline) solid var(--input);
+  touch-action: none;
+}
+
+html.is-phone .dash-handle {
+  width: var(--control-phone);
+  height: var(--control-phone);
+}
+
+.dash-controls .icon-btn,
+.dash-controls .dash-size-button {
+  flex: none;
+}
+
+.dash-size-button {
+  min-width: 3.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The corner that resizes: two pixel steps in the corner, a touch target on the phone. */
+.dash-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: nwse-resize;
+  touch-action: none;
+  background:
+    linear-gradient(var(--foreground) 0 0) 0.875rem 0.375rem / 0.125rem 0.125rem no-repeat,
+    linear-gradient(var(--foreground) 0 0) 0.625rem 0.625rem / 0.125rem 0.125rem no-repeat,
+    linear-gradient(var(--foreground) 0 0) 0.875rem 0.625rem / 0.125rem 0.125rem no-repeat,
+    linear-gradient(var(--foreground) 0 0) 0.375rem 0.875rem / 0.125rem 0.125rem no-repeat,
+    linear-gradient(var(--foreground) 0 0) 0.625rem 0.875rem / 0.125rem 0.125rem no-repeat,
+    linear-gradient(var(--foreground) 0 0) 0.875rem 0.875rem / 0.125rem 0.125rem no-repeat;
+}
+
+html.is-phone .dash-resize {
+  width: 2rem;
+  height: 2rem;
+  background-position: 1.625rem 1.125rem, 1.375rem 1.375rem, 1.625rem 1.375rem, 1.125rem 1.625rem, 1.375rem 1.625rem, 1.625rem 1.625rem;
+}
+
+.dash-cell.is-resizing {
+  z-index: 3;
+}
+
+/* The size picker: a grid of cells, one for each size the grid has. The sizes the widget can take are lit. */
+.dash-size-pop {
+  padding: var(--space-3);
+}
+
+.dash-size-grid {
+  display: grid;
+  gap: var(--space-1);
+  width: 15rem;
+  outline-offset: var(--hairline-2);
+}
+
+html.is-phone .dash-size-grid {
+  width: 6rem;
+  gap: var(--space-2);
+}
+
+.dash-size-cell {
+  height: 1.25rem;
+  cursor: pointer;
+  background: var(--muted);
+  border: var(--hairline) solid var(--border);
+}
+
+html.is-phone .dash-size-cell {
+  height: 2.25rem;
+}
+
+.dash-size-cell.is-off {
+  cursor: not-allowed;
+  background: transparent;
+  border-style: dotted;
+  opacity: 0.45;
+}
+
+.dash-size-cell.is-in {
+  background: var(--primary);
+  border-color: var(--primary);
+  opacity: 1;
+}
+
+.dash-size-cell.is-now:not(.is-in) {
+  border-color: var(--primary);
+}
+
+.dash-size-read {
+  margin: var(--space-2) 0 0;
+  font-size: 0.8125rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* -- the dialogs ------------------------------------------------------------------------------------------------------------------------- */
+.dash-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 4rem;
+}
+
+.dash-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+}
+
+.dash-checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  max-height: 11rem;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-y: auto;
+  font-size: 0.8125rem;
+  border: var(--hairline) solid var(--input);
+}
+
+.dash-checks legend {
+  padding: 0 var(--space-1);
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.dash-checks label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-catalog {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0;
+}
+
+.dash-catalog li {
+  display: block;
+  padding: 0;
+  border-top: var(--hairline) solid var(--border);
+}
+
+.dash-catalog li:first-child {
+  border-top: 0;
+}
+
+.dash-catalog button {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  min-height: var(--row-min);
+  padding: 0 var(--space-2);
+  font: inherit;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+@media (hover: hover) {
+  .dash-catalog button:hover {
+    background: var(--accent);
+  }
+}
+
+.dash-catalog-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-catalog-about {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+
+.dash-catalog-sizes {
+  font-size: 0.8125rem;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+html.is-phone .dash-catalog button {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+html.is-phone .dash-catalog-about {
+  display: none;
+}
+
+.dash-checks-group {
+  margin-top: var(--space-1);
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.dash-checks-group:first-of-type {
+  margin-top: 0;
+}
+
+.dash-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: 0.8125rem;
+}

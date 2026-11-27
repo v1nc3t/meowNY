@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { amountString, convertAmount, convertBetween, formatMoney, fromMinor, invertAmount, moneyIn, parseRate, signedAmountString, toMinor } from './money.ts'
+import { amountString, convertAmount, convertBetween, formatMoney, fromMinor, invertAmount, moneyIn, parseRate, signedAmountString, sumAmounts, toMinor } from './money.ts'
 
 test('transaction amounts pad to two decimals and reject empty, zero, and negative', () => {
   assert.equal(amountString('10', false), '10.00')
@@ -178,4 +178,12 @@ test('a currency the browser does not know does not throw: the amount behind its
   assert.equal(formatMoney('12.00', 'RON', ''), 'RON 12.00')
   assert.equal(formatMoney('abc', 'RON', 'en-GB'), 'abc', 'not an amount')
   assert.equal(moneyIn('EU', 'en-GB')('1.00'), 'EU 1.00')
+})
+
+test('amounts add up in whole cents, signs and all', () => {
+  assert.equal(sumAmounts(['8731.58', '92.25']), '8823.83')
+  assert.equal(sumAmounts(['-319.90', '0.10']), '-319.80')
+  assert.equal(sumAmounts(['0.10', '0.20']), '0.30', 'no floating point')
+  assert.equal(sumAmounts([]), '0.00')
+  assert.equal(sumAmounts(['x', '1.00']), '1.00', 'a text that is not an amount is 0')
 })

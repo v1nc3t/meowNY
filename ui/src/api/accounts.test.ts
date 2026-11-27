@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { Account, AccountLine, AccountStatement, AccountsSummary, Breakdown, HistoryPoint, Share } from './accounts.ts'
+import { Account, AccountLine, AccountStatement, AccountsSummary, Breakdown, HistoryPoint, isLiability, Paid, Share } from './accounts.ts'
 import { Preview } from './dataExport.ts'
 import { Entry, Line } from './debts.ts'
 import { Recurring } from './recurring.ts'
@@ -33,16 +33,25 @@ const account = {
   foreign: false,
   rate: null,
   balanceInMain: '1520.35',
+  // what the stashes in it hold, and what is left of the balance (docs/stash-design.md, section 4.5)
+  setAside: '0.00',
+  free: '1520.35',
+  // the rate, installment and what a liability owes (docs/loans-deposits-design.md, section 6): none on an account without them
+  interestRate: null,
+  interestPeriod: null,
+  installment: null,
+  liability: null,
+  returnPerMonth: null,
 }
 // an account in lei, at 1 EUR = 5.00 RON: its amounts are in lei, and `balanceInMain` is what it is worth in the app's currency
-const lei = { ...account, id: '3', name: 'Lei account', currency: 'RON', foreign: true, rate: '5.00', balance: '120.00', balanceInMain: '24.00', virtualBalance: '0.00', available: '120.00' }
+const lei = { ...account, id: '3', name: 'Lei account', currency: 'RON', foreign: true, rate: '5.00', balance: '120.00', balanceInMain: '24.00', virtualBalance: '0.00', available: '120.00', free: '120.00' }
 const line = { date: '2026-11-02', source: 'TRANSACTION', id: '9', what: 'Lidl', other: 'Groceries', amount: '-12.50', balance: '887.50' }
 const ok = (schema: { safeParse: (value: unknown) => { success: boolean } }, value: unknown) => schema.safeParse(value).success
 
 test('an account as the app sends it is accepted', () => {
   assert.deepEqual(Account.parse(account), account)
   assert.ok(ok(Account, { ...account, number: 'DE00 1234', lastActivity: null, entries: 0, balance: '0.00', isMain: true }))
-  for (const kind of ['CHECKING', 'SAVINGS', 'CASH', 'CREDIT_CARD']) assert.ok(ok(Account, { ...account, kind }), kind)
+  for (const kind of ['CHECKING', 'SAVINGS', 'CASH', 'CREDIT_CARD', 'CREDIT', 'LOAN', 'MORTGAGE']) assert.ok(ok(Account, { ...account, kind }), kind)
 })
 
 test('an account with a wrong shape is refused', () => {
@@ -53,7 +62,7 @@ test('an account with a wrong shape is refused', () => {
     ['a plus', { ...account, balance: '+1.00' }],
     ['an id as a number', { ...account, id: 2 }],
     ['an id of zero', { ...account, id: '0' }],
-    ['an unknown kind', { ...account, kind: 'LOAN' }],
+    ['an unknown kind', { ...account, kind: 'DEPOSIT' }],
     ['a kind in small letters', { ...account, kind: 'cash' }],
     ['archived as 0', { ...account, archived: 0 }],
     ['a date with a time', { ...account, openingDate: '2026-01-01T00:00:00Z' }],
@@ -84,7 +93,7 @@ test('an account with a wrong shape is refused', () => {
   ]
   for (const [why, value] of bad) assert.equal(ok(Account, value), false, why)
   // the backend always sends the six new fields, so an account without one is refused
-  for (const field of ['bic', 'notes', 'group', 'includeInNetWorth', 'virtualBalance', 'available', 'currency', 'foreign', 'rate', 'balanceInMain']) {
+  for (const field of ['bic', 'notes', 'group', 'includeInNetWorth', 'virtualBalance', 'available', 'currency', 'foreign', 'rate', 'balanceInMain', 'setAside', 'free', 'interestRate', 'interestPeriod', 'installment', 'liability', 'returnPerMonth']) {
     assert.equal(ok(Account, Object.fromEntries(Object.entries(account).filter(([key]) => key !== field))), false, `${field} left out`)
   }
 })
@@ -107,11 +116,40 @@ test('an account with its new fields is accepted, set or not', () => {
   assert.ok(ok(Account, { ...plain, balance: '-240.00', virtualBalance: '1000.00', available: '760.00' }))
 })
 
+test('a rate, an installment and what a liability owes are read as the app sends them', () => {
+  const owing = { owed: '9000.00', state: 'OWING', interestPerMonth: '48.75', payoff: { months: 12, interestLeft: '123.45', month: '2027-11' } }
+  const loan = { ...account, kind: 'LOAN', balance: '-9000.00', interestRate: '6.5', interestPeriod: 'YEARLY', installment: '300.00', liability: owing }
+  assert.deepEqual(Account.parse(loan), loan)
+  assert.ok(ok(Account, { ...loan, liability: { ...owing, payoff: { never: true } } }), 'the installment does not beat the interest')
+  assert.ok(ok(Account, { ...loan, liability: { ...owing, interestPerMonth: null, payoff: null }, interestRate: null, interestPeriod: null, installment: null }), 'no rate, no installment')
+  assert.ok(ok(Account, { ...account, kind: 'SAVINGS', interestRate: '2.5', interestPeriod: 'YEARLY', returnPerMonth: '10.01' }))
+  for (const [why, value] of [
+    ['a rate above 100', { ...loan, interestRate: '100.5' }],
+    ['a rate as a number', { ...loan, interestRate: 6.5 }],
+    ['four decimals', { ...loan, interestRate: '3.1415' }],
+    ['an unknown period', { ...loan, interestPeriod: 'DAILY' }],
+    ['a state in small letters', { ...loan, liability: { ...owing, state: 'owing' } }],
+    ['a payoff that is neither shape', { ...loan, liability: { ...owing, payoff: { months: 12 } } }],
+    ['owed below 0', { ...loan, liability: { ...owing, owed: '-9000.00' } }],
+  ] as [string, unknown][]) assert.equal(ok(Account, value), false, why)
+  assert.deepEqual(['CHECKING', 'CREDIT_CARD', 'CREDIT', 'LOAN', 'MORTGAGE'].map((kind) => isLiability(kind as never)), [false, false, true, true, true])
+})
+
+test('what a payment made is a transfer for the principal and an expense for the interest, either one left out', () => {
+  const transfer = { id: '7', fromAccountId: '1', toAccountId: '2', amount: '365.00', toAmount: null, date: '2026-11-03', note: null }
+  const transaction = { id: '1', categoryId: '2', accountId: '1', clientUuid: null, name: 'Flat', amount: '585.00', nativeAmount: null, myShare: '585.00', split: [], paidBy: null, paymentDate: '2026-11-03', description: null }
+  assert.ok(ok(Paid, { transfer, transaction }))
+  assert.ok(ok(Paid, { transfer: null, transaction }), 'all of it was interest')
+  assert.ok(ok(Paid, { transfer, transaction: null }), 'there was none')
+  assert.equal(ok(Paid, { transfer }), false, 'the app always says both')
+})
+
 test('the summary, a statement and the history are accepted, and refused with numbers for money', () => {
-  const summary = { inAccounts: '5210.00', friends: '50.00', netWorth: '5260.00', accounts: 3, inUse: true }
+  const summary = { inAccounts: '5210.00', debts: '-1000.00', friends: '50.00', netWorth: '4260.00', accounts: 3, inUse: true }
   assert.ok(ok(AccountsSummary, summary))
   assert.ok(ok(AccountsSummary, { ...summary, friends: '-50.00', netWorth: '-10.00', inUse: false }))
   assert.equal(ok(AccountsSummary, { ...summary, netWorth: 5260 }), false)
+  assert.equal(ok(AccountsSummary, (({ debts: _debts, ...rest }) => rest)(summary)), false, 'the app always says the debts')
   assert.equal(ok(AccountsSummary, { ...summary, inUse: 'yes' }), false)
 
   const statement = { account, currency: 'EUR', from: '2026-11-01', to: '2026-11-30', balanceBefore: '900.00', lines: [line], balanceAfter: '1520.35' }

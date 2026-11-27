@@ -15,7 +15,7 @@ pub(crate) const TODAY: &str = "2026-11-13";
 pub(crate) const INVALID: AppError = AppError::InvalidInput;
 
 pub(crate) fn new_account(name: &str) -> NewAccount {
-    NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: None, opening_date: None, bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None }
+    NewAccount { name: name.into(), kind: Kind::Checking, number: None, opening_balance: None, opening_date: None, bic: None, notes: None, group: None, include_in_net_worth: None, virtual_balance: None, currency: None, rate: None, interest_rate: None, interest_period: None, installment: None }
 }
 
 /// A checking account with nothing in it. Returns its id.
@@ -53,11 +53,11 @@ pub(crate) fn balance(conn: &Connection, id: i64, day: &str) -> i64 {
 }
 
 /// Everything a write could touch, as text: every row and column of the tables of this feature and of the rows that carry an account
-/// (stamps and `updated_at` among them), the deletion markers, the history, and the clock that makes stamps. Two equal snapshots mean
+/// (the stashes and their entries too; stamps and `updated_at` among them), the deletion markers, the history, and the clock that makes stamps. Two equal snapshots mean
 /// that nothing was written and no stamp was made.
 pub(crate) fn snapshot(conn: &Connection) -> String {
     let mut out = String::new();
-    for table in ["accounts", "transfers", "transactions", "recurring_transactions", "ledger_entries", "transaction_split_lines", "people", "sync_deleted", "audit_log"] {
+    for table in ["accounts", "transfers", "stashes", "stash_entries", "transactions", "recurring_transactions", "ledger_entries", "transaction_split_lines", "people", "sync_deleted", "audit_log"] {
         out.push_str(&format!("== {table}\n"));
         let mut statement = conn.prepare(&format!("SELECT * FROM {table} ORDER BY id")).unwrap();
         let columns = statement.column_count();

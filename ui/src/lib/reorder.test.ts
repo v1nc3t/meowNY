@@ -50,3 +50,4 @@ test('the list scrolls near its edges only, faster the closer the pointer is', (
   assert.ok(scrollStep(100 + SCROLL_EDGE / 2, 100, 500) < 0)
   assert.ok(Math.abs(scrollStep(100 + SCROLL_EDGE / 2, 100, 500)) < SCROLL_MAX)
 })
+

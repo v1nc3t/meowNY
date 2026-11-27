@@ -14,11 +14,13 @@ import { whenText } from '../api/locales'
 import { errorText } from '../api/invoke'
 import { useT } from '../i18n/context'
 import { useToast } from '../hooks/toast'
+import { useOpenRow } from '../hooks/useOpenRow'
 import Dropdown from './Dropdown'
+import Facts from './Facts'
 import { Row, Table } from './RowParts'
-import Badge from './ui/Badge'
-import Button from './ui/Button'
-import { Actions, Field, Rows, SwitchRow } from '../pages/settings/layout'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
+import { Actions, Field, Rows, Subtitle, SwitchRow } from '../pages/settings/layout'
 
 /**
  * Settings block for the command API: the on/off switch and the access tokens the CLI needs.
@@ -35,6 +37,7 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
   const [days, setDays] = useState(String(DEFAULT_EXPIRY_DAYS))
   const [busy, setBusy] = useState(false)
   const say = useToast()
+  const rows = useOpenRow()
 
   useEffect(() => {
     commandApi.status().then(setStatus, (e) => say(errorText(e), 'error'))
@@ -94,7 +97,6 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
 
   return (
     <div className="settings-stack">
-
       {status && (
         <Rows>
           <SwitchRow
@@ -107,45 +109,52 @@ export default function CommandApiBlock({ locale, timezone }: { locale: string; 
         </Rows>
       )}
 
-      <h3 className="settings-subtitle">{t('cli.tokens')}</h3>
+      <Subtitle>{t('cli.tokens')}</Subtitle>
       {tokens && tokens.length === 0 && <p className="hint">{t('cli.noTokens')}</p>}
       {tokens && tokens.length > 0 && (
         <Table
+          tidy
+          opens
           className="token-table"
-          heads={[t('common.name'), t('cli.tokenScope'), t('cli.colExpires'), t('cli.colLastUsed'), { label: t('cli.revoke'), className: 'head-spacer' }]}
+          heads={[t('common.name'), { label: t('cli.tokenScope'), className: 'head-scope' }, t('cli.colExpires'), { label: t('cli.colLastUsed'), className: 'head-used' }, '']}
         >
-          {tokens.map((token) => (
-            <Row
-              key={token.id}
-              className={token.expired ? 'is-expired' : undefined}
-              actions={
-                <Button variant="outline" size="sm" className="row-primary" onClick={() => void onRevoke(token.id)}>
-                  {t('cli.revoke')}
-                </Button>
-              }
-            >
-              <div className="cell-name">
-                <span className="card-name" title={token.name}>
-                  {token.name}
-                </span>
-              </div>
-              <span className="cell-sub">{t(token.scope === 'write' ? 'cli.scopeWrite' : 'cli.scopeRead')}</span>
-              {token.expired ? (
-                <span className="cell-sub-end">{t('cli.expired', { time: whenText(token.expiresAt, locale, timezone) })}</span>
-              ) : (
-                <span className="cell-sub-end" data-label={t('cli.colExpires')}>
-                  {whenText(token.expiresAt, locale, timezone)}
-                </span>
-              )}
-              {token.lastUsedAt ? (
-                <span className="cell-extra" data-label={t('cli.colLastUsed')}>
-                  {whenText(token.lastUsedAt, locale, timezone)}
-                </span>
-              ) : (
-                <span className="cell-extra">{t('cli.neverUsed')}</span>
-              )}
-            </Row>
-          ))}
+          {tokens.map((token) => {
+            const scope = t(token.scope === 'write' ? 'cli.scopeWrite' : 'cli.scopeRead')
+            const expires = token.expired ? t('cli.expired', { time: whenText(token.expiresAt, locale, timezone) }) : whenText(token.expiresAt, locale, timezone)
+            const used = token.lastUsedAt ? whenText(token.lastUsedAt, locale, timezone) : t('cli.neverUsed')
+            return (
+              <Row
+                key={token.id}
+                rows={rows}
+                id={token.id}
+                className={token.expired ? 'is-expired' : undefined}
+                actions={
+                  <Button variant="outline" size="sm" className="row-primary" onClick={() => void onRevoke(token.id)}>
+                    {t('cli.revoke')}
+                  </Button>
+                }
+                // what a narrow list leaves out
+                panel={
+                  <Facts
+                    items={[
+                      { label: t('cli.tokenScope'), value: scope },
+                      { label: t('cli.colExpires'), value: expires },
+                      { label: t('cli.colLastUsed'), value: used },
+                    ]}
+                  />
+                }
+              >
+                <div className="cell-name">
+                  <span className="card-name" title={token.name}>
+                    {token.name}
+                  </span>
+                </div>
+                <span className="cell-sub token-scope">{scope}</span>
+                <span className="cell-sub">{expires}</span>
+                <span className="cell-sub token-used">{used}</span>
+              </Row>
+            )
+          })}
         </Table>
       )}
 

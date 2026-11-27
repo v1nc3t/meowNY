@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PDFDocumentProxy, PDFDocumentLoadingTask, RenderTask } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { useT } from '../i18n/context'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * A PDF drawn one page at a time on a canvas, as large as fits its frame, with the buttons for the previous and the next page and the

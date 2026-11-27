@@ -34,7 +34,7 @@ pub(super) const SPLIT: Param = Param::new("split", Kind::String, "Only the bill
 pub(super) const SECTIONS: Param = Param::new(
     "sections",
     Kind::String,
-    "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+    "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), stashes (money set aside in an account for a goal, with their entries, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
 );
 
 /// What an export covers, from the arguments: the parts come as one text separated by commas and are read as a list.

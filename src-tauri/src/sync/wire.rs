@@ -19,7 +19,7 @@ use crate::documents::names::{is_clean_name, MediaType};
 use crate::documents::seal::CHUNK_SIZE;
 use crate::documents::MAX_DOCUMENT_BYTES;
 use crate::money::MAX_MINOR;
-use crate::{categories, currency, transactions, vault};
+use crate::{categories, currency, rates, transactions, vault};
 
 /// The version of this protocol, in `hello`.
 /// Protocol 3 adds the tables `documents` and `document_links`; protocol 4 adds `people` and `ledger_entries`, the parts of a shared
@@ -30,8 +30,11 @@ use crate::{categories, currency, transactions, vault};
 /// and the template of a recurring item name the friend who paid (`paidBy`); protocol 9 adds the tables `accounts` and `transfers` and the
 /// account of a transaction, a recurring item and a ledger entry (`account`); protocol 10 adds the details of an account (`bic`, `notes`,
 /// `group`, `includeNetWorth`, `virtualBalanceMinor`); protocol 11 adds a currency per account (`currency` and `rate` of an account, `nativeAmountMinor`
-/// of a transaction, `toAmountMinor` of a transfer). A device that speaks an older protocol is told to update.
-pub const PROTOCOL: u32 = 11;
+/// of a transaction, `toAmountMinor` of a transfer); protocol 12 adds the tables `stashes` and `stash_entries` (money set aside in an account for
+/// a goal); protocol 13 adds the rate and the installment of an account (`interestRate`, `interestPeriod`, `installment`), the three kinds of account
+/// you owe on, and the term deposit of a stash (`kind`, `interestRate`, `interestPeriod`, `startDate`, `brokenOn`, `returnedOn`). A device that speaks an
+/// older protocol is told to update.
+pub const PROTOCOL: u32 = 13;
 /// Digest entries in one message, and rows in one message. Messages are also cut by size (`SOFT_MESSAGE_BYTES`).
 pub const MAX_ENTRIES_PER_MESSAGE: usize = 400;
 pub const MAX_ROWS_PER_MESSAGE: usize = 200;
@@ -43,7 +46,7 @@ pub const CHUNK_BYTES: usize = 24 * 1024;
 pub const MAX_CHUNK_TEXT: usize = CHUNK_BYTES / 3 * 4;
 /// More than this many rows of one table in a sync is not a budget of one person.
 pub const MAX_ROWS_PER_TABLE: usize = 2_000_000;
-/// The highest place a category or an account can have in its list.
+/// The highest place a category, an account or a stash can have in its list.
 const MAX_POSITION: i64 = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -57,6 +60,8 @@ pub enum Table {
     Budgets,
     Transactions,
     Transfers,
+    Stashes,
+    StashEntries,
     LedgerEntries,
     Documents,
     DocumentLinks,
@@ -64,7 +69,7 @@ pub enum Table {
 
 impl Table {
     /// In the order they are sent and applied: a row's references always point at a table earlier in the list.
-    pub const ALL: [Table; 11] = [
+    pub const ALL: [Table; 13] = [
         Table::Settings,
         Table::Categories,
         Table::People,
@@ -73,6 +78,8 @@ impl Table {
         Table::Budgets,
         Table::Transactions,
         Table::Transfers,
+        Table::Stashes,
+        Table::StashEntries,
         Table::LedgerEntries,
         Table::Documents,
         Table::DocumentLinks,
@@ -85,6 +92,8 @@ impl Table {
             Table::People => "people",
             Table::Accounts => "accounts",
             Table::Transfers => "transfers",
+            Table::Stashes => "stashes",
+            Table::StashEntries => "stash_entries",
             Table::LedgerEntries => "ledger_entries",
             Table::RecurringTransactions => "recurring_transactions",
             Table::Budgets => "budgets",
@@ -515,7 +524,7 @@ fn note_ok(text: &str) -> bool {
     lines_ok(text, 200)
 }
 
-/// The notes of an account.
+/// The notes of an account or a stash.
 fn notes_ok(text: &str) -> bool {
     lines_ok(text, 1000)
 }
@@ -534,6 +543,11 @@ fn currency_ok(text: &str) -> bool {
 /// spaces and signs are not digits, so the parser refuses them.
 fn rate_ok(text: &str) -> bool {
     (1..=20).contains(&text.chars().count()) && currency::parse_rate(text).is_ok()
+}
+
+/// The period of a rate (`rates::Period`).
+fn period_ok(text: &str) -> bool {
+    rates::Period::from_sql(text).is_ok()
 }
 
 /// Who a part belongs to: exactly one of a friend (a `sync_id`) and a guest (a plain name).
@@ -738,6 +752,13 @@ pub struct AccountRow {
     pub currency: Option<String>,
     /// How many units of the account's currency one unit of the app's currency buys, as typed: there exactly when `currency` is.
     pub rate: Option<String>,
+    /// The rate of the account, a percent times 1000 (3.25 % is 3250): the return of savings, the interest of a debt. There exactly when
+    /// `interest_period` is (`docs/loans-deposits-design.md`, section 7).
+    pub interest_rate: Option<i64>,
+    /// `MONTHLY` or `YEARLY`.
+    pub interest_period: Option<String>,
+    /// What a debt is paid off with every month, in minor units; only for a credit, a loan or a mortgage.
+    pub installment: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -756,6 +777,55 @@ pub struct TransferRow {
     pub to_amount_minor: Option<i64>,
     pub transfer_date: String,
     pub note: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// A stash: money set aside inside one account for a goal (`docs/stash-design.md`, section 7). It always names its account; what it holds is
+/// the sum of its entries and is never sent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StashRow {
+    pub sync_id: String,
+    pub stamp: String,
+    pub name: String,
+    /// The `sync_id` of the account the stash lives in.
+    pub account: String,
+    /// What the stash is saving for, in the account's currency; none for a stash without a target.
+    pub target_minor: Option<i64>,
+    pub target_date: Option<String>,
+    pub notes: Option<String>,
+    /// 0 or 1.
+    pub archived: i64,
+    /// Place in the list of stashes, from 0.
+    pub position: i64,
+    /// `GOAL` or `DEPOSIT`. The next five are there only for a deposit (`docs/loans-deposits-design.md`, sections 4.2 and 7); its maturity is `target_date`.
+    pub kind: String,
+    /// A percent times 1000, with `interest_period`; both there exactly for a deposit.
+    pub interest_rate: Option<i64>,
+    pub interest_period: Option<String>,
+    pub start_date: Option<String>,
+    /// The day a running deposit was broken, and the day its return was booked.
+    pub broken_on: Option<String>,
+    pub returned_on: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// One add or one take of a stash. The sign says which: above 0 money went in, below 0 it came out.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StashEntryRow {
+    pub sync_id: String,
+    pub stamp: String,
+    /// The `sync_id` of the stash.
+    pub stash: String,
+    /// Signed, never 0.
+    pub amount_minor: i64,
+    pub entry_date: String,
+    pub note: Option<String>,
+    /// The `sync_id` of the transfer that came with the entry, if it is still there.
+    pub transfer: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -867,6 +937,8 @@ pub enum Row {
     Person(PersonRow),
     Account(AccountRow),
     Transfer(TransferRow),
+    Stash(StashRow),
+    StashEntry(StashEntryRow),
     Ledger(LedgerRow),
     Recurring(RecurringRow),
     Budget(BudgetRow),
@@ -883,6 +955,8 @@ impl Row {
             Row::Person(r) => &r.sync_id,
             Row::Account(r) => &r.sync_id,
             Row::Transfer(r) => &r.sync_id,
+            Row::Stash(r) => &r.sync_id,
+            Row::StashEntry(r) => &r.sync_id,
             Row::Ledger(r) => &r.sync_id,
             Row::Recurring(r) => &r.sync_id,
             Row::Budget(r) => &r.sync_id,
@@ -899,6 +973,8 @@ impl Row {
             Row::Person(r) => &r.stamp,
             Row::Account(r) => &r.stamp,
             Row::Transfer(r) => &r.stamp,
+            Row::Stash(r) => &r.stamp,
+            Row::StashEntry(r) => &r.stamp,
             Row::Ledger(r) => &r.stamp,
             Row::Recurring(r) => &r.stamp,
             Row::Budget(r) => &r.stamp,
@@ -918,6 +994,8 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
         Table::People => Row::Person(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::Accounts => Row::Account(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::Transfers => Row::Transfer(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
+        Table::Stashes => Row::Stash(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
+        Table::StashEntries => Row::StashEntry(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::LedgerEntries => Row::Ledger(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::RecurringTransactions => Row::Recurring(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
         Table::Budgets => Row::Budget(serde_json::from_value(value.clone()).map_err(|_| WireError::Format)?),
@@ -958,9 +1036,11 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && timestamp_ok(&r.updated_at)
         }
         Row::Account(r) => {
+            let kind = crate::accounts::Kind::from_sql(&r.kind).ok();
+            let liability = kind.is_some_and(crate::accounts::Kind::is_liability);
             sync_id_ok(&r.sync_id)
                 && category_name_ok(&r.name)
-                && ["CHECKING", "SAVINGS", "CASH", "CREDIT_CARD"].contains(&r.kind.as_str())
+                && kind.is_some()
                 && r.number.as_deref().is_none_or(|n| short_ok(n, 50))
                 && (-MAX_MINOR..=MAX_MINOR).contains(&r.opening_balance_minor)
                 && date_ok(&r.opening_date)
@@ -978,6 +1058,12 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 // a rate exactly when there is a currency, and the main account is always in the app's currency
                 && r.currency.is_some() == r.rate.is_some()
                 && (r.sync_id != MAIN_SYNC_ID || r.currency.is_none())
+                // a rate and its period both there or both absent; an installment is for a debt only; the main account is never one
+                && r.interest_rate.is_none_or(|m| (0..=rates::MAX_MILLI).contains(&m))
+                && r.interest_period.as_deref().is_none_or(period_ok)
+                && r.interest_rate.is_some() == r.interest_period.is_some()
+                && r.installment.is_none_or(|i| money_ok(i, 1) && liability)
+                && (r.sync_id != MAIN_SYNC_ID || !liability)
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
@@ -990,6 +1076,42 @@ pub fn parse_row(table: Table, value: &Value) -> Result<Row, WireError> {
                 && r.to_amount_minor.is_none_or(|a| money_ok(a, 1))
                 && date_ok(&r.transfer_date)
                 && r.note.as_deref().is_none_or(note_ok)
+                && timestamp_ok(&r.created_at)
+                && timestamp_ok(&r.updated_at)
+        }
+        Row::Stash(r) => {
+            // the checks of the columns (migration 0022): a deposit has a rate with its period and a start date, a goal has none of the five
+            let deposit = r.kind == "DEPOSIT";
+            sync_id_ok(&r.sync_id)
+                && category_name_ok(&r.name)
+                && sync_id_ok(&r.account)
+                && r.target_minor.is_none_or(|t| money_ok(t, 1))
+                && option_date(&r.target_date)
+                && r.notes.as_deref().is_none_or(notes_ok)
+                && [0, 1].contains(&r.archived)
+                && (0..=MAX_POSITION).contains(&r.position)
+                && (deposit || r.kind == "GOAL")
+                && r.interest_rate.is_some() == deposit
+                && r.interest_rate.is_none_or(|m| (0..=rates::MAX_MILLI).contains(&m))
+                && r.interest_period.is_some() == deposit
+                && r.interest_period.as_deref().is_none_or(period_ok)
+                && r.start_date.is_some() == deposit
+                && option_date(&r.start_date)
+                && (deposit || (r.broken_on.is_none() && r.returned_on.is_none()))
+                && option_date(&r.broken_on)
+                && option_date(&r.returned_on)
+                && timestamp_ok(&r.created_at)
+                && timestamp_ok(&r.updated_at)
+        }
+        Row::StashEntry(r) => {
+            sync_id_ok(&r.sync_id)
+                && sync_id_ok(&r.stash)
+                // an add or a take, never nothing; the sign is what tells them apart
+                && r.amount_minor != 0
+                && (-MAX_MINOR..=MAX_MINOR).contains(&r.amount_minor)
+                && date_ok(&r.entry_date)
+                && r.note.as_deref().is_none_or(note_ok)
+                && option_sync_id(&r.transfer)
                 && timestamp_ok(&r.created_at)
                 && timestamp_ok(&r.updated_at)
         }
@@ -1093,6 +1215,8 @@ pub fn row_to_value(row: &Row) -> Value {
         Row::Person(r) => serde_json::to_value(r),
         Row::Account(r) => serde_json::to_value(r),
         Row::Transfer(r) => serde_json::to_value(r),
+        Row::Stash(r) => serde_json::to_value(r),
+        Row::StashEntry(r) => serde_json::to_value(r),
         Row::Ledger(r) => serde_json::to_value(r),
         Row::Recurring(r) => serde_json::to_value(r),
         Row::Budget(r) => serde_json::to_value(r),
@@ -1145,13 +1269,15 @@ mod tests {
     fn account() -> Value {
         json!({"syncId": ID_A, "stamp": STAMP, "name": "Savings", "kind": "SAVINGS", "number": "IE29 AIBK 9311 5212 3456 78", "openingBalanceMinor": -12000,
                "openingDate": "2026-01-01", "archived": 0, "position": 2, "bic": "DEUTDEFF500", "notes": "joint account\nsince 2020", "group": "Everyday",
-               "includeNetWorth": 1, "virtualBalanceMinor": 100000, "currency": null, "rate": null, "createdAt": TS, "updatedAt": TS})
+               "includeNetWorth": 1, "virtualBalanceMinor": 100000, "currency": null, "rate": null, "interestRate": null, "interestPeriod": null, "installment": null,
+               "createdAt": TS, "updatedAt": TS})
     }
 
     fn main_account() -> Value {
         json!({"syncId": MAIN_SYNC_ID, "stamp": "0000000000000-0000-00000000", "name": "Main account", "kind": "CHECKING", "number": null, "openingBalanceMinor": 0,
                "openingDate": "1970-01-01", "archived": 0, "position": 0, "bic": null, "notes": null, "group": null, "includeNetWorth": 1, "virtualBalanceMinor": 0,
-               "currency": null, "rate": null, "createdAt": "1970-01-01T00:00:00.000Z", "updatedAt": "1970-01-01T00:00:00.000Z"})
+               "currency": null, "rate": null, "interestRate": null, "interestPeriod": null, "installment": null, "createdAt": "1970-01-01T00:00:00.000Z",
+               "updatedAt": "1970-01-01T00:00:00.000Z"})
     }
 
     /// The same account in Romanian lei, at 5.00 lei to the euro.
@@ -1161,6 +1287,17 @@ mod tests {
 
     fn transfer() -> Value {
         json!({"syncId": ID_B, "stamp": STAMP, "from": MAIN_SYNC_ID, "to": ID_A, "amountMinor": 20000, "toAmountMinor": null, "transferDate": "2026-03-01", "note": "to savings",
+               "createdAt": TS, "updatedAt": TS})
+    }
+
+    fn stash() -> Value {
+        json!({"syncId": ID_B, "stamp": STAMP, "name": "Holiday", "account": MAIN_SYNC_ID, "targetMinor": 120000, "targetDate": "2027-06-30", "notes": "Lisbon\nin June",
+               "archived": 0, "position": 2, "kind": "GOAL", "interestRate": null, "interestPeriod": null, "startDate": null, "brokenOn": null, "returnedOn": null,
+               "createdAt": TS, "updatedAt": TS})
+    }
+
+    fn stash_entry() -> Value {
+        json!({"syncId": ID_B, "stamp": STAMP, "stash": ID_A, "amountMinor": 5000, "entryDate": "2026-03-01", "note": "from the bonus", "transfer": ID_A,
                "createdAt": TS, "updatedAt": TS})
     }
 
@@ -1242,6 +1379,25 @@ mod tests {
             (Table::Transfers, changed(transfer(), "note", json!(null))),
             (Table::Transfers, changed(transfer(), "amountMinor", json!(1))),
             (Table::Transfers, changed(transfer(), "amountMinor", json!(MAX_MINOR))),
+            (Table::Stashes, stash()),
+            (Table::Stashes, changed(stash(), "targetMinor", json!(null))),
+            (Table::Stashes, changed(stash(), "targetMinor", json!(1))),
+            (Table::Stashes, changed(stash(), "targetMinor", json!(MAX_MINOR))),
+            (Table::Stashes, changed(stash(), "targetDate", json!(null))),
+            (Table::Stashes, changed(stash(), "targetDate", json!("2020-02-29"))),
+            (Table::Stashes, changed(stash(), "notes", json!(null))),
+            (Table::Stashes, changed(stash(), "archived", json!(1))),
+            (Table::Stashes, changed(stash(), "position", json!(0))),
+            (Table::Stashes, changed(stash(), "position", json!(MAX_POSITION))),
+            (Table::Stashes, changed(stash(), "account", json!(ID_A))),
+            (Table::StashEntries, stash_entry()),
+            (Table::StashEntries, changed(stash_entry(), "transfer", json!(null))),
+            (Table::StashEntries, changed(stash_entry(), "note", json!(null))),
+            (Table::StashEntries, changed(stash_entry(), "amountMinor", json!(-5000))),
+            (Table::StashEntries, changed(stash_entry(), "amountMinor", json!(1))),
+            (Table::StashEntries, changed(stash_entry(), "amountMinor", json!(-1))),
+            (Table::StashEntries, changed(stash_entry(), "amountMinor", json!(MAX_MINOR))),
+            (Table::StashEntries, changed(stash_entry(), "amountMinor", json!(-MAX_MINOR))),
             (Table::RecurringTransactions, recurring()),
             (Table::RecurringTransactions, templated()),
             (Table::Budgets, budget()),
@@ -1281,11 +1437,14 @@ mod tests {
 
     #[test]
     fn there_is_a_table_for_every_kind_of_row_and_the_protocol_knows_it() {
-        assert_eq!(PROTOCOL, 11);
+        assert_eq!(PROTOCOL, 13);
         let names: Vec<&str> = Table::ALL.iter().map(|t| t.name()).collect();
         assert_eq!(
             names,
-            ["settings", "categories", "people", "accounts", "recurring_transactions", "budgets", "transactions", "transfers", "ledger_entries", "documents", "document_links"]
+            [
+                "settings", "categories", "people", "accounts", "recurring_transactions", "budgets", "transactions", "transfers", "stashes", "stash_entries", "ledger_entries", "documents",
+                "document_links"
+            ]
         );
         // what a row points at is always in an earlier table, so it is there when the row is applied
         let position = |t: Table| Table::ALL.iter().position(|x| *x == t).unwrap();
@@ -1296,9 +1455,13 @@ mod tests {
         assert!(position(Table::LedgerEntries) > position(Table::Transactions) && position(Table::LedgerEntries) > position(Table::People));
         assert!(position(Table::DocumentLinks) > position(Table::LedgerEntries));
         // every row that names an account comes after the accounts, and a transfer after the transactions it is sent with
-        for table in [Table::RecurringTransactions, Table::Transactions, Table::Transfers, Table::LedgerEntries] {
+        for table in [Table::RecurringTransactions, Table::Transactions, Table::Transfers, Table::Stashes, Table::LedgerEntries] {
             assert!(position(Table::Accounts) < position(table), "{table:?}");
         }
+        // an entry of a stash names its stash and the transfer that came with it, so both are in before it
+        assert!(position(Table::Stashes) < position(Table::StashEntries) && position(Table::Transfers) < position(Table::StashEntries));
+        assert!(position(Table::Transfers) < position(Table::Stashes), "the stashes come right after the transfers, before the ledger");
+        assert!(position(Table::StashEntries) < position(Table::LedgerEntries));
         // the order of the tables is the order they are declared in, which is how a map of them is walked
         let mut sorted = Table::ALL.to_vec();
         sorted.sort();
@@ -1800,6 +1963,242 @@ mod tests {
             missing.as_object_mut().unwrap().remove(key);
             assert!(parse_row(Table::Transfers, &missing).is_err(), "{key} missing");
         }
+    }
+
+    #[test]
+    fn every_field_of_a_stash_is_checked() {
+        let bad: Vec<(&str, Value)> = vec![
+            ("syncId", json!("nope")),
+            ("syncId", json!(ID_B.to_uppercase())),
+            ("syncId", json!(1)),
+            ("syncId", json!(null)),
+            ("stamp", json!("nope")),
+            ("stamp", json!(null)),
+            // a category's name: 1 to 50 characters, already trimmed, no control character
+            ("name", json!("")),
+            ("name", json!(" Holiday")),
+            ("name", json!("Holiday ")),
+            ("name", json!("a".repeat(51))),
+            ("name", json!("é".repeat(51))),
+            ("name", json!("tab\there")),
+            ("name", json!("two\nlines")),
+            ("name", json!(null)),
+            ("name", json!(7)),
+            // the account is a sync id, never a local id or a name
+            ("account", json!("1")),
+            ("account", json!("Main account")),
+            ("account", json!(ID_A.to_uppercase())),
+            ("account", json!(&MAIN_SYNC_ID[1..])),
+            ("account", json!("")),
+            ("account", json!(1)),
+            ("account", json!(null)),
+            // a target is 1 to the largest amount, whole minor units, and none when the stash has none
+            ("targetMinor", json!(0)),
+            ("targetMinor", json!(-1)),
+            ("targetMinor", json!(MAX_MINOR + 1)),
+            ("targetMinor", json!(1.5)),
+            ("targetMinor", json!("1200")),
+            ("targetMinor", json!(true)),
+            ("targetDate", json!("2027-02-30")),
+            ("targetDate", json!("2027-6-5")),
+            ("targetDate", json!("30/06/2027")),
+            ("targetDate", json!("2027-06-30T00:00:00Z")),
+            ("targetDate", json!(" 2027-06-30")),
+            ("targetDate", json!("")),
+            ("targetDate", json!(20270630)),
+            // the notes of an account: 1 to 1000 characters, trimmed, line breaks allowed, no other control character
+            ("notes", json!("")),
+            ("notes", json!("x".repeat(1001))),
+            ("notes", json!("é".repeat(1001))),
+            ("notes", json!("a\tb")),
+            ("notes", json!("a\u{7}b")),
+            ("notes", json!("a\rb")),
+            ("notes", json!("a\r\nb")),
+            ("notes", json!(" leading")),
+            ("notes", json!("trailing\n")),
+            ("notes", json!(5)),
+            ("archived", json!(2)),
+            ("archived", json!(-1)),
+            ("archived", json!(true)),
+            ("archived", json!("0")),
+            ("archived", json!(1.5)),
+            ("archived", json!(null)),
+            ("position", json!(-1)),
+            ("position", json!(MAX_POSITION + 1)),
+            ("position", json!("1")),
+            ("position", json!(1.5)),
+            ("position", json!(null)),
+            ("createdAt", json!("2026-03-01")),
+            ("createdAt", json!("2026-03-01 10:00:00")),
+            ("createdAt", json!(null)),
+            ("updatedAt", json!("2026-13-01T10:00:00.250Z")),
+            ("updatedAt", json!("nope")),
+            ("updatedAt", json!(null)),
+        ];
+        for (key, value) in bad {
+            let shown: String = value.to_string().chars().take(40).collect();
+            assert!(parse_row(Table::Stashes, &changed(stash(), key, value.clone())).is_err(), "{key} = {shown}");
+        }
+        // the bounds that are fine, written back exactly as they were read
+        let good: Vec<(&str, Value)> = vec![
+            ("name", json!("H")),
+            ("name", json!("x".repeat(50))),
+            ("name", json!("é".repeat(50))),
+            ("account", json!(ID_A)),
+            ("targetMinor", json!(1)),
+            ("targetMinor", json!(MAX_MINOR)),
+            ("targetMinor", json!(null)),
+            // a date in the past is fine: the stash is then overdue, and a sync does not look at the day
+            ("targetDate", json!("1999-12-31")),
+            ("targetDate", json!("2028-02-29")),
+            ("targetDate", json!(null)),
+            ("notes", json!("n")),
+            ("notes", json!("x".repeat(1000))),
+            ("notes", json!("é".repeat(1000))),
+            ("notes", json!("one\ntwo\n\nfour")),
+            ("notes", json!(null)),
+            ("archived", json!(0)),
+            ("archived", json!(1)),
+            ("position", json!(0)),
+            ("position", json!(MAX_POSITION)),
+        ];
+        for (key, value) in good {
+            let row = changed(stash(), key, value.clone());
+            let read = parse_row(Table::Stashes, &row).unwrap_or_else(|e| panic!("{key} = {value}: {e}"));
+            assert_eq!(row_to_value(&read), row, "{key}");
+        }
+        // an unknown field: what a stash holds is worked out from its entries and never sent, and the names of the columns are not the names of the wire
+        for (key, value) in [("saved", json!(500)), ("free", json!("10.00")), ("accountId", json!(MAIN_SYNC_ID)), ("target", json!("1200.00")), ("entries", json!([])), ("deletedAt", json!(null))] {
+            assert!(parse_row(Table::Stashes, &changed(stash(), key, value)).is_err(), "{key} is not a field of a stash");
+        }
+        // each field that must be there; the three that are optional read as nothing when they are left out and are written back as null
+        for key in ["syncId", "stamp", "name", "account", "archived", "position", "createdAt", "updatedAt"] {
+            let mut missing = stash();
+            missing.as_object_mut().unwrap().remove(key);
+            assert!(parse_row(Table::Stashes, &missing).is_err(), "{key} missing");
+        }
+        for key in ["targetMinor", "targetDate", "notes"] {
+            let mut left_out = stash();
+            left_out.as_object_mut().unwrap().remove(key);
+            assert_eq!(row_to_value(&parse_row(Table::Stashes, &left_out).unwrap())[key], json!(null), "{key} left out");
+        }
+        // rows of other tables are not stashes, and a stash is not one of theirs
+        for (table, row) in [(Table::Accounts, account()), (Table::Transfers, transfer()), (Table::StashEntries, stash_entry()), (Table::Budgets, budget()), (Table::Categories, category())] {
+            assert!(parse_row(Table::Stashes, &row).is_err(), "{table:?} is not a stash");
+            assert!(parse_row(table, &stash()).is_err(), "a stash is not a row of {table:?}");
+        }
+        assert!(parse_row(Table::Stashes, &json!([])).is_err());
+        assert!(parse_row(Table::Stashes, &json!(null)).is_err());
+    }
+
+    #[test]
+    fn every_field_of_a_stash_entry_is_checked() {
+        let bad: Vec<(&str, Value)> = vec![
+            ("syncId", json!("nope")),
+            ("syncId", json!(ID_B.to_uppercase())),
+            ("syncId", json!(1)),
+            ("syncId", json!(null)),
+            ("stamp", json!("nope")),
+            ("stamp", json!(null)),
+            // the stash is a sync id
+            ("stash", json!("1")),
+            ("stash", json!("Holiday")),
+            ("stash", json!(ID_A.to_uppercase())),
+            ("stash", json!(&ID_A[1..])),
+            ("stash", json!("")),
+            ("stash", json!(1)),
+            ("stash", json!(null)),
+            // above 0 an add, below 0 a take, never 0, and never more than the largest amount either way
+            ("amountMinor", json!(0)),
+            ("amountMinor", json!(MAX_MINOR + 1)),
+            ("amountMinor", json!(-MAX_MINOR - 1)),
+            ("amountMinor", json!(i64::MAX)),
+            ("amountMinor", json!(i64::MIN)),
+            ("amountMinor", json!(0.0)),
+            ("amountMinor", json!(1.5)),
+            ("amountMinor", json!("5000")),
+            ("amountMinor", json!(true)),
+            ("amountMinor", json!(null)),
+            ("entryDate", json!("2026-02-30")),
+            ("entryDate", json!("2026-3-1")),
+            ("entryDate", json!("01/03/2026")),
+            ("entryDate", json!("2026-03-01T10:00:00Z")),
+            ("entryDate", json!("")),
+            ("entryDate", json!(20260301)),
+            ("entryDate", json!(null)),
+            // a note as the ledger and the transfers have it: 1 to 200 characters, trimmed, line breaks allowed
+            ("note", json!("")),
+            ("note", json!(" padded")),
+            ("note", json!("padded ")),
+            ("note", json!("x".repeat(201))),
+            ("note", json!("é".repeat(201))),
+            ("note", json!("tab\there")),
+            ("note", json!("a\u{7}b")),
+            ("note", json!("line\r\nbreak")),
+            ("note", json!(5)),
+            // the transfer is a sync id, or nothing
+            ("transfer", json!("1")),
+            ("transfer", json!("x")),
+            ("transfer", json!("")),
+            ("transfer", json!(ID_A.to_uppercase())),
+            ("transfer", json!(&ID_A[1..])),
+            ("transfer", json!(1)),
+            ("transfer", json!(true)),
+            ("createdAt", json!("2026-03-01")),
+            ("createdAt", json!("2026-03-01 10:00:00")),
+            ("createdAt", json!(null)),
+            ("updatedAt", json!("2026-13-01T10:00:00.250Z")),
+            ("updatedAt", json!("nope")),
+            ("updatedAt", json!(null)),
+        ];
+        for (key, value) in bad {
+            let shown: String = value.to_string().chars().take(40).collect();
+            assert!(parse_row(Table::StashEntries, &changed(stash_entry(), key, value.clone())).is_err(), "{key} = {shown}");
+        }
+        let good: Vec<(&str, Value)> = vec![
+            ("stash", json!(ID_B)),
+            ("stash", json!(MAIN_SYNC_ID)),
+            ("amountMinor", json!(1)),
+            ("amountMinor", json!(-1)),
+            ("amountMinor", json!(MAX_MINOR)),
+            ("amountMinor", json!(-MAX_MINOR)),
+            // a date in the future is fine: the other device's clock is its own, and a sync does not look at the day
+            ("entryDate", json!("2999-12-31")),
+            ("entryDate", json!("1999-01-01")),
+            ("entryDate", json!("2028-02-29")),
+            ("note", json!(null)),
+            ("note", json!("n")),
+            ("note", json!("x".repeat(200))),
+            ("note", json!("é".repeat(200))),
+            ("note", json!("line\nbreak")),
+            ("transfer", json!(null)),
+            ("transfer", json!(ID_B)),
+        ];
+        for (key, value) in good {
+            let row = changed(stash_entry(), key, value.clone());
+            let read = parse_row(Table::StashEntries, &row).unwrap_or_else(|e| panic!("{key} = {value}: {e}"));
+            assert_eq!(row_to_value(&read), row, "{key}");
+        }
+        // the kind is the sign and the amount is whole: neither is a field
+        for (key, value) in [("kind", json!("ADD")), ("amount", json!("50.00")), ("transferId", json!(ID_A)), ("stashId", json!(ID_A)), ("account", json!(MAIN_SYNC_ID)), ("origin", json!(null))] {
+            assert!(parse_row(Table::StashEntries, &changed(stash_entry(), key, value)).is_err(), "{key} is not a field of an entry");
+        }
+        for key in ["syncId", "stamp", "stash", "amountMinor", "entryDate", "createdAt", "updatedAt"] {
+            let mut missing = stash_entry();
+            missing.as_object_mut().unwrap().remove(key);
+            assert!(parse_row(Table::StashEntries, &missing).is_err(), "{key} missing");
+        }
+        for key in ["note", "transfer"] {
+            let mut left_out = stash_entry();
+            left_out.as_object_mut().unwrap().remove(key);
+            assert_eq!(row_to_value(&parse_row(Table::StashEntries, &left_out).unwrap())[key], json!(null), "{key} left out");
+        }
+        for (table, row) in [(Table::LedgerEntries, entry()), (Table::Transfers, transfer()), (Table::Stashes, stash()), (Table::Documents, document())] {
+            assert!(parse_row(Table::StashEntries, &row).is_err(), "{table:?} is not an entry of a stash");
+            assert!(parse_row(table, &stash_entry()).is_err(), "an entry of a stash is not a row of {table:?}");
+        }
+        assert!(parse_row(Table::StashEntries, &json!([])).is_err());
+        assert!(parse_row(Table::StashEntries, &json!(null)).is_err());
     }
 
     #[test]

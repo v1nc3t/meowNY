@@ -2,11 +2,11 @@
 
 /* Debts (phase 10). Panes with several parts stack them with an even space between. */
 :is(.tx-pane.pane-stack, .debts-half) > * + * {
-  margin-top: 1rem;
+  margin-top: var(--page-gap);
 }
 
 :is(.tx-pane.pane-stack, .debts-half) > .debts-heading {
-  margin: 1.5rem 0 0;
+  margin: var(--group-gap) 0 0;
   font-family: var(--font);
   font-size: 1.0625rem;
   font-weight: 700;
@@ -14,12 +14,11 @@
 }
 
 :is(.tx-pane.pane-stack, .debts-half) > .debts-heading + * {
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
 }
 
-/* The debts page, like the budgets (money.css): the friends on the left, and on the right the debts of all friends or the history of the
-   one chosen, in halves of the same width; with no room for two, one under the other. A half needs about 23rem, for a friend's name of
-   10rem beside the amount of its two-line row. The phone never has two. */
+/* The debts page: the friends, then under them the debts of all friends or the history of the one chosen, each the whole width of the page,
+   so each table has the room for its columns. */
 .debts-view {
   container-type: inline-size;
   container-name: debts;
@@ -27,19 +26,9 @@
 
 .debts-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: start;
-  gap: 1.5rem;
-}
-
-@container debts (max-width: 46rem) {
-  .debts-split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-html.is-phone .debts-split {
   grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--group-gap);
 }
 
 .debts-half {
@@ -51,50 +40,9 @@ html.is-phone .debts-split {
   margin-top: 0;
 }
 
-.tx-actions.debts-actions {
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-/* On a phone the four buttons are two by two, all the same width; a long name breaks onto a second line inside its button. The bar of
-   adding a friend has the same two columns (so the edges line up), and "show removed friends" takes a row under them. */
-html.is-phone :is(.tx-actions.debts-actions, .debts-bar) {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: stretch;
-  gap: 0.5rem;
-  width: 100%;
-}
-
-html.is-phone :is(.tx-actions.debts-actions, .debts-bar) > .ui-btn {
-  width: 100%;
-  min-width: 0;
-  height: auto;
-  padding-block: 0.375rem;
-  line-height: 1.25;
-  white-space: normal;
-  text-align: center;
-}
-
-html.is-phone .debts-bar > label {
-  grid-column: 1 / -1;
-}
-
 /* A friend's page: the title sits the page's usual 1rem under the row of back and mark as paid, not the 0.5rem of a heading and its text. */
 html.is-phone .debts-name + .debts-heading {
-  margin-top: 1rem;
-}
-
-/* Adding a friend, and showing the ones that were taken off the list. */
-.debts-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1.25rem;
-}
-
-.debts-bar > label {
-  width: auto;
+  margin-top: var(--page-gap);
 }
 
 .debts-pager {
@@ -129,33 +77,6 @@ html.is-phone .debts-name + .debts-heading {
   font-variant-numeric: tabular-nums;
 }
 
-/* What is due: the total, and how many payments have no amount. */
-.debts-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem 2.5rem;
-}
-
-.debts-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.debts-stat-label {
-  font-size: 0.8125rem;
-  color: var(--muted-foreground);
-}
-
-.debts-stat-value {
-  font-size: 1.5rem;
-  font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
 .debts-files {
   display: flex;
   flex-wrap: wrap;
@@ -164,26 +85,14 @@ html.is-phone .debts-name + .debts-heading {
 }
 
 /* The statement of the friend chosen, under the history and at the window's bottom as the pager of the transactions is: the history
-   scrolls above it. Its list opens upwards, since there is no room under it. It is outside the pane that holds the two halves, so the
-   page is a container for it to see when they are side by side: that is when the pane (the page less the room of the scroll bar,
-   0.875rem) is wider than 46rem, as in the rule of `.debts-split` above. Then the foot is under the right half, as wide as it, with the
-   same gap (1.5rem) to the left half; otherwise it has the whole width. */
-.debts-page {
-  container-type: inline-size;
-  container-name: debts-page;
-}
-
+   scrolls above it. Its list opens upwards, since there is no room under it. It has the whole width, as the history above it: the title at the left and
+   the file type and the save button at the right. */
 .debts-foot {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-@container debts-page (not (max-width: 46.875rem)) {
-  .app-main main > section > .debts-foot {
-    width: calc((100% - var(--room) - 1.5rem) / 2);
-    margin-left: calc((100% - var(--room) - 1.5rem) / 2 + 1.5rem);
-  }
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
 }
 
 .debts-foot > .debts-heading {
@@ -195,92 +104,53 @@ html.is-phone .debts-name + .debts-heading {
   bottom: calc(100% + 0.25rem);
 }
 
-/* The friends: name, who owes whom (and the reminder), what is owed, then mark as paid (or bring back), rename and remove (a friend who
-   is removed already has an empty place for it, so the icons line up). A click anywhere else on a row chooses the friend. Who owes whom
-   is as wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has 15 characters. The button is on
-   one line in every language: the longest word, "als bezahlt markieren", has 21 characters of 0.875rem (a column in ch is the width of
-   a character of 1rem), and the button has its padding, 0.5rem of room and two icon buttons of 2rem. The reminder wraps rather than
-   being cut: its column holds 16 characters of small print, which is two lines for a reminder with a date of 10 characters in every
-   language. With these and the gaps the columns take 49.1rem, which leaves the name 10rem from 60em. Below that a row is lines of
-   its own: the name and the amount; who owes whom, with the buttons on the right of it when they fit and on a line of their own, at the
-   right, when they do not; the reminder. So the name has the width of the row less the amount, whatever the buttons are called. */
+/* The friends, a tidy table (docs/ui-design.md, rule 2): name, who owes whom, the day of the reminder, what is owed, then two buttons: mark as
+   paid (or bring back one who was removed; an empty place where it is not offered, so the "more" buttons line up) and the "more" menu. A click anywhere else on
+   a row chooses the friend. Who owes whom is as wide as the longest of the three ("alles beglichen", 15 characters of 0.875rem), the amount has 15
+   characters, the day 10. Every cell is one line. With less room a column goes: the reminder (under 44em), then who owes whom (under 34em; the colour of
+   the amount says it as well). */
 .card-list.friends-table {
-  --cols: minmax(0, 1fr) 13.5ch 14ch 15ch calc(18.4ch + 5.9rem);
+  --cols: minmax(0, 1fr) 13.5ch 12ch 15ch calc(2 * var(--control-sm) + 0.25rem);
 }
 
 ul.card-list.friends-table > li.card-item {
   cursor: pointer;
 }
 
-.friends-table .cell-sub-end {
-  white-space: normal;
-}
-
-.friends-table .row-primary {
-  max-width: none;
-  padding-inline: 0.5rem;
+/* A column head is one line, cut with an ellipsis. */
+ul.card-list:is(.friends-table, .ledger-table, .history-table) > li.list-head > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@container (max-width: 60em) {
+.friends-table .friend-reminder {
+  font-variant-numeric: tabular-nums;
+}
+
+@container (max-width: 44em) {
+  ul.card-list.friends-table > li.card-item,
   ul.card-list.friends-table > li.list-head {
-    display: none;
+    grid-template-columns: minmax(0, 1fr) 13.5ch 15ch calc(2 * var(--control-sm) + 0.25rem);
   }
 
-  ul.card-list.friends-table > li.list-head + li {
-    border-top: 0;
-  }
-
-  ul.card-list.friends-table > li.card-item {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.125rem 1rem;
-  }
-
-  /* The line break after the name and the amount. */
-  ul.card-list.friends-table > li.card-item::after {
-    content: '';
-    order: 2;
-    flex: 0 0 100%;
-    height: 0;
-  }
-
-  ul.card-list.friends-table .cell-name {
-    order: 0;
-    flex: 1 1 0;
-  }
-
-  ul.card-list.friends-table .cell-amount {
-    order: 1;
-    flex: none;
-  }
-
-  ul.card-list.friends-table .cell-sub {
-    order: 3;
-    flex: 0 1 auto;
-  }
-
-  ul.card-list.friends-table .cell-actions {
-    order: 4;
-    flex: none;
-    margin-left: auto;
-  }
-
-  ul.card-list.friends-table .cell-sub-end {
-    order: 5;
-    flex: 0 0 100%;
-    text-align: left;
-  }
-
-  ul.card-list.friends-table :is(.cell-amount, .cell-sub-end):empty {
+  ul.card-list.friends-table .friend-reminder,
+  ul.card-list.friends-table > li.list-head > .head-reminder {
     display: none;
   }
 }
 
-ul.card-list > li.list-head > .span-2 {
-  grid-column: span 2;
+@container (max-width: 34em) {
+  ul.card-list.friends-table > li.card-item,
+  ul.card-list.friends-table > li.list-head {
+    grid-template-columns: minmax(0, 1fr) 15ch calc(2 * var(--control-sm) + 0.25rem);
+  }
+
+  ul.card-list.friends-table .friend-status,
+  ul.card-list.friends-table > li.list-head > .head-status {
+    display: none;
+  }
 }
 
 /* A name that leads to a page is a link: quiet, underlined in full when the pointer is on it. */
@@ -289,7 +159,7 @@ ul.card-list > li.list-head > .span-2 {
   color: inherit;
   text-decoration: underline;
   text-decoration-color: var(--input);
-  text-underline-offset: 4px;
+  text-underline-offset: 0.25em;
 }
 
 @media (hover: hover) {
@@ -299,22 +169,12 @@ ul.card-list > li.list-head > .span-2 {
   }
 }
 
-/* One friend's history: what it was, the day, how much it changed (with a sign, 16 characters), the balance after it (small print, with
-   a sign), then the buttons: go to the transaction, show code (a bill) or edit and delete (an entry; a bill has an empty place where
-   an entry has delete), and the chevron of a note. That is four of 2rem and three gaps of 0.125rem, 8.5rem. The columns take 34rem
-   (the characters, 42.5 of them, 25.5rem, and the buttons), the gaps 4rem and the padding 2.5rem, which leaves what it was 10rem from
-   51em; below that the rows have two lines (what it was and the change, then the day and the balance, the buttons beside both), and
-   from 33em down three, the buttons on a line of their own at the right: beside the two lines they would leave what it was less than
-   10rem. What it was starts with the kind in words (and a bill's name), and the day sits under it in a narrow half: both wrap rather
-   than being cut. */
+/* One friend's history, a tidy table: the kind of line (and its documents), a bill's name, the day, how much it changed (with a sign, 13 characters), the
+   balance after it (small print, with a sign), then the "more" menu (go to the transaction, show code, edit, delete) and the chevron of a note. That is two of
+   --control-sm and a gap of 0.125rem. Every cell is one line. With less
+   room a column goes: the bill's name (under 50em), the balance (under 42em), the day (under 34em). */
 .card-list.ledger-table {
-  --cols: minmax(10rem, 1fr) 12ch 16ch 14.5ch 8.5rem;
-}
-
-.ledger-table .cell-name > .card-name,
-.ledger-table .cell-sub {
-  white-space: normal;
-  overflow-wrap: anywhere;
+  --cols: minmax(7rem, 1.5fr) minmax(7rem, 1fr) 11ch 13ch 12ch calc(2 * var(--control-sm) + 0.125rem);
 }
 
 .ledger-table .cell-sub-end {
@@ -322,81 +182,68 @@ ul.card-list > li.list-head > .span-2 {
   font-variant-numeric: tabular-nums;
 }
 
-/* The same room for the buttons in every row, so the amounts line up when the head is gone (a narrow window). */
+/* The same room for the buttons in every row, so the amounts line up. */
 .ledger-table .cell-actions {
-  min-width: 8.5rem;
+  min-width: calc(2 * var(--control-sm) + 0.125rem);
 }
 
-@container (max-width: 51em) {
+@container (max-width: 50em) {
+  ul.card-list.ledger-table > li.card-item,
   ul.card-list.ledger-table > li.list-head {
+    grid-template-columns: minmax(7rem, 1fr) 11ch 13ch 12ch calc(2 * var(--control-sm) + 0.125rem);
+  }
+
+  ul.card-list.ledger-table .ledger-bill,
+  ul.card-list.ledger-table > li.list-head > .head-bill {
     display: none;
   }
+}
 
-  ul.card-list.ledger-table > li.list-head + li {
-    border-top: 0;
+@container (max-width: 42em) {
+  ul.card-list.ledger-table > li.card-item,
+  ul.card-list.ledger-table > li.list-head {
+    grid-template-columns: minmax(6rem, 1fr) 11ch 13ch calc(2 * var(--control-sm) + 0.125rem);
   }
 
-  ul.card-list.ledger-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    grid-template-areas:
-      'name amount actions'
-      'sub sub-end actions';
-    row-gap: 0;
-  }
-
-  ul.card-list.ledger-table .cell-name {
-    grid-area: name;
-  }
-
-  ul.card-list.ledger-table .cell-amount {
-    grid-area: amount;
-  }
-
-  ul.card-list.ledger-table .cell-sub {
-    grid-area: sub;
-  }
-
-  ul.card-list.ledger-table .cell-sub-end {
-    grid-area: sub-end;
-  }
-
-  ul.card-list.ledger-table .cell-actions {
-    grid-area: actions;
+  ul.card-list.ledger-table .cell-sub-end,
+  ul.card-list.ledger-table > li.list-head > :nth-child(5) {
+    display: none;
   }
 }
 
-@container (max-width: 33em) {
-  ul.card-list.ledger-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'name amount'
-      'sub sub-end'
-      'actions actions';
+@container (max-width: 34em) {
+  ul.card-list.ledger-table > li.card-item,
+  ul.card-list.ledger-table > li.list-head {
+    grid-template-columns: minmax(5rem, 1fr) 13ch calc(2 * var(--control-sm) + 0.125rem);
+  }
+
+  ul.card-list.ledger-table > li.card-item > .cell-sub:nth-child(3),
+  ul.card-list.ledger-table > li.list-head > :nth-child(3) {
+    display: none;
   }
 }
 
-/* The history of all debts: who, what kind of change, the day, the change (with a sign, 16 characters), the balance after it (small
-   print, with a sign), then go to the transaction and the chevron of a note: two buttons of 2rem, 4.25rem. The kind of change is words
-   that can be long ("wiederkehrende zahlung verspätet bezahlt"), so it wraps. With the gaps and the padding the day, the change, the
-   balance and the buttons take 37.25rem, which leaves 10rem each to the friend and to the kind of change from 58em. Below that the rows
-   have two lines (the friend and the change, then the kind and the day, the balance and the buttons beside both), and under 40em four
-   (the balance under the day, the buttons under the balance). */
+/* The history of all debts, a tidy table: who (or what, for a recurring payment), what kind of change, the day, the change (with a sign, 14
+   characters), the balance after it (small print, with a sign), then go to the transaction and the chevron of a bill's name or a note: two buttons of
+   --control-sm. Every cell is one line; the kind can be long ("wiederkehrende zahlung verspätet bezahlt"), and is cut. With less room a column goes: the
+   balance (under 51em), then the day (under 41em). */
 .card-list.history-table {
-  --cols: minmax(10rem, 1fr) minmax(10rem, 1.4fr) 12ch 16ch 14.5ch 4.25rem;
+  --cols: minmax(8rem, 1.2fr) minmax(9rem, 1.4fr) 11ch 14ch 13ch calc(2 * var(--control-sm) + 0.25rem);
 }
 
-.history-table .cell-sub {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-/* The same room for the buttons in every row, so the amounts line up when the head is gone (a narrow window). */
+/* The same room for the buttons in every row, so the amounts line up. */
 .history-table .cell-actions {
-  min-width: 4.25rem;
+  min-width: calc(2 * var(--control-sm) + 0.25rem);
+}
+
+.history-table .cell-sub-end {
+  font-variant-numeric: tabular-nums;
 }
 
 .cell-bal {
-  min-width: 16.5ch;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 0.875rem;
   text-align: right;
   white-space: nowrap;
@@ -404,106 +251,60 @@ ul.card-list > li.list-head > .span-2 {
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 58em) {
+@container (max-width: 51em) {
+  ul.card-list.history-table > li.card-item,
   ul.card-list.history-table > li.list-head {
+    grid-template-columns: minmax(8rem, 1.2fr) minmax(7rem, 1.4fr) 11ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+  }
+
+  ul.card-list.history-table .cell-bal,
+  ul.card-list.history-table > li.list-head > :nth-child(5) {
     display: none;
   }
+}
 
-  ul.card-list.history-table > li.list-head + li {
-    border-top: 0;
+@container (max-width: 41em) {
+  ul.card-list.history-table > li.card-item,
+  ul.card-list.history-table > li.list-head {
+    grid-template-columns: minmax(5rem, 1fr) minmax(5rem, 1fr) 14ch calc(2 * var(--control-sm) + 0.25rem);
   }
 
-  ul.card-list.history-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
-    grid-template-areas:
-      'name amount bal actions'
-      'sub sub-end bal actions';
-    row-gap: 0;
-  }
-
-  ul.card-list.history-table .cell-name {
-    grid-area: name;
-  }
-
-  ul.card-list.history-table .cell-amount {
-    grid-area: amount;
-  }
-
-  ul.card-list.history-table .cell-sub {
-    grid-area: sub;
-  }
-
-  ul.card-list.history-table .cell-sub-end {
-    grid-area: sub-end;
-    text-align: right;
-  }
-
-  ul.card-list.history-table .cell-bal {
-    grid-area: bal;
-  }
-
-  ul.card-list.history-table .cell-actions {
-    grid-area: actions;
+  ul.card-list.history-table .cell-sub-end,
+  ul.card-list.history-table > li.list-head > :nth-child(3) {
+    display: none;
   }
 }
 
-/* In half a page the balance is under the day, in the column of the amount, and the buttons under it, so the friend's name keeps its
-   room. */
-@container (max-width: 40em) {
-  ul.card-list.history-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'name amount'
-      'sub sub-end'
-      'sub bal'
-      'actions actions';
-  }
-}
-
-/* The payments that are late: how late, under the day. */
-.due-table .due-late,
-.row-toggle .due-late {
+/* The payments that are late: how late, in red, in a column of its own beside the day (and under the name of a phone row). */
+.due-late {
   color: var(--destructive);
 }
 
-.due-late {
-  display: block;
-  font-size: 0.8125rem;
-  white-space: normal;
-}
-
-.row-toggle .due-late {
-  font-size: inherit;
-}
-
-/* What is due: name, category, the day with how late it is under it (that wraps, on 14 characters), the amount (an income has a plus
-   sign: 16), then skip and mark as paid, each on one line: together 33 characters of 0.875rem in German ("überspringen", "als
-   bezahlt markieren"), and the padding of the two buttons. */
+/* What is due: name, category, the day, how late it is, the amount (an income has a plus sign: 16), then two icon buttons (skip and mark as paid).
+   Every cell is one line. With less room a column goes: first the category, then the day. */
 .card-list.due-table {
-  --cols: minmax(0, 1.6fr) minmax(0, 1fr) 14ch 16ch calc(29ch + 3.5rem);
+  --cols: minmax(0, 1.6fr) minmax(0, 1fr) 11ch 17ch 14ch calc(2 * var(--control-sm) + 0.25rem);
 }
 
-/* A bill code that was read: who it is from, what, and when. */
-.code-details {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.25rem 1rem;
-  margin: 0;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--muted);
-  font-size: 0.8125rem;
+@container (max-width: 48em) {
+  ul.card-list.due-table > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(0, 1fr) 11ch 17ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+  }
+
+  ul.card-list.due-table :is(.due-cat, .head-cat) {
+    display: none;
+  }
 }
 
-.code-details dt {
-  color: var(--muted-foreground);
-}
+@container (max-width: 38em) {
+  ul.card-list.due-table > :is(li.card-item, li.list-head) {
+    grid-template-columns: minmax(0, 1fr) 17ch 14ch calc(2 * var(--control-sm) + 0.25rem);
+  }
 
-.code-details dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--foreground);
+  ul.card-list.due-table .due-date,
+  ul.card-list.due-table > li.list-head > :nth-child(3) {
+    display: none;
+  }
 }
 
 /* Documents (phase 9). */
@@ -515,7 +316,7 @@ ul.card-list > li.list-head > .span-2 {
   gap: 0.75rem;
   width: 100%;
   padding-top: 1rem;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
 }
 
 .attach h3 {
@@ -538,7 +339,7 @@ ul.card-list > li.list-head > .span-2 {
   padding: 0;
   overflow: hidden;
   list-style: none;
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-lg);
 }
 
@@ -550,7 +351,7 @@ ul.card-list > li.list-head > .span-2 {
   gap: 0.5rem;
   padding: 0.25rem 0.5rem 0.25rem 0.75rem;
   border: 0;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
   font-size: 0.8125rem;
 }
 
@@ -560,8 +361,8 @@ ul.card-list > li.list-head > .span-2 {
 
 .attach-icon {
   flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
+  width: var(--icon);
+  height: var(--icon);
   color: var(--muted-foreground);
 }
 
@@ -601,37 +402,7 @@ ul.card-list > li.list-head > .span-2 {
   max-height: min(50svh, 24rem);
   margin: 0 auto;
   object-fit: contain;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.doc-facts {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 0.25rem 1rem;
-  margin: 0;
-  font-size: 0.8125rem;
-}
-
-.doc-facts dt {
-  color: var(--muted-foreground);
-}
-
-.doc-facts dd {
-  margin: 0;
-  color: var(--foreground);
-  overflow-wrap: anywhere;
-}
-
-/* The file in the details: what it is on the left, what can be done with it on the right, in one frame. */
-.doc-file {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-md);
 }
 
@@ -643,7 +414,7 @@ ul.card-list > li.list-head > .span-2 {
   margin: 0;
   padding: 0;
   list-style: none;
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-md);
 }
 
@@ -655,7 +426,7 @@ ul.card-list > li.list-head > .span-2 {
   gap: 0.75rem;
   min-height: 2.75rem;
   padding: 0.375rem 0.25rem 0.375rem 0.75rem;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
   font-size: 0.8125rem;
 }
 
@@ -670,6 +441,8 @@ ul.card-list > li.list-head > .span-2 {
 }
 
 .doc-link-meta {
+  display: flex;
+  gap: 0.75rem;
   font-size: 0.75rem;
   color: var(--muted-foreground);
 }
@@ -685,88 +458,45 @@ ul.card-list > li.list-head > .span-2 {
   gap: 0.5rem;
 }
 
-/* The documents: name, day (13 characters of small print), size ("1.023,9 KB"), the box to keep the document on the phone, how many things
-   it is attached to, then preview, edit, save a copy and delete and the chevron that opens the details (five buttons of 2rem and four
-   gaps of 0.125rem, 10.5rem). The two new heads are small print too: 9 characters of 0.8125rem are 7.3 characters of the row, so 7.5ch
-   holds "téléphone" and "telemóvel", and a paper clip with a number of three digits; a longer head ("verknüpft mit") takes a second line.
-   With these the columns take 32.7rem, the gaps 5rem and the padding 2.5rem, which leaves the name 8rem from 48.2em (a window of about
-   1080px; the app opens at 1100px). The name is cut with an ellipsis, and the whole name is its title. Narrower, a row is two lines (see
-   below). */
+/* A document, one value to a cell: its name, its type ("pdf file", "text file": 11 characters of small print), the day, the size (at the right, as amounts
+   are), then six icon buttons (the paper clip when it is attached to something, preview, edit, save a copy, delete, and the chevron that opens the
+   details). One line to a row: with less room the type goes (under 46em), then the day (under 36em). The name is cut with an ellipsis, and the whole
+   name is its title. */
 .card-list.doc-table {
-  --cols: minmax(8rem, 1fr) 12ch 6rem 7.5ch 7.5ch 10.5rem;
+  --act: calc(6 * var(--control-sm) + 0.625rem);
+  --cols: minmax(8rem, 1fr) 11ch 12ch 6rem var(--act);
 }
 
-/* The box is at the left of its column, under the word of the head, and so is the paper clip (its padding goes to the left). The word
-   beside the box is the head's, so it shows only where there is no head. */
-.doc-table .cell-keep {
-  width: auto;
-  justify-self: start;
-}
-
-.doc-table .cell-keep > span {
-  display: none;
+.doc-table .doc-type {
+  min-width: 0;
+  overflow: hidden;
   font-size: 0.875rem;
   white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--muted-foreground);
 }
 
-.doc-table .clip {
-  margin-left: -0.375rem;
+ul.card-list.doc-table .doc-size {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Under 48.2em a row is two lines: the name, how many things it is attached to and the buttons, then the day, the size and the box with
-   its word. The buttons are beside both lines, and the paper clip and the box share a column, so they line up. */
-@container (max-width: 48.2em) {
-  ul.card-list.doc-table > li.list-head {
+@container (max-width: 46em) {
+  ul.card-list.doc-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(8rem, 1fr) 12ch 6rem var(--act);
+  }
+
+  ul.card-list.doc-table :is(.doc-type, .head-type) {
     display: none;
   }
-
-  ul.card-list.doc-table > li.list-head + li {
-    border-top: 0;
-  }
-
-  ul.card-list.doc-table > li.card-item {
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
-    grid-template-areas:
-      'name name links actions'
-      'sub sub-end keep actions';
-    row-gap: 0;
-  }
-
-  ul.card-list.doc-table .cell-name {
-    grid-area: name;
-  }
-
-  ul.card-list.doc-table .cell-sub {
-    grid-area: sub;
-  }
-
-  ul.card-list.doc-table .cell-sub-end {
-    grid-area: sub-end;
-    text-align: right;
-  }
-
-  ul.card-list.doc-table .cell-keep {
-    grid-area: keep;
-  }
-
-  ul.card-list.doc-table .cell-keep > span {
-    display: inline;
-  }
-
-  ul.card-list.doc-table .cell-links {
-    grid-area: links;
-  }
-
-  ul.card-list.doc-table .cell-actions {
-    grid-area: actions;
-  }
 }
 
-/* In under 33em the day would be cut (13 characters, "2026. 12. 28.", in a column that the word of the box leaves too narrow), so the box
-   has no word. */
-@container (max-width: 33em) {
-  ul.card-list.doc-table .cell-keep > span {
+@container (max-width: 36em) {
+  ul.card-list.doc-table > :is(li.card-item, li.list-head) {
+    --cols: minmax(6rem, 1fr) 6rem var(--act);
+  }
+
+  ul.card-list.doc-table :is(.doc-day, .head-day) {
     display: none;
   }
 }
@@ -787,70 +517,22 @@ ul.card-list > li.list-head > .span-2 {
   color: var(--muted-foreground);
 }
 
-/* The page of documents: what is here and where to add more. It lights up when files are held over the window. */
-.doc-drop {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem 1.5rem;
-  width: 100%;
-  max-width: none;
-  padding: 0.875rem 1rem;
-  border: 1px dashed var(--input);
-  border-radius: var(--radius-lg);
-  background: var(--muted);
-}
-
-.tx-page > .doc-drop {
-  width: auto;
-  max-width: none;
-  align-self: stretch;
-}
-
-.doc-drop-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.doc-drop-text p {
-  margin: 0;
-}
-
-.doc-count {
-  font-size: 0.875rem;
-  color: var(--foreground);
-}
-
-.doc-page > p.warn,
-.doc-page > p.warning {
-  align-self: stretch;
-  max-width: 40rem;
-  font-size: 0.8125rem;
-}
-
+/* The page of documents lights up when files are held over the window: its list is framed. */
 .doc-page.is-dragging {
   outline: none;
 }
 
-.doc-page.is-dragging .doc-drop {
-  border-color: var(--ring);
+.doc-page.is-dragging .tx-pane {
+  outline: var(--hairline-2) dashed var(--ring);
+  outline-offset: -0.25rem;
   background: var(--accent);
 }
 
 .doc-icon {
   flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
+  width: var(--icon);
+  height: var(--icon);
   color: var(--muted-foreground);
-}
-
-/* The documents are as wide as the search and the type together: the list keeps no gutter of its own on the right, only the width of
-   its scroll bar (and nothing when the list is short). */
-.app-main main > section.doc-page > .tx-pane.wide {
-  padding-right: 0;
 }
 
 /* The paper clip and a number, on a transaction or an item that has documents: a small quiet button. */
@@ -866,8 +548,8 @@ ul.card-list > li.list-head > .span-2 {
 }
 
 .clip-icon {
-  width: 12px;
-  height: 12px;
+  width: var(--icon);
+  height: var(--icon);
   flex: 0 0 auto;
 }
 
@@ -885,7 +567,7 @@ ul.card-list > li.list-head > .span-2 {
   max-height: calc(100svh - 12rem);
   padding: var(--edge) var(--room) var(--edge) var(--edge);
   overflow: auto;
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   border-radius: var(--radius-lg);
 }
 
@@ -1048,7 +730,7 @@ ul.card-list > li.list-head > .span-2 {
 
 .paper-table td {
   padding: 0.3rem 0.625rem;
-  border: 1px solid #b8b8b8; /* fixed: paper look of a docx */
+  border: var(--hairline) solid #b8b8b8; /* fixed: paper look of a docx */
   color: #1b1b1b; /* fixed: paper look of a docx */
   vertical-align: top;
   white-space: pre-wrap;
@@ -1075,8 +757,8 @@ ul.card-list > li.list-head > .span-2 {
   max-width: 22rem;
   padding: 0.125rem 0.5rem;
   overflow: hidden;
-  border-right: 1px solid #d4d4d4; /* fixed: spreadsheet look */
-  border-bottom: 1px solid #d4d4d4; /* fixed: spreadsheet look */
+  border-right: var(--hairline) solid #d4d4d4; /* fixed: spreadsheet look */
+  border-bottom: var(--hairline) solid #d4d4d4; /* fixed: spreadsheet look */
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1145,7 +827,7 @@ ul.card-list > li.list-head > .span-2 {
 .link-list .ui-btn {
   width: 100%;
   height: auto;
-  min-height: 2.25rem;
+  min-height: var(--control);
   justify-content: flex-start;
   padding: 0.5rem 0.75rem;
   text-align: left;
@@ -1160,26 +842,4 @@ html.is-phone .attach-list > li {
 
 html.is-phone .attach-list .attach-name {
   flex: 1 1 6rem;
-}
-
-/* On the phone, a file that stays on the computer: a short note and one button to bring it (components/KeepToPreview.tsx). */
-.keep-offer {
-  display: flex;
-  flex: 1 1 100%;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-}
-
-.keep-offer > p,
-.attach-note {
-  flex: 1 1 10rem;
-  margin: 0;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: var(--muted-foreground);
-}
-
-.attach-note {
-  flex-basis: 100%;
 }

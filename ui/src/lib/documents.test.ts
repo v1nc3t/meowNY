@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { Doc } from '../api/documents.ts'
 import { t } from '../i18n/translate.ts'
-import { canKeepToPreview, canOpen, canPreview, canShowImage, dropNotice, dropNote, fileState, MAX_DRAW_BYTES, MAX_PREVIEW_BYTES, previewKindOf } from './documents.ts'
+import { canKeepToPreview, canOpen, canPreview, canShowImage, dropNotice, dropNote, fileState, fileStateText, MAX_DRAW_BYTES, MAX_PREVIEW_BYTES, previewKindOf, reportLines } from './documents.ts'
 
 test('a missing file is a fault on the computer and normal on the phone', () => {
   assert.equal(fileState({ hasFile: true, keepOnPhone: false }, false), 'here')
@@ -11,6 +11,21 @@ test('a missing file is a fault on the computer and normal on the phone', () => 
   assert.equal(fileState({ hasFile: false, keepOnPhone: true }, false), 'missing')
   assert.equal(fileState({ hasFile: false, keepOnPhone: false }, true), 'onComputer')
   assert.equal(fileState({ hasFile: false, keepOnPhone: true }, true), 'waiting')
+})
+
+test('a file that is here says nothing of where it is; the others say it in a few words', () => {
+  assert.equal(fileStateText('here'), null)
+  assert.deepEqual((['missing', 'onComputer', 'waiting'] as const).map(fileStateText), ['docs.stateMissing', 'docs.stateOnComputer', 'docs.stateWaiting'])
+})
+
+test('the report of the files has a line for what is wrong, with a sentence and a few words for the mark in the header, and none for zero', () => {
+  assert.deepEqual(reportLines({ missing: 0, damaged: 0 }, false), [])
+  assert.deepEqual(reportLines({ missing: 2, damaged: 1 }, false), [
+    { key: 'docs.missing', short: 'docs.missingShort', count: 2 },
+    { key: 'docs.damaged', short: 'docs.damagedShort', count: 1 },
+  ])
+  // a phone is not missing the files: they are waiting for the next sync
+  assert.deepEqual(reportLines({ missing: 3, damaged: 0 }, true), [{ key: 'docs.waiting', short: 'docs.waitingShort', count: 3 }])
 })
 
 test('only a file that is here and of a known kind can be opened', () => {

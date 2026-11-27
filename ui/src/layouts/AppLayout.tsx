@@ -1,15 +1,17 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Suspense, useCallback, useEffect, useId, useMemo, useRef, useState, type TouchEvent } from 'react'
+import { Outlet, useLocation } from 'react-router-dom'
 import AppSidebar from '../components/AppSidebar'
-import PhoneTabs, { PHONE_TABS } from '../components/PhoneTabs'
+import PhoneMenu from '../components/PhoneMenu'
 import QuickAdd from '../components/QuickAdd'
 import Toaster from '../components/Toaster'
 import { preloadAllWhenIdle } from '../pages'
 import { blocksSwipe, SwipeContext, type SwipeHandler } from '../hooks/swipe'
+import { PhoneMenuContext } from '../hooks/phoneMenu'
+import { PageAddContext, type PageAdd } from '../hooks/quickAdd'
 import { useDebtReminders } from '../hooks/useDebtReminders'
 import { useDueNotifications } from '../hooks/useDueNotifications'
 import { useProfile } from '../hooks/profile'
-import { neighbour, swipeDirection, type Direction } from '../lib/swipe'
+import { opensMenu, swipeDirection } from '../lib/swipe'
 import ShortcutsProvider from '../keys/ShortcutsProvider'
 
 // The round add button has nothing to add on these pages of a phone.
@@ -20,22 +22,23 @@ export default function AppLayout() {
   useDueNotifications()
   useDebtReminders()
   const phone = useProfile() === 'phone'
-  const navigate = useNavigate()
   const { pathname } = useLocation()
   // Pages that have sections of their own (the budgets) answer a swipe first; the newest one is asked first.
   const handlers = useRef<SwipeHandler[]>([])
   const touch = useRef<{ x: number; y: number } | null>(null)
-  const [direction, setDirection] = useState<Direction | null>(null)
+  // The phone's menu: the logo button of each page's header opens it (`usePhoneMenu`), and so does a swipe from the left edge.
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuId = useId()
+  const menu = useMemo(() => ({ open: () => setMenuOpen(true), isOpen: menuOpen, id: menuId }), [menuOpen, menuId])
+  const closeMenu = useCallback(() => setMenuOpen(false), [])
+  // The round add button, and the main action of the page shown, which it offers first (so a phone has one "+", not two).
+  const fab = phone && !NO_ADD.includes(pathname)
+  const [pageAdd, setPageAdd] = useState<PageAdd | null>(null)
+  const adds = useMemo(() => ({ fab, set: setPageAdd }), [fab])
 
   useEffect(() => {
     preloadAllWhenIdle()
   }, [])
-
-  useEffect(() => {
-    if (!direction) return
-    const timer = setTimeout(() => setDirection(null), 300)
-    return () => clearTimeout(timer)
-  }, [direction])
 
   const register = useCallback((handler: SwipeHandler) => {
     handlers.current.push(handler)
@@ -55,14 +58,14 @@ export default function AppLayout() {
     touch.current = null
     const finger = event.changedTouches[0]
     if (!start || !finger) return
-    const way = swipeDirection(finger.clientX - start.x, finger.clientY - start.y, start.x, window.innerWidth)
-    if (!way) return
-    if (handlers.current[handlers.current.length - 1]?.(way)) return
-    const to = neighbour(PHONE_TABS.map((tab) => tab.to), pathname, way)
-    if (to) {
-      setDirection(way)
-      navigate(to)
+    const dx = finger.clientX - start.x
+    const dy = finger.clientY - start.y
+    if (opensMenu(dx, dy, start.x)) {
+      setMenuOpen(true)
+      return
     }
+    const way = swipeDirection(dx, dy, start.x, window.innerWidth)
+    if (way) handlers.current[handlers.current.length - 1]?.(way)
   }
 
   const toggleSidebar = useCallback(() => {
@@ -77,25 +80,25 @@ export default function AppLayout() {
 
   return (
     <SwipeContext.Provider value={swipes}>
-      <ShortcutsProvider onToggleSidebar={toggleSidebar} enabled={!phone}>
-        <div className={shell}>
-          <AppSidebar collapsed={collapsed} onToggle={toggleSidebar} />
-          <div className="app-main" onTouchStart={phone ? onTouchStart : undefined} onTouchEnd={phone ? onTouchEnd : undefined}>
-            <main data-direction={direction ?? undefined}>
-              <Suspense fallback={null}>
-                <Outlet />
-              </Suspense>
-            </main>
+      <PhoneMenuContext.Provider value={menu}>
+        <PageAddContext.Provider value={adds}>
+        <ShortcutsProvider onToggleSidebar={toggleSidebar} enabled={!phone}>
+          <div className={shell}>
+            <AppSidebar collapsed={collapsed} onToggle={toggleSidebar} />
+            <div className="app-main" onTouchStart={phone ? onTouchStart : undefined} onTouchEnd={phone ? onTouchEnd : undefined}>
+              <main>
+                <Suspense fallback={null}>
+                  <Outlet />
+                </Suspense>
+              </main>
+            </div>
+            {fab ? <QuickAdd pageAdd={pageAdd} /> : null}
           </div>
-          {phone ? (
-            <>
-              <PhoneTabs />
-              {NO_ADD.includes(pathname) ? null : <QuickAdd />}
-            </>
-          ) : null}
-        </div>
-        <Toaster />
-      </ShortcutsProvider>
+          {phone && menuOpen ? <PhoneMenu id={menuId} onClose={closeMenu} /> : null}
+          <Toaster />
+        </ShortcutsProvider>
+        </PageAddContext.Provider>
+      </PhoneMenuContext.Provider>
     </SwipeContext.Provider>
   )
 }

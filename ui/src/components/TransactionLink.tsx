@@ -8,7 +8,7 @@ import { useMoneySettings } from '../hooks/useMoneySettings'
 import { useT } from '../i18n/context'
 import { formatDate, formatMoney } from '../lib/money'
 import { place } from '../lib/placeList'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /** How many transactions the list shows at a time. */
 const SHOWN = 8
@@ -112,9 +112,8 @@ export default function TransactionLink({ value, onChange }: { value: Transactio
         <span>{t('debts.settleLinked')}</span>
         <div className="tx-link-line">
           <span className="tx-link-name">{value.name}</span>
-          <span className="tx-link-meta">
-            {day(value.paymentDate)} · {money(value.amount)}
-          </span>
+          <span className="tx-link-meta">{day(value.paymentDate)}</span>
+          <span className="tx-link-meta">{money(value.amount)}</span>
           <Button variant="ghost" size="sm" onClick={clear}>
             {t('common.clear')}
           </Button>
@@ -187,9 +186,8 @@ export default function TransactionLink({ value, onChange }: { value: Transactio
                       onClick={() => choose(transaction)}
                     >
                       <span className="tx-pick-name">{transaction.name}</span>
-                      <span className="tx-pick-meta">
-                        {day(transaction.paymentDate)} · {money(transaction.amount)}
-                      </span>
+                      <span className="tx-pick-meta">{day(transaction.paymentDate)}</span>
+                      <span className="tx-pick-meta">{money(transaction.amount)}</span>
                     </button>
                   </li>
                 ))

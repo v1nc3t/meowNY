@@ -6,8 +6,10 @@ import { debtsLabels } from '../api/debtsLabels'
 import { ApiError, errorText, inDesktopApp } from '../api/invoke'
 import { periodLabel, reportLabels } from '../api/reportLabels'
 import { useToday, type Today } from '../api/today'
+import HelpButton from '../components/HelpButton'
+import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
-import Button from '../components/ui/Button'
+import { Button } from '../components/ui/button'
 import Dropdown from '../components/Dropdown'
 import Pick, { PickOption } from '../components/Pick'
 import { Sheets } from '../components/SheetView'
@@ -36,6 +38,7 @@ import {
   sectionsFor,
   selectionFor,
   TEXT_MAX_CHARS,
+  WHOLE_ONLY,
   withMode,
   type Choice,
   type ExportFormat,
@@ -280,6 +283,7 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
     recurring: t('nav.recurring'),
     accounts: t('export.partAccounts'),
     transfers: t('export.partTransfers'),
+    stashes: t('export.partStashes'),
     documents: t('nav.documents'),
     people: t('nav.debts'),
     due: t('debts.dueTitle'),
@@ -310,25 +314,23 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
   const textShown = textFormat !== null && problem === null && fileText?.format === textFormat
   const viewBroken = (format === 'xlsx' || format === 'pdf') && problem === null && viewProblem !== ''
   const viewReady = problem === null && viewProblem === ''
-  // the size line over the preview: the extension, the size of the whole file, and for a text file whether only its start is shown
-  const previewMeta =
+  // the line over the preview: the extension, the size of the whole file, and for a text file cut short how much of it is shown
+  const previewFile =
     textFormat && textShown && fileText
-      ? `.${textFormat} \u00b7 ${formatSize(fileText.data.bytes, settings.locale)}${
-          fileText.data.cut
-            ? ` \u00b7 ${t('export.previewCut', { shown: formatSize(new TextEncoder().encode(fileText.data.text).length, settings.locale), total: formatSize(fileText.data.bytes, settings.locale) })}`
-            : ''
-        }`
+      ? { extension: textFormat, bytes: fileText.data.bytes, shown: fileText.data.cut ? new TextEncoder().encode(fileText.data.text).length : null }
       : format === 'xlsx' && viewReady && fileView?.format === 'xlsx'
-        ? `.xlsx \u00b7 ${formatSize(fileView.bytes, settings.locale)}`
+        ? { extension: 'xlsx', bytes: fileView.bytes, shown: null }
         : format === 'pdf' && viewReady && fileView?.format === 'pdf'
-          ? `.pdf \u00b7 ${formatSize(fileView.bytes, settings.locale)}`
-          : ''
+          ? { extension: 'pdf', bytes: fileView.bytes, shown: null }
+          : null
 
   return (
     <section className="tx-page export-page">
-      <div className="tx-title">
-        <h1>{t('export.title')}</h1>
-      </div>
+      {/* the one thing this page does: save the file, in the format chosen below */}
+      <PageHeader
+        title={t('export.title')}
+        actions={[{ label: `${t('export.go')} .${format}`, icon: 'export', primary: true, disabled: busy || problem !== null, onClick: () => void run() }]}
+      />
 
       <div className="tx-pane wide export-pane">
         <div className="export-layout">
@@ -457,11 +459,11 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
               )}
 
               {(format === 'json' || format === 'xlsx') && (
-                <Group title={t('export.include')}>
+                <Group title={t('export.include')} help={format === 'json' ? <p>{t('export.historyHint')}</p> : undefined}>
                   <div className="export-chips">
                     {partsOfFile.map((section) => {
-                      // the change history and the transfers are only in a file with no limits
-                      const off = (section === 'history' || section === 'transfers') && limited
+                      // the change history, the transfers and the stashes are only in a file with no limits
+                      const off = WHOLE_ONLY.includes(section) && limited
                       return (
                         <Chip key={section} checked={!off && choice.sections.includes(section)} disabled={off} onChange={(on) => togglePart(section, on)}>
                           {partName[section]}
@@ -469,7 +471,6 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                       )
                     })}
                   </div>
-                  {format === 'json' && limited && <p className="hint">{t('export.historyHint')}</p>}
                 </Group>
               )}
 
@@ -520,6 +521,8 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                     )}
                     {listed && hasPart('accounts') && (preview.accounts ?? 0) > 0 && <Row label={t('export.partAccounts')} value={String(preview.accounts)} />}
                     {listed && hasPart('transfers') && (preview.transfers ?? 0) > 0 && <Row label={t('export.partTransfers')} value={String(preview.transfers)} />}
+                    {listed && hasPart('stashes') && (preview.stashes ?? 0) > 0 && <Row label={t('export.partStashes')} value={String(preview.stashes)} />}
+                    {listed && hasPart('stashes') && (preview.stashEntries ?? 0) > 0 && <Row label={t('export.partStashEntries')} value={String(preview.stashEntries)} />}
                     {listed && hasPart('documents') && preview.documents > 0 && <Row label={t('nav.documents')} value={String(preview.documents)} />}
                     {listed && (hasPart('transactions') || hasPart('ledger')) && preview.splitBills > 0 && <Row label={t('export.sharedBills')} value={String(preview.splitBills)} />}
                     {listed && hasPart('people') && preview.people > 0 && <Row label={t('nav.debts')} value={String(preview.people)} />}
@@ -529,17 +532,27 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
                   </div>
                 )
               )}
-              <Button size="lg" className="export-go" disabled={busy || problem !== null} onClick={() => void run()}>
-                <span>{t('export.go')}</span>
-                <span className="export-ext">.{format}</span>
-              </Button>
             </div>
           </aside>
 
           <section className="export-preview">
             <header className="export-preview-head">
               <h2>{t('export.previewTitle')}</h2>
-              {previewMeta ? <p className="hint">{previewMeta}</p> : null}
+              {previewFile ? (
+                <p className="hint export-preview-meta">
+                  <span className="label-pair">
+                    {t('export.format')} <b>.{previewFile.extension}</b>
+                  </span>
+                  <span className="label-pair">
+                    {t('docs.size')} <b>{formatSize(previewFile.bytes, settings.locale)}</b>
+                  </span>
+                  {previewFile.shown === null ? null : (
+                    <span className="label-pair">
+                      {t('export.previewShown')} <b>{formatSize(previewFile.shown, settings.locale)}</b>
+                    </span>
+                  )}
+                </p>
+              ) : null}
             </header>
 
             {textFormat && textShown && fileText ? (
@@ -573,11 +586,14 @@ function ExportForm({ today, settings, categories }: { today: Today; settings: M
   )
 }
 
-/** A group of the options panel: a small heading and what it holds. */
-function Group({ title, children }: { title: string; children: ReactNode }) {
+/** A group of the options panel: a small heading (with its explanation, if it needs one, behind a help button) and what it holds. */
+function Group({ title, help, children }: { title: string; help?: ReactNode; children: ReactNode }) {
   return (
     <section className="export-group">
-      <h2>{title}</h2>
+      <div className="export-group-head">
+        <h2>{title}</h2>
+        {help ? <HelpButton>{help}</HelpButton> : null}
+      </div>
       {children}
     </section>
   )

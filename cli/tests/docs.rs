@@ -30,7 +30,7 @@ const HOME: &str = "/home/you";
 /// Outputs that legitimately differ from run to run (the clock, file sizes, timestamps inside files). They are
 /// compared by exit code, by the shape of their JSON and by the frame of their plain output, not word for word.
 /// "export preview" counts the payments that are due, and more fall due as the days go by, as with "debts due".
-const MOVES: &[&str] = &["today", "recurring dues", "debts due", "debts history", "debts reminders", "budgets history", "accounts list", "accounts summary", "recurring end", "documents add", "documents list", "documents show", "documents update", "export debts", "export preview", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
+const MOVES: &[&str] = &["today", "recurring dues", "debts due", "debts history", "debts reminders", "budgets history", "accounts list", "accounts summary", "stashes list", "recurring end", "documents add", "documents list", "documents show", "documents update", "export debts", "export preview", "export json", "export csv", "export xlsx", "export pdf", "backup create", "schema"];
 
 #[derive(Clone, Copy)]
 enum Who {
@@ -79,6 +79,19 @@ impl Tour<'_> {
         entry.insert("stdout".into(), json!(stdout));
         entry.insert("stderr".into(), json!(stderr));
         Value::Object(entry)
+    }
+
+    /// The data a command prints with `--json`, whole: an example keeps only the first 700 characters of a long answer, so the ids a later step needs are read here.
+    fn data(&self, who: Who, args: &[&str]) -> Value {
+        let mut c = command(self.app);
+        match who {
+            Who::Read => c.env("MEOWNY_TOKEN", &self.app.read),
+            Who::Write => c.env("MEOWNY_TOKEN", &self.app.write),
+            Who::Nobody => &mut c,
+        };
+        let out = c.args(args).arg("--json").stdin(Stdio::null()).output().unwrap();
+        assert!(out.status.success(), "{args:?}: {}", String::from_utf8_lossy(&out.stderr));
+        serde_json::from_slice(&out.stdout).unwrap()
     }
 
     fn strings(args: &[&str]) -> Vec<String> {
@@ -153,6 +166,11 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     // What the cash account paid and took in over a month that is over, by category: the days are given, so it does not move with the clock.
     t.example("accounts breakdown", read, "meowny accounts breakdown 3 --from 2026-09-01 --to 2026-09-30", &["accounts", "breakdown", "3", "--from", "2026-09-01", "--to", "2026-09-30"], true, true, None);
     t.example("transfers list", read, "meowny transfers list --account-id 2 --limit 3", &["transfers", "list", "--account-id", "2", "--limit", "3"], true, true, None);
+    // The demo stashes: money set aside inside an account for a goal, so no balance moves. The holiday has a date, so what to save each month follows the
+    // clock and the list is compared by shape. The bike was saved for in 2025 and bought, a year that is over, so its chart is the same whatever the day.
+    t.example("stashes list", read, "meowny stashes list", &["stashes", "list"], true, true, None);
+    t.example("stashes summary", read, "meowny stashes summary", &["stashes", "summary"], true, true, None);
+    t.example("stashes history", read, "meowny stashes history 4 --year 2025", &["stashes", "history", "4", "--year", "2025"], true, true, None);
 
     // Changing: a category, a transaction, a budget.
     t.example("settings set", write, "meowny settings set --language ro", &["settings", "set", "--language", "ro"], false, true, None);
@@ -232,6 +250,119 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
         write,
         &format!("meowny transfers update {moved} --amount 50.00 --to-amount 250.00 --note \"Rainy day\""),
         &["transfers", "update", &moved, "--amount", "50.00", "--to-amount", "250.00", "--note", "Rainy day"],
+        false,
+        true,
+        None,
+    );
+
+    // Stashes: money set aside in the current account for a goal. It never leaves the account, so no balance moves; what is free is the balance less what
+    // the stashes hold. An add can bring the money from another account in the same step (a transfer is made with it), and a take can send it on. Every
+    // entry is dated, so what the stash holds and what is free stay the same as the months go by, and there is no date to save towards, which would move.
+    let coat = Tour::id(&t.example(
+        "stashes create",
+        write,
+        "meowny stashes create --name \"Winter coat\" --account-id 1 --target 250.00 --notes \"The long one, in wool\"",
+        &["stashes", "create", "--name", "Winter coat", "--account-id", "1", "--target", "250.00", "--notes", "The long one, in wool"],
+        false,
+        true,
+        None,
+    ));
+    // A plain add, which is not shown: the add that is shown brings money from the savings, and says everything this one could.
+    let plain = t.capture(write, &Tour::strings(&["stashes", "add", &coat, "--amount", "50.00", "--date", "2026-10-05", "--note", "from the pay", "--json"]), None, &[]);
+    assert_eq!(plain["exit"], 0, "{}", plain["stderr"]);
+    t.example(
+        "stashes add",
+        write,
+        &format!("meowny stashes add {coat} --amount 60.00 --date 2026-10-06 --note \"bonus from the savings\" --from-account-id 2"),
+        &["stashes", "add", &coat, "--amount", "60.00", "--date", "2026-10-06", "--note", "bonus from the savings", "--from-account-id", "2"],
+        false,
+        true,
+        None,
+    );
+    let entry_of = |t: &Tour, note: &str| -> String {
+        let detail = t.data(Who::Read, &["stashes", "show", &coat]);
+        detail["entries"].as_array().unwrap().iter().find(|e| e["note"] == note).unwrap_or_else(|| panic!("no entry with the note {note}"))["id"].as_str().unwrap().to_string()
+    };
+    let bonus = entry_of(&t, "bonus from the savings");
+    t.example(
+        "stashes take",
+        write,
+        &format!("meowny stashes take {coat} --amount 20.00 --date 2026-10-09 --note \"the scarf\""),
+        &["stashes", "take", &coat, "--amount", "20.00", "--date", "2026-10-09", "--note", "the scarf"],
+        false,
+        true,
+        None,
+    );
+    let scarf = entry_of(&t, "the scarf");
+    t.example("stashes show", read, &format!("meowny stashes show {coat}"), &["stashes", "show", &coat], true, true, None);
+    t.example(
+        "stashes amend",
+        write,
+        &format!("meowny stashes amend {scarf} --amount 25.00 --note \"the scarf and gloves\""),
+        &["stashes", "amend", &scarf, "--amount", "25.00", "--note", "the scarf and gloves"],
+        false,
+        true,
+        None,
+    );
+    t.example(
+        "stashes update",
+        write,
+        &format!("meowny stashes update {coat} --name \"Winter coat and boots\" --target 300.00 --clear-notes"),
+        &["stashes", "update", &coat, "--name", "Winter coat and boots", "--target", "300.00", "--clear-notes"],
+        false,
+        true,
+        None,
+    );
+    t.example("stashes archive", write, &format!("meowny stashes archive {coat}"), &["stashes", "archive", &coat], false, true, None);
+    t.example("stashes unarchive", write, &format!("meowny stashes unarchive {coat}"), &["stashes", "unarchive", &coat], false, true, None);
+    // Every stash that is not archived, the new one first, then the others in their order (the demo data's holiday, laptop, rainy day, wedding gift and
+    // term deposit; the bike is archived).
+    let stashes = t.data(read, &["stashes", "list"]);
+    let others: Vec<&str> = stashes.as_array().unwrap().iter().filter(|s| s["archived"] == false).map(|s| s["id"].as_str().unwrap()).filter(|id| *id != coat).collect();
+    let stash_ids = format!("{coat},{}", others.join(","));
+    t.example("stashes reorder", write, &format!("meowny stashes reorder --ids {stash_ids}"), &["stashes", "reorder", "--ids", &stash_ids], false, true, None);
+    // Erasing an entry gives its money back to what is free; the transfer that came with it stays, unless it is asked to go too.
+    t.example(
+        "stashes erase",
+        write,
+        &format!("meowny stashes erase {bonus} --delete-transfer --yes"),
+        &["stashes", "erase", &bonus, "--delete-transfer", "--yes"],
+        false,
+        true,
+        None,
+    );
+    t.example("stashes delete", write, &format!("meowny stashes delete {coat} --yes"), &["stashes", "delete", &coat, "--yes"], true, false, None);
+
+    // A loan and a term deposit, both far enough back that nothing in them moves with the clock. The loan is made with its rate (a percent a year) and its
+    // installment, the debt is a negative opening balance, and a payment of 950.00 is split: 48.75 of it is interest, an expense of the Savings that paid,
+    // and the rest is a transfer into the loan. The deposit's maturity is its target date, and it matured in July (money goes in while it runs, then its maturity is moved back), so its return can be booked.
+    let interest_expense = Tour::id(&t.data(write, &["categories", "create", "--name", "Loan interest", "--type", "expense"]));
+    let interest_income = Tour::id(&t.data(write, &["categories", "create", "--name", "Deposit interest", "--type", "income"]));
+    let car = Tour::id(&t.data(
+        write,
+        &["accounts", "create", "--name", "Car loan", "--kind", "loan", "--opening-balance=-9000.00", "--opening-date", "2026-01-01", "--interest-rate", "6.5", "--interest-period", "yearly", "--installment", "950.00"],
+    ));
+    t.example(
+        "accounts pay",
+        write,
+        &format!("meowny accounts pay {car} --from-account-id 2 --amount 950.00 --interest 48.75 --category-id {interest_expense} --date 2026-10-05 --note \"October\""),
+        &["accounts", "pay", &car, "--from-account-id", "2", "--amount", "950.00", "--interest", "48.75", "--category-id", &interest_expense, "--date", "2026-10-05", "--note", "October"],
+        false,
+        true,
+        None,
+    );
+    let term = Tour::id(&t.data(
+        write,
+        &["stashes", "create", "--name", "Fixed deposit", "--account-id", "2", "--kind", "deposit", "--interest-rate", "3.1", "--interest-period", "yearly", "--start-date", "2026-01-05", "--target-date", "2027-01-05"],
+    ));
+    t.data(write, &["stashes", "add", &term, "--amount", "1000.00", "--date", "2026-01-05"]);
+    // a deposit takes no more money once it has matured, so its maturity is moved back to July after the money is in
+    t.data(write, &["stashes", "update", &term, "--target-date", "2026-07-05"]);
+    t.example(
+        "stashes return",
+        write,
+        &format!("meowny stashes return {term} --amount 15.37 --category-id {interest_income} --date 2026-07-06 --note \"Interest from the bank\""),
+        &["stashes", "return", &term, "--amount", "15.37", "--category-id", &interest_income, "--date", "2026-07-06", "--note", "Interest from the bank"],
         false,
         true,
         None,
@@ -390,12 +521,15 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("people unarchive", write, &format!("meowny people unarchive {bob}"), &["people", "unarchive", &bob], false, true, None);
     t.example("ledger delete", write, &format!("meowny ledger delete {loan} --yes"), &["ledger", "delete", &loan, "--yes"], true, false, None);
     t.example("transactions delete", write, &format!("meowny transactions delete {bread} --yes"), &["transactions", "delete", &bread, "--yes"], true, false, None);
-    let listed = t.capture(read, &Tour::strings(&["categories", "list", "--type", "expense", "--json"]), None, &[]);
-    let listed: Value = serde_json::from_str(listed["stdout"].as_str().unwrap()).unwrap();
+    // whole: an example keeps only the first 700 characters, and the list of categories is longer
+    let listed = t.data(read, &["categories", "list", "--type", "expense"]);
     let order: Vec<&str> = listed.as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap()).filter(|id| *id != pets).collect();
     let ids = format!("{pets},{}", order.join(","));
     // Accounts: bring the card to the top of the list, put it away and back, and delete an account that has nothing in it.
-    let account_ids = format!("{card},1,2,3,4,6"); // the demo data's five accounts that are not archived (the sixth is)
+    // every account that is not archived, the card first, then the others in their order (the demo data's and the car loan the tour made)
+    let accounts = t.data(read, &["accounts", "list"]);
+    let others: Vec<&str> = accounts.as_array().unwrap().iter().filter(|a| a["archived"] == false).map(|a| a["id"].as_str().unwrap()).filter(|id| *id != card).collect();
+    let account_ids = format!("{card},{}", others.join(","));
     t.example("accounts reorder", write, &format!("meowny accounts reorder --ids {account_ids}"), &["accounts", "reorder", "--ids", &account_ids], false, true, None);
     t.example("accounts archive", write, &format!("meowny accounts archive {card}"), &["accounts", "archive", &card], false, true, None);
     t.example("accounts unarchive", write, &format!("meowny accounts unarchive {card}"), &["accounts", "unarchive", &card], false, true, None);
@@ -426,6 +560,7 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.error("A name for a copy that a system could run", &format!("meowny documents get {lease} --out /home/you/copy.sh"), write, &["documents", "get", &lease, "--out", &path("copy.sh")], &[]);
     t.error("A name that is taken", "meowny categories create --name Groceries --type expense", write, &["categories", "create", "--name", "Groceries", "--type", "expense"], &[]);
     t.error("The main account cannot be archived", "meowny accounts archive 1", write, &["accounts", "archive", "1"], &[]);
+    t.error("Setting aside more than the account has free", "meowny stashes add 3 --amount 99999.00", write, &["stashes", "add", "3", "--amount", "99999.00"], &[]);
     t.error(
         "An account in lei needs what it really paid",
         "meowny transactions create --name Bread --amount 2.40 --payment-date 2026-10-14 --category-id 5 --account-id 6",

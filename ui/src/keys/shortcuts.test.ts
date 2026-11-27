@@ -84,3 +84,15 @@ test('a shortcut with Alt in the list does not take the plain key of another', (
   assert.equal(shortcutKeys('lock', false), 'Ctrl+L')
   assert.equal(shortcutKeys('goTransactions', false), 'g t')
 })
+
+test('g then h goes to the stashes, and h on its own does nothing', () => {
+  const m = new KeyMatcher()
+  m.handle(press('g'), 0)
+  assert.equal(m.handle(press('h'), 50), 'goStashes')
+  assert.equal(m.handle(press('h'), 60), null, 'the chord is used up')
+  assert.deepEqual(SHORTCUTS.goStashes, { keys: ['g', 'h'], group: 'go', label: 'keys.goTo', page: 'nav.stashes' })
+  assert.equal(shortcutKeys('goStashes', false), 'g h')
+  // the accounts keep theirs
+  m.handle(press('g'), 100)
+  assert.equal(m.handle(press('a'), 150), 'goAccounts')
+})

@@ -14,12 +14,14 @@ const VERSION = JSON.parse(readFileSync(new URL('../../src-tauri/tauri.conf.json
 /** What it does: a name, a line, and where the guide says more. */
 const FEATURES = [
   ['budgets', 'Monthly budgets per category, with statistics and trends.', 'guide.html#budgeting'],
-  ['accounts', 'Bank, savings, cash and credit card, one of them in another currency if you like, with transfers between them and net worth.', 'guide.html#accounts'],
+  ['dashboard', 'A dashboard you arrange, with 18 widgets.', 'guide.html#dashboard-customize'],
+  ['accounts', 'Bank, savings, cash and credit card, in any currency, with transfers and net worth.', 'guide.html#accounts'],
+  ['stashes', 'Money set aside for a goal, or a term deposit at a rate.', 'guide.html#stashes'],
   ['recurring', 'Rent, salary, subscriptions.', 'guide.html#recurring'],
   ['documents', 'Receipts, kept encrypted.', 'guide.html#documents'],
-  ['debts', 'Who owes whom. Split bills, with a QR code for each friend.', 'guide.html#debts'],
-  ['phone', 'Android, synced straight from your computer over wifi. No cloud.', 'guide.html#phone'],
-  ['backup', 'Encrypted backups, and exports to JSON, CSV, Excel and PDF.', 'guide.html#backup'],
+  ['debts', 'Who owes whom. Split bills, with a QR code for each friend. Loans and mortgages.', 'guide.html#debts'],
+  ['phone', 'Android, synced from your computer over wifi. No cloud.', 'guide.html#phone'],
+  ['backup', 'Encrypted backups. Exports to JSON, CSV, Excel and PDF.', 'guide.html#backup'],
   ['private', 'Encrypted at rest, locks itself, and nothing leaves the device.', 'guide.html#privacy'],
   ['AI agents, if you want', 'An assistant can add and sort your expenses through the command line. Off until you turn it on.', 'cli.html#quick-start'],
 ]
@@ -41,11 +43,15 @@ ${features}
 </ul>
 </section>
 <section class="doc" id="start"><h2>get started</h2>
-<p>Download meowNY for Linux, Windows or Android from <a href="${REPO}/releases/latest">the latest release</a>. Step by step: <a href="guide.html#install">install</a>. iPhone and Mac are not available yet: <a href="#support">help make it happen</a>.</p>
-<p>To build it yourself: <a href="develop.html">develop</a>.</p>
+<ol>
+<li>Download meowNY for Linux, Windows or Android from <a href="${REPO}/releases/latest">the latest release</a>.</li>
+<li>Install it: <a href="guide.html#install">step by step</a>.</li>
+<li>Open it and press <strong>get started</strong>.</li>
+</ol>
+<p>iPhone and Mac are not available yet: <a href="#support">help make it happen</a>. To build it yourself: <a href="develop.html">develop</a>.</p>
 </section>
 <section class="doc" id="support"><h2>support meowNY</h2>
-<p>meowNY is free and stays free. Putting it on the App Store and Google Play costs money: the developer accounts and the yearly fees. <a href="${SPONSOR}">Support on Ko-fi</a> goes toward publishing it there, so anyone can install it from their phone's store.</p>
+<p>meowNY is free and stays free. The App Store and Google Play need paid developer accounts. <a href="${SPONSOR}">Support on Ko-fi</a> goes toward publishing it there.</p>
 </section>
 <footer><p>meowNY is free software under the AGPL-3.0. <a href="${REPO}">Source on GitHub</a> · <a href="${SPONSOR}">Support on Ko-fi</a>.</p></footer>`
 

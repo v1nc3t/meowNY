@@ -1,11 +1,11 @@
-/* The dashboard page: stat cards, charts, legends and the recurring summary. */
+/* What the widgets of the dashboard hold: figures, bars, charts, legends and the budget table. The grid and the frame are dashboard-grid.css. */
 
 /* Dashboard. Scoped under .dash so the global ul, li and section rules above do not apply. */
 .dash {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding-bottom: 1.5rem;
+  gap: var(--page-gap);
+  padding-bottom: var(--space-5);
 }
 
 .dash ul {
@@ -18,16 +18,9 @@
   gap: 0;
 }
 
-.dash-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
-  gap: 1rem;
-  align-items: start;
-}
-
 .dash-empty {
   margin: 0;
-  padding: 0.75rem 0;
+  padding: var(--space-3) 0;
   font-size: 0.8125rem;
   text-align: center;
   color: var(--muted-foreground);
@@ -37,22 +30,44 @@
   color: var(--muted-foreground);
 }
 
-/* Headline numbers: four across, two across when the card is narrow. The debts card measures its own width too, or its two
-   amounts would each get a quarter of it. */
-.dash-top,
-.dash-debts {
-  container-type: inline-size;
-}
-
+/* Headline numbers: four across, two across when the widget is narrow. A widget measures its own width (`.dash-widget-body`). */
 .dash-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1rem 1.5rem;
+  /* as many columns as figures, each an equal share of the width */
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: var(--space-4) var(--space-5);
 }
 
 @container (max-width: 34rem) {
   .dash-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dash-stats .dash-stat-value {
+    font-size: 1.25rem;
+  }
+}
+
+/* A narrow card (a phone) has a row for each: the word at the left, the figure and its change at the right, and no line wraps. */
+@container (max-width: 24rem) {
+  .dash-stats {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+
+  .dash-stats > .dash-stat {
+    flex-flow: row wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.125rem 0.75rem;
+  }
+
+  .dash-stats .dash-stat-value {
+    font-size: 1.125rem;
+  }
+
+  .dash-stats > .dash-stat > .bar-row {
+    flex: 1 1 100%;
   }
 }
 
@@ -74,13 +89,23 @@
   line-height: 1.4;
   color: var(--foreground);
   font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
 }
 
-/* The change from the month before: coloured text, green when it is good and red when it is bad. */
+/* The figure and, at its right on the same line, the change from the month before. */
+.dash-stat-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.5rem;
+  min-width: 0;
+}
+
+/* The change from the month before: a small coloured value, green when it is good and red when it is bad. */
 .dash-delta {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
   color: var(--muted-foreground);
 }
 
@@ -92,6 +117,19 @@
   color: var(--destructive);
 }
 
+/* The label and value pairs of a card (net worth, the stashes, what recurring items cost): `Facts`, the figures in bold; the sum is bigger. */
+.dash-facts {
+  align-items: baseline;
+}
+
+.dash-facts > dd b {
+  font-weight: 600;
+}
+
+.dash-facts.is-sum > dd b {
+  font-size: 1.125rem;
+}
+
 /* Bars */
 .bar-row {
   display: flex;
@@ -100,12 +138,11 @@
   width: 100%;
 }
 
-/* A thin flat track, with no frame. The fill is cut into blocks of 6px with a 2px gap (the pixel hint), and grows in steps when it
-   changes. */
+/* A thin flat track, with no frame, and a smooth fill that grows smoothly when it changes. */
 .bar {
   flex: 1;
   display: block;
-  height: 8px;
+  height: 0.5rem;
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--c-track);
@@ -116,8 +153,8 @@
   display: block;
   height: 100%;
   border-radius: var(--radius-sm);
-  background: repeating-linear-gradient(90deg, var(--fill) 0 6px, transparent 6px 8px);
-  transition: width var(--t-med, 180ms) steps(6, end);
+  background: var(--fill);
+  transition: width var(--t-med, 180ms) ease-out;
 }
 
 .bar-near {
@@ -166,7 +203,6 @@
 }
 
 .dash-line .axis {
-  font-size: 10px;
   fill: var(--muted-foreground);
 }
 
@@ -189,132 +225,85 @@
 
 .line-expense { stroke: var(--c-expense); }
 
+.line-savings { stroke: var(--c-savings); }
+
 .dot-income { fill: var(--c-income); }
 
 .dot-expense { fill: var(--c-expense); }
 
-.save-pos { fill: var(--c-savings); fill-opacity: 0.75; }
-
-.save-neg { fill: var(--c-expense); fill-opacity: 0.75; }
+.dot-savings { fill: var(--c-savings); }
 
 .dash-line .dim { opacity: 0.45; }
 
 .year-readout {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.25rem 1.25rem;
-  min-height: 1.25rem;
+  justify-content: flex-start;
+  align-items: end;
+  gap: 0.25rem 1.5rem;
+  min-height: 2.25rem;
   font-size: 0.8125rem;
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
 }
 
 .year-readout b {
+  overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--foreground);
 }
 
-.year-month {
-  min-width: 6.5rem;
-  color: var(--foreground);
+.year-month,
+.year-key {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.year-key::before {
+.year-label {
+  overflow: hidden;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.year-key > .year-label::before {
   content: '';
   display: inline-block;
   width: 0.625rem;
   height: 0.625rem;
   margin-right: 0.375rem;
   border-radius: 0;
-  vertical-align: -1px;
+  vertical-align: -0.0625em;
 }
 
-.key-income::before { background: var(--c-income); }
+.key-income > .year-label::before { background: var(--c-income); }
 
-.key-expense::before { background: var(--c-expense); }
+.key-expense > .year-label::before { background: var(--c-expense); }
 
-.key-savings::before { background: var(--c-savings); }
+.key-savings > .year-label::before { background: var(--c-savings); }
 
-/* Spending donut */
-.dash-donut {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1.25rem 1.5rem;
-}
+ 
 
-.donut-wrap {
-  position: relative;
-  flex: none;
-  width: clamp(8rem, 30%, 11rem);
-  aspect-ratio: 1;
-  margin: 0 auto;
-}
+ 
 
-.donut {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
+ 
 
-.donut path {
-  fill: var(--seg);
-  transition: opacity 0.15s;
-}
+ 
 
-.donut .dim {
-  opacity: 0.3;
-}
+ 
 
-.donut-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.125rem;
-  padding: 22%;
-  text-align: center;
-  font-size: 0.6875rem;
-  color: var(--muted-foreground);
-  pointer-events: none;
-}
+ 
 
-.donut-center b {
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: var(--foreground);
-}
+ 
 
-.donut-center span {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.seg-0 { --seg: var(--seg-0); } .seg-bg-0 { background: var(--seg-0); }
-
-.seg-1 { --seg: var(--seg-1); } .seg-bg-1 { background: var(--seg-1); }
-
-.seg-2 { --seg: var(--seg-2); } .seg-bg-2 { background: var(--seg-2); }
-
-.seg-3 { --seg: var(--seg-3); } .seg-bg-3 { background: var(--seg-3); }
-
-.seg-4 { --seg: var(--seg-4); } .seg-bg-4 { background: var(--seg-4); }
-
-.seg-5 { --seg: var(--seg-5); } .seg-bg-5 { background: var(--seg-5); }
-
-.seg-6 { --seg: var(--seg-6); } .seg-bg-6 { background: var(--seg-6); }
-
-.seg-7 { --seg: var(--seg-7); } .seg-bg-7 { background: var(--seg-7); }
+ 
 
 /* The legend of the donut goes beside it only when it has 22rem: a name of 8rem, the share and the amount of 15 characters (small print). */
 .dash-legend {
-  flex: 1 1 22rem;
+  flex: 1 1 18rem;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -324,8 +313,8 @@
 .dash .dash-legend li {
   flex-direction: row;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0.3rem 0.5rem;
+  gap: 0.5rem;
+  padding: 0.1875rem 0.375rem;
   border-radius: var(--radius-sm);
 }
 
@@ -340,13 +329,6 @@
   }
 }
 
-.swatch {
-  flex: none;
-  width: 0.625rem;
-  height: 0.625rem;
-  border-radius: 0;
-}
-
 .legend-name {
   flex: 1;
   min-width: 0;
@@ -358,34 +340,43 @@
 
 /* The name cuts its end short, and with it the ring of a link in it: the ring goes inside. */
 .legend-name a:focus-visible {
-  outline-offset: -2px;
+  outline-offset: calc(var(--hairline-2) * -1);
 }
 
 .legend-pct {
+  min-width: 4ch;
+  text-align: right;
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
 }
 
 .legend-amount {
-  min-width: 5.5rem;
+  min-width: 4.5rem;
   text-align: right;
   color: var(--foreground);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-/* Budget bars */
+/* Budget bars: a table for each side, one row for the side as a whole and one for each category: name, what was spent (or earned), the budget,
+   and a bar of how much is used with its percent. The rows share one set of columns, so the figures line up. The card measures its own width: in
+   a narrow one the budget goes. */
 .dash-bars {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
+  font-size: 0.8125rem;
+}
+
+.dash-budgets {
+  container-type: inline-size;
 }
 
 /* The budget card: expenses, then income under it, each with a coloured mark and its title; no frame, only room between them. */
 .dash-budgets {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--group-gap);
 }
 
 .dash-budget-group {
@@ -406,7 +397,7 @@
 .dash-group-title a {
   color: inherit;
   text-decoration: none;
-  text-underline-offset: 4px;
+  text-underline-offset: 0.25em;
 }
 
 .dash-group-title a:focus-visible {
@@ -421,8 +412,8 @@
 
 .dash-group-title::before {
   content: '';
-  width: 8px;
-  height: 8px;
+  width: 0.5rem;
+  height: 0.5rem;
   background: var(--c-expense);
 }
 
@@ -431,16 +422,50 @@
 }
 
 .dash .dash-bars li {
-  align-items: stretch;
-  gap: 0.375rem;
-  padding: 0.4rem 0.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto minmax(6rem, 1.5fr);
+  align-items: center;
+  gap: 0 0.75rem;
+  padding: 0.25rem 0.5rem;
   border-radius: var(--radius-sm);
 }
 
+@supports (grid-template-columns: subgrid) {
+  .dash-bars {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1fr) max-content max-content minmax(6rem, 1.5fr);
+    column-gap: var(--space-4);
+  }
+
+  .dash .dash-bars li {
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+  }
+}
+
 @media (hover: hover) {
-  .dash .dash-bars li:hover {
+  .dash .dash-bars li:not(.dash-bars-head):hover {
     background: var(--accent);
   }
+}
+
+/* The words over the columns, small and grey, the way the recurring items' table has them. */
+.dash .dash-bars .dash-bars-head {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.dash-bars-head > :not(:first-child):not(:last-child) {
+  text-align: right;
+}
+
+.dash-bar-meter {
+  min-width: 0;
+}
+
+.dash .dash-bars .dash-total .legend-name {
+  font-weight: 600;
 }
 
 .dash .dash-bars .dash-total {
@@ -449,157 +474,369 @@
 
 .dash .dash-bars .dash-total + li:not(.dash-total) {
   margin-top: 0.25rem;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-  padding-top: 0.75rem;
+  padding-top: 0.5rem;
 }
 
-.dash-bar-text {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.125rem 1rem;
-  font-size: 0.8125rem;
-}
+@container (max-width: 24rem) {
+  .dash .dash-bars li {
+    grid-template-columns: minmax(0, 1fr) auto minmax(5rem, 1fr);
+  }
 
-/* What was spent of the budget is two amounts and some words: when the name would be left with less than 8rem it goes on a line of its
-   own, above the words, which wrap if they are wider than the card. */
-.dash-bar-text > .legend-name {
-  flex: 1 1 8rem;
-}
+  .dash-bars {
+    grid-template-columns: minmax(5rem, 1fr) max-content minmax(5rem, 1fr);
+  }
 
-.dash-bar-text > .legend-amount {
-  margin-left: auto;
-  white-space: normal;
+  .dash-bars .dash-bar-budget {
+    display: none;
+  }
 }
 
 .year-readout.is-blank {
   display: none;
 }
 
-/* Recurring items */
-.dash-rec {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+.dash-bars .legend-amount {
+  min-width: 0;
 }
-
-.dash-rec-sum {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.5rem 1.5rem;
-}
-
-.dash-rec-sum > span:not(.dash-stat-label) {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.dash-rec-sum b {
-  font-weight: 600;
-  font-size: 1.125rem;
-  color: var(--foreground);
-  font-variant-numeric: tabular-nums;
-}
-
-.dash-rec-rows {
-  display: flex;
-  flex-direction: column;
-  font-size: 0.8125rem;
-}
-
-.dash .dash-rec-rows li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 0 1rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: var(--radius-sm);
-}
-
-/* The rows share one set of columns, so "per month" and "paid" line up from row to row and under their headings, whatever
-   the amounts are. (Without subgrid each row sizes its own columns, which is the fallback above.) */
-@supports (grid-template-columns: subgrid) {
-  .dash-rec-rows {
-    display: grid;
-    grid-template-columns: minmax(6rem, 1fr) max-content max-content;
-    column-gap: 1rem;
-  }
-
-  .dash .dash-rec-rows li {
-    grid-template-columns: subgrid;
-    grid-column: 1 / -1;
-  }
-}
-
-@media (hover: hover) {
-  .dash .dash-rec-rows li:not(.dash-rec-head):hover {
-    background: var(--accent);
-  }
-}
-
-.dash .dash-rec-rows .dash-rec-head {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--muted-foreground);
-  text-align: right;
-}
-
-/* The words over the columns wrap in the width of the amounts under them, so a long one ("diesen monat bezahlt") does not widen the
-   column and leave the name less room. */
-.dash .dash-rec-rows .dash-rec-head > span {
-  width: 0;
-  min-width: 100%;
-}
-
-.dash-rec-rows .legend-amount {
-  min-width: 4.5rem;
-}
-
-.dash-rec-rows .legend-name {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.swatch-income { background: var(--c-income); }
-
-.swatch-expense { background: var(--c-expense); }
 
 .rec-paid { color: var(--success); }
 
 .dash .rec-over { color: var(--c-expense); }
 
-.dash-col {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+/* -- the widgets that show one thing: a figure, a line, bars or a short list. Each measures its own width (`.dash-widget-body`) and drops what is
+   secondary when it is narrow. -------------------------------------------------------------------------------------------------------------- */
+
+/* A large figure (the savings rate) and its red when more was spent than earned. */
+.dash-stat-value.is-big {
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.dash-stat-value.is-bad {
+  color: var(--destructive);
+}
+
+/* One row high: the figure is smaller and a word that only names it goes, so the figure and its bar or line fit. */
+@container (max-height: 6.5rem) {
+  .dash-widget .dash-stat-value {
+    font-size: 1.25rem;
+    line-height: 1.3;
+  }
+
+  .dash-widget .dash-stat-value.is-big {
+    font-size: 1.75rem;
+    line-height: 1.2;
+  }
+
+  .dash-stat-label.is-optional {
+    display: none;
+  }
+}
+
+@container (max-width: 13rem) {
+  .dash-widget .dash-stat-value {
+    font-size: 1.125rem;
+  }
+
+  .dash-widget .dash-stat-value.is-big {
+    font-size: 1.5rem;
+  }
+}
+
+/* The sparkline: a thin line over a light area, in the colour of the balance line. It fills what the figure above leaves. */
+.dash-spark {
   min-width: 0;
 }
 
-.dash .rec-paid-cell {
+.dash-spark svg {
+  display: block;
+}
+
+.spark-line {
+  fill: none;
+  stroke: var(--c-savings);
+  stroke-width: 2;
+  stroke-linejoin: miter;
+  stroke-linecap: square;
+}
+
+.spark-area {
+  fill: var(--c-savings);
+  stroke: none;
+  opacity: 0.12;
+}
+
+.spark-dot {
+  fill: var(--c-savings);
+}
+
+/* Bars of the cash flow: income and expense in the colours of their lines; the month under the pointer has a column behind it. */
+.dash-line .bar-income {
+  fill: var(--c-income);
+}
+
+.dash-line .bar-expense {
+  fill: var(--c-expense);
+}
+
+.dash-line .column-on {
+  fill: var(--accent);
+}
+
+/* The biggest categories: the name and the amount on a line, a bar under them as long as the category's share of the largest. */
+.dash-spend {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.3;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: 0.8125rem;
 }
 
-.dash .rec-diff {
-  font-size: 0.6875rem;
-  opacity: 0.8;
+.dash .dash-spend li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem var(--space-3);
+  align-items: baseline;
 }
 
-/* Dashboard on a phone: a bigger donut. */
-html.is-phone .donut-wrap {
-  width: min(86%, 17rem);
+.dash-spend .bar-row {
+  grid-column: 1 / -1;
 }
 
-html.is-phone .donut-center b {
+.dash-spend .bar-fill {
+  --fill: var(--c-expense);
+}
+
+.dash-spend .legend-amount {
+  min-width: 0;
+}
+
+/* Transactions in columns: name, category, day, amount. The category goes when the widget is under 30rem wide, then the day (under 17rem). The
+   rows share the columns of the list, so the figures line up. */
+.dash-tx {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) max-content max-content;
+  column-gap: var(--space-3);
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+
+.dash .dash-tx li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) max-content max-content;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 0 var(--space-3);
+  padding: 0.1875rem 0;
+}
+
+@supports (grid-template-columns: subgrid) {
+  .dash .dash-tx li {
+    grid-template-columns: subgrid;
+  }
+}
+
+.dash-tx .legend-amount {
+  min-width: 0;
+}
+
+.dash-tx .legend-pct {
+  min-width: 0;
+}
+
+@container (max-width: 30rem) {
+  .dash-tx,
+  .dash .dash-tx li {
+    grid-template-columns: minmax(0, 1fr) max-content max-content;
+  }
+
+  .dash-tx .tx-category {
+    display: none;
+  }
+}
+
+@container (max-width: 17rem) {
+  .dash-tx,
+  .dash .dash-tx li {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .dash-tx .tx-day {
+    display: none;
+  }
+}
+
+/* The loans: what is owed, the installment and the payoff side by side; the narrower the widget, the fewer (under 20rem two, under 13rem the first). */
+.dash-trio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+}
+
+.dash-trio > .dash-stat:nth-child(n + 2) {
+  display: none;
+}
+
+@container (min-width: 13rem) {
+  .dash-trio {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dash-trio > .dash-stat:nth-child(2) {
+    display: flex;
+  }
+}
+
+@container (min-width: 20rem) {
+  .dash-trio {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dash-trio > .dash-stat:nth-child(3) {
+    display: flex;
+  }
+}
+
+.dash-trio .dash-stat-value {
   font-size: 1.25rem;
 }
 
-html.is-phone .donut-center {
-  font-size: 0.8125rem;
+/* Tall but narrow (two rows in four columns): all three, one under the other, the word at the left and the figure at the right. */
+@container (max-width: 20rem) and (min-height: 9rem) {
+  .dash-trio {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+
+  .dash-trio > .dash-stat:nth-child(n) {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+}
+
+/* What only a tall widget shows: the list under the figures. */
+.dash-tall {
+  display: none;
+}
+
+@container (min-height: 9rem) {
+  .dash-tall {
+    display: flex;
+  }
+}
+
+/* The target of a stash and its day, under the bar, small; they go when the widget is narrow. */
+.dash-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.dash-foot .legend-amount {
+  min-width: 0;
+  color: inherit;
+}
+
+@container (max-width: 11.5rem) {
+  .dash-foot {
+    display: none;
+  }
+}
+
+/* The period control (components/PeriodNav.tsx): "‹ nov 2026 ›", the middle a button that opens the choice of month and year, and "current" at the
+   end only while another period is shown. The popover is drawn over the page, in the body (or in a dialog). */
+.period-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--font);
+  font-size: 0.875rem;
+  color: var(--foreground);
+}
+
+.period-nav > .ui-btn-icon,
+.period-years > .ui-btn-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.period-pick {
+  position: relative;
+  min-width: 0;
+  padding-right: 1.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The pixel arrow of the dropdowns: it turns over while the popover is open. */
+.period-pick::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0.625rem;
+  width: 0.625rem;
+  height: 0.375rem;
+  margin-top: -0.1875rem;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 0.625rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) 0.125rem 0.125rem / 0.375rem 0.125rem no-repeat,
+    linear-gradient(currentColor 0 0) 0.25rem 0.25rem / 0.125rem 0.125rem no-repeat;
+  opacity: 0.6;
+  transition: transform var(--t-med) steps(2, end);
+}
+
+.period-pick[aria-expanded='true']::after {
+  transform: rotate(180deg);
+}
+
+.period-current {
+  flex: none;
+  margin-right: 0.25rem;
+}
+
+.period-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 15rem;
+  max-width: calc(100vw - 1rem);
+  padding: 0.5rem;
+  color: var(--popover-foreground);
+  background: var(--popover);
+  border: var(--border-width) solid var(--input);
+  border-radius: var(--radius-md);
+  animation: panel-in var(--t-fast) var(--ease-step);
+}
+
+.period-years {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.period-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.period-cell {
+  padding-inline: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.period-cell[aria-pressed='true'] {
+  background: var(--accent);
+  box-shadow: inset 0 calc(var(--hairline-2) * -1) 0 var(--primary);
 }

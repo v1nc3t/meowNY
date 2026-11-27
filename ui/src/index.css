@@ -1,15 +1,30 @@
+/* Tailwind (v4) for the shadcn/ui components in components/ui/, and the app's own style sheets.
+   Layers, lowest first: Tailwind's theme variables; base.css (the page's plain elements); the shadcn components' utility classes. The page
+   style sheets are in no layer, so they win over all three: a page can still shape a component (a width, a margin), as before.
+   Tailwind's preflight is left out: base.css is this app's reset. Utilities are generated only for the classes written in components/ui/ and in
+   the wrappers listed at the end (any other file that writes Tailwind classes must be listed there), so words of the app that look like a
+   class (grid, table, filter...) do not make styles of their own. */
+@layer theme, app-base, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities) source(none);
+@import './styles/tailwind.css';
 @import './styles/tokens.css';
-@import './styles/base.css';
+@import './styles/base.css' layer(app-base);
 @import './styles/primitives.css';
 @import './styles/shell.css';
 @import './styles/controls.css';
 @import './styles/page-chrome.css';
 @import './styles/dashboard.css';
+@import './styles/dashboard-grid.css';
 @import './styles/money.css';
 @import './styles/debts-docs.css';
 @import './styles/accounts.css';
+@import './styles/stashes.css';
 @import './styles/settings.css';
 @import './styles/export.css';
 @import './styles/onboarding.css';
 @import './styles/phone.css';
 @import './styles/toast.css';
+
+@source './components/ui';
+@source './components/MoreMenu.tsx';

@@ -2,7 +2,7 @@ import { useEffect, useState, type AnimationEvent, type CSSProperties } from 're
 import { createPortal } from 'react-dom'
 import { dismissToast, useToasts, type ToastItem } from '../hooks/toast'
 import { useT } from '../i18n/context'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /** The place the toasts are drawn in: the open dialog on top, else the page. A modal dialog sits in the browser's top layer, so a toast
  * on the page would be hidden behind it (and could not be clicked); inside the dialog it shows above it. */
@@ -63,7 +63,7 @@ function Toast({ item, closeLabel }: { item: ToastItem; closeLabel: string }) {
     >
       <p className="toast-text">{item.text}</p>
       <Button variant="ghost" size="icon" className="toast-close" aria-label={closeLabel} onClick={() => dismissToast(item.id)}>
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" aria-hidden="true">
+        <svg viewBox="0 0 24 24" className="toast-close-icon" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" aria-hidden="true">
           <path d="M6 6l12 12M18 6L6 18" />
         </svg>
       </Button>

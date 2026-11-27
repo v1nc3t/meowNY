@@ -143,12 +143,22 @@ test('the tables and fields are the ones the Rust side sends', () => {
   const names = [...(/pub fn name\(self\)[\s\S]*?\n    \}/.exec(wire)?.[0] ?? '').matchAll(/=> "(\w+)"/g)].map((m) => m[1])
   // Accounts and transfers come with protocol 9 (docs/accounts-design.md, section 7). Until wire.rs names them the screen is one step
   // ahead by exactly those two; from then on the lists are equal again, and this needs no change.
-  const ahead = names.includes('accounts') ? [] : ['accounts', 'transfers']
+  // Stashes and their entries come with protocol 12 (docs/stash-design.md, section 7), the same way.
+  const ahead = [...(names.includes('accounts') ? [] : ['accounts', 'transfers']), ...(names.includes('stashes') ? [] : ['stashes', 'stash_entries'])]
   assert.deepEqual([...TABLES].filter((table) => !ahead.includes(table)).sort(), names.sort())
   const engine = readFileSync(new URL('../../../src-tauri/src/sync/engine.rs', import.meta.url), 'utf8')
   const facts = /fn facts\(conn[\s\S]*?\n\}\n/.exec(engine)?.[0] ?? ''
   const sent = new Set([...facts.matchAll(/\("(\w+)", /g)].map((m) => m[1]))
   for (const field of sent) assert.ok((FIELDS as readonly string[]).includes(field ?? ''), `${field} is not a known field`)
+})
+
+test('every table a conflict can name has its words, the stashes too', () => {
+  for (const table of TABLES) assert.ok(`sync.table.${table}` in en, `sync.table.${table}`)
+  for (const table of ['stashes', 'stash_entries']) assert.ok((TABLES as readonly string[]).includes(table), table)
+  // the facts of a stash and of an entry (docs/stash-design.md, section 7.5)
+  for (const field of ['name', 'account', 'target', 'targetDate', 'notes', 'archived', 'stash', 'kind', 'amount', 'date', 'note']) assert.ok((FIELDS as readonly string[]).includes(field), field)
+  // a stash's target is not the "linked to" of a document link: it has words of its own
+  assert.ok('sync.field.stashTarget' in en)
 })
 
 test('every field a conflict can name has its words, the five of an account too', () => {
@@ -168,4 +178,15 @@ test('the screen knows the four facts of a currency per account before the engin
   }
   // and whatever the engine does send, today or later, is known
   for (const sentField of sent) assert.ok((FIELDS as readonly string[]).includes(sentField), `${sentField} is not a known field`)
+})
+
+test('the screen knows the six facts of a rate, an installment and a deposit, with their words', () => {
+  // docs/loans-deposits-design.md, section 7: the account row gains the rate, its period and the installment, the stash row the start day and the two days
+  const fields = ['interestRate', 'interestPeriod', 'installment', 'startDate', 'brokenOn', 'returnedOn']
+  for (const field of fields) {
+    assert.ok((FIELDS as readonly string[]).includes(field), `${field} is a known field`)
+    assert.ok(`sync.field.${field}` in en, `${field} has its words`)
+  }
+  // a stash's kind has the words of both of its values, and a period of both of its
+  for (const key of ['stashes.kind.GOAL', 'stashes.kind.DEPOSIT', 'accounts.period.MONTHLY', 'accounts.period.YEARLY']) assert.ok(key in en, key)
 })

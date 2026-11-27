@@ -7,14 +7,14 @@ import { useToast } from '../hooks/toast'
 import { useProfile } from '../hooks/profile'
 import { useT } from '../i18n/context'
 import { formatSize } from '../lib/bytes'
-import { canKeepToPreview, canPreview, fileState } from '../lib/documents'
+import { canKeepToPreview, canPreview, fileState, fileStateText } from '../lib/documents'
 import ClipMark from './ClipMark'
 import DocumentModal from './DocumentModal'
 import KeepToPreview from './KeepToPreview'
 import Icon from './NavIcon'
 import Modal from './Modal'
 import PreviewModal from './PreviewModal'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 const FILTER = { transaction: 'transactionId', recurring: 'recurringTransactionId', ledger_entry: 'ledgerEntryId' } as const
 
@@ -74,6 +74,11 @@ function ItemDocuments({ name, docs, onChanged, onClose }: { name: string; docs:
   const locale = settings?.locale ?? 'en'
   const [previewing, setPreviewing] = useState<Doc | null>(null)
   const [viewing, setViewing] = useState<string | null>(null)
+  /** Why the preview is off, when the file is not here: on the button, not a line under the name. */
+  const stateWords = (doc: Doc) => {
+    const state = fileStateText(fileState(doc, phone))
+    return state ? t(state) : undefined
+  }
   return (
     <>
       <Modal title={t('docs.itemDocsTitle', { name })} onClose={onClose} cancelLabel={t('common.back')} readOnly>
@@ -91,11 +96,10 @@ function ItemDocuments({ name, docs, onChanged, onClose }: { name: string; docs:
                 {canKeepToPreview(doc, phone) ? (
                   <KeepToPreview doc={doc} onKept={onChanged} />
                 ) : (
-                  <Button variant="ghost" size="sm" disabled={!canPreview(doc)} onClick={() => setPreviewing(doc)}>
+                  <Button variant="ghost" size="sm" disabled={!canPreview(doc)} title={stateWords(doc)} onClick={() => setPreviewing(doc)}>
                     {t('docs.previewButton')}
                   </Button>
                 )}
-                {fileState(doc, phone) === 'waiting' ? <p className="attach-note">{t('docs.fileWaiting')}</p> : null}
               </li>
             ))}
           </ul>

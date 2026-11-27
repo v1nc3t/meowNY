@@ -233,9 +233,16 @@ pub(crate) fn category_is_active(conn: &Connection, id: i64) -> Result<bool, App
         .is_some())
 }
 
-fn category_is_expense(conn: &Connection, id: i64) -> Result<bool, AppError> {
+pub(crate) fn category_is_expense(conn: &Connection, id: i64) -> Result<bool, AppError> {
     Ok(conn
         .query_row("SELECT 1 FROM categories WHERE id = ?1 AND type = 'EXPENSE'", [id], |_| Ok(()))
+        .optional()?
+        .is_some())
+}
+
+pub(crate) fn category_is_income(conn: &Connection, id: i64) -> Result<bool, AppError> {
+    Ok(conn
+        .query_row("SELECT 1 FROM categories WHERE id = ?1 AND type = 'INCOME'", [id], |_| Ok(()))
         .optional()?
         .is_some())
 }

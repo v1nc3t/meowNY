@@ -39,8 +39,8 @@ export const TEXT_MAX_CHARS = 100
 /** The parts that have a sheet in an Excel file: everything but the change history. */
 const SHEETED: readonly ExportSection[] = EXPORT_SECTIONS.filter((section) => section !== 'history')
 
-/** The parts that are only in a file with no limits: the change history and the transfers (docs/accounts-design.md, section 10). */
-export const WHOLE_ONLY: readonly ExportSection[] = ['history', 'transfers']
+/** The parts that are only in a file with no limits: the change history, the transfers and the stashes (docs/accounts-design.md, section 10; docs/stash-design.md, section 10). */
+export const WHOLE_ONLY: readonly ExportSection[] = ['history', 'transfers', 'stashes']
 
 /** Whether a part can be in a file of this choice: every part with no limit, all but the ones above with one. */
 const allowed = (section: ExportSection, choice: Choice) => !WHOLE_ONLY.includes(section) || !isLimited(choice)

@@ -3,6 +3,14 @@
 How friends, split bills, the ledger, bill codes and reminders work. Section numbers are cited in the code; keep them.
 User side: the [guide](https://v1nc3t.github.io/meowNY/guide.html#debts).
 
+## In short
+
+- A friend is only a name. Each friend has a ledger outside your budget.
+- A bill you paid can be split. Budgets, statistics and exports count only your part.
+- A friend's balance comes from split parts and ledger entries. Mark as paid takes any amount.
+- A bill can be shown to a friend as a QR code. Nothing goes over a network.
+- Reminders hold a count, never a name or an amount.
+
 ## 1. What it has to do
 
 Friends are names only. A bill you paid can be split; your expenses, budgets and statistics count only your part. A

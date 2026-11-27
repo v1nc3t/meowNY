@@ -7,7 +7,7 @@ use skrifa::instance::{LocationRef, Size};
 use skrifa::metrics::GlyphMetrics;
 use skrifa::{FontRef, MetadataProvider};
 
-use super::{AccountsPart, ReportData, ReportLabels, ReportOptions};
+use super::{AccountsPart, ReportData, ReportLabels, ReportOptions, StashLine};
 use crate::categories::CategoryType;
 use crate::debts::summary::Labels as DebtsLabels;
 use crate::display::DisplayFormat;
@@ -518,7 +518,7 @@ impl Builder<'_> {
         self.text_right(balance_right, base, 8.5, true, MUTED, &balance);
         self.line(self.left, self.y + 17.0, self.right, self.y + 17.0, 0.8, GRID);
         self.y += 20.0;
-        for (name, balance, change, counts, currency) in &part.accounts {
+        for (name, balance, change, counts, currency, liability) in &part.accounts {
             self.ensure(row);
             let base = Self::baseline(self.y, row, 9.5);
             // an account in a currency of its own: the code in front of the numbers, which are in that currency and carry no symbol of the app's
@@ -527,11 +527,14 @@ impl Builder<'_> {
                 Some(code) => (format!("{code} {}{}", if *change >= 0 { "+" } else { "" }, self.fmt.number(*change)), format!("{code} {}", self.fmt.number(*balance))),
             };
             let room = change_right - self.left - 90.0;
-            if *counts {
+            // what is said beside the name: the kind of an account you owe on, and why a balance is not in the net worth
+            let kind = liability.and_then(|kind| self.labels.liability_word(kind)).map(str::to_string);
+            let marks: Vec<String> = kind.into_iter().chain((!*counts).then(|| self.labels.not_in_net_worth.clone())).collect();
+            if marks.is_empty() {
                 self.text_fit(self.left, base, 9.5, false, INK, name, room);
             } else {
-                // the mark tells why this balance is not in the net worth, so the name is cut before it is; a very long mark is cut too
-                let mark = self.m.fit(&self.labels.not_in_net_worth, 8.0, false, room * 0.6);
+                // the marks tell what the account is and why its balance is not in the net worth, so the name is cut before them; very long ones are cut too
+                let mark = self.m.fit(&marks.join(" "), 8.0, false, room * 0.6);
                 let shown = self.m.fit(name, 9.5, false, room - self.m.width(&mark, 8.0, false) - 5.0);
                 let after_name = self.left + self.m.width(&shown, 9.5, false) + 5.0;
                 self.text(self.left, base, 9.5, false, INK, &shown);
@@ -544,11 +547,60 @@ impl Builder<'_> {
         }
         self.ensure(row + 6.0);
         self.y += 6.0;
+        // what the accounts you owe on add up to, when there are any in the net worth: it is in the net worth below, and in the balances above
+        if let Some(debts) = part.debts {
+            self.ensure(row);
+            let base = Self::baseline(self.y, row, 9.5);
+            let label = self.labels.debts.clone();
+            self.text(self.left, base, 9.5, false, MUTED, &label);
+            self.text_right(balance_right, base, 9.5, false, if debts < 0 { OVER_TEXT } else { INK }, &self.fmt.money(debts));
+            self.y += row;
+        }
         let base = Self::baseline(self.y, row, 9.5);
         let label = self.labels.net_worth.clone();
         self.text(self.left, base, 9.5, true, MUTED, &label);
         self.text_right(balance_right, base, 9.5, true, if part.net_worth < 0 { OVER_TEXT } else { INK }, &self.fmt.money(part.net_worth));
         self.y += row + 14.0;
+    }
+
+    /// The stashes: each with its account, what it held on the last day and its target (a dash without one). The archived ones come last, in the
+    /// muted colour. A stash in an account with a currency of its own has the code in front of both numbers, which are in that currency and
+    /// carry no symbol of the app's. There is no total: the stashes are in more than one currency, and what they hold is part of the balances above.
+    fn stashes(&mut self, lines: &[StashLine]) {
+        let title = self.labels.stashes.clone();
+        self.y += 12.0;
+        self.section_title(&title, 20.0 + 17.0 * 2.0);
+        let row = 17.0;
+        let target_right = self.right;
+        let saved_right = self.right - 100.0;
+        let account_x = self.left + self.width() * 0.36;
+        let account_room = saved_right - 90.0 - account_x;
+        let name_room = account_x - self.left - 8.0;
+        let base = Self::baseline(self.y, 16.0, 8.5);
+        let (name, account, saved, target) = (self.labels.name.clone(), self.labels.accounts.clone(), self.labels.saved.clone(), self.labels.target.clone());
+        self.text(self.left, base, 8.5, true, MUTED, &name);
+        self.text_fit(account_x, base, 8.5, true, MUTED, &account, account_room);
+        self.text_right(saved_right, base, 8.5, true, MUTED, &saved);
+        self.text_right(target_right, base, 8.5, true, MUTED, &target);
+        self.line(self.left, self.y + 17.0, self.right, self.y + 17.0, 0.8, GRID);
+        self.y += 20.0;
+        for line in lines {
+            self.ensure(row);
+            let base = Self::baseline(self.y, row, 9.5);
+            let show = |minor: i64| match &line.currency {
+                None => self.fmt.money(minor),
+                Some(code) => format!("{code} {}", self.fmt.number(minor)),
+            };
+            let (held, aim) = (show(line.saved), line.target.map_or_else(|| "\u{2013}".to_string(), show));
+            let ink = if line.archived { MUTED } else { INK };
+            self.text_fit(self.left, base, 9.5, false, ink, &line.name, name_room);
+            self.text_fit(account_x, base, 9.5, false, MUTED, &line.account, account_room);
+            self.text_right(saved_right, base, 9.5, false, if line.saved < 0 { OVER_TEXT } else { ink }, &held);
+            self.text_right(target_right, base, 9.5, false, if line.target.is_some() { ink } else { MUTED }, &aim);
+            self.line(self.left, self.y + row, self.right, self.y + row, 0.3, GRID);
+            self.y += row;
+        }
+        self.y += 14.0;
     }
 
     /// Who owed what on the last day: a line for each friend, and under them what is owed to you, what you owe, and the net.
@@ -743,7 +795,7 @@ pub fn build(data: &ReportData, options: &ReportOptions) -> Result<Doc, AppError
     b.header(data);
     b.tiles(data);
     let no_money = data.income == 0 && data.expense == 0 && data.budget_lines.is_empty() && data.transactions.is_empty();
-    if no_money && data.debts.is_none() && data.accounts.is_none() {
+    if no_money && data.debts.is_none() && data.accounts.is_none() && data.stashes.is_none() {
         let none = b.labels.no_data.clone();
         b.text(b.left, b.y + 10.0, 10.0, false, MUTED, &none);
     } else {
@@ -754,6 +806,9 @@ pub fn build(data: &ReportData, options: &ReportOptions) -> Result<Doc, AppError
         }
         if let Some(part) = &data.accounts {
             b.accounts(part);
+        }
+        if let Some(lines) = &data.stashes {
+            b.stashes(lines);
         }
         if !no_money && options.include_transactions && !data.transactions.is_empty() {
             b.transactions(data, options.show_descriptions);

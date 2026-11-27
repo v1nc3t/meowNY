@@ -913,6 +913,8 @@ fn sample_args(name: &str, category: &str) -> String {
         "accounts.show" => r#"{"id":"1"}"#.into(),
         "accounts.history" => r#"{"id":"1","year":"2026"}"#.into(),
         "accounts.breakdown" => r#"{"id":"1","from":"2026-09-01","to":"2026-09-30"}"#.into(),
+        "stashes.show" => r#"{"id":"1"}"#.into(),
+        "stashes.history" => r#"{"id":"1","year":"2026"}"#.into(),
         "splits.preview" => r#"{"amount":"100.00","mode":"EQUAL","people":["1"],"guests":"Bob"}"#.into(),
         _ => "{}".into(),
     }

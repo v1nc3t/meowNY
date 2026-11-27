@@ -10,7 +10,7 @@ import DatePicker from './DatePicker'
 import DocumentDetails from './DocumentDetails'
 import Modal from './Modal'
 import PreviewModal from './PreviewModal'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 const FORM_ID = 'document-form'
 const WARNING_FORM_ID = 'document-open-form'
@@ -121,6 +121,9 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
     )
   }
 
+  // what cannot be done with this kind of file: behind a help button beside the title, not a line under the buttons
+  const help = doc.hasFile && !canOpen(doc) && !canPreview(doc) ? <p>{t('docs.cannotOpen')}</p> : undefined
+
   return (
     <>
       <Modal
@@ -129,6 +132,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
         formId={FORM_ID}
         doneLabel={t('common.save')}
         cancelLabel={t('common.back')}
+        help={help}
         onClose={onClose}
       >
         {image ? <img className="doc-preview" src={imageSource(image)} alt={t('docs.preview', { name: doc.name })} /> : null}
@@ -166,7 +170,7 @@ export default function DocumentModal({ id, onClose, onChanged }: { id: string; 
       </Modal>
       {previewing ? <PreviewModal doc={doc} onClose={() => setPreviewing(false)} /> : null}
       {warning ? (
-        <Modal title={t('docs.openTitle')} formId={WARNING_FORM_ID} doneLabel={t('docs.open')} onClose={() => setWarning(false)}>
+        <Modal title={t('docs.openTitle')} formId={WARNING_FORM_ID} doneLabel={t('docs.open')} help={<p>{t('docs.openHtml')}</p>} onClose={() => setWarning(false)}>
           <form id={WARNING_FORM_ID} onSubmit={(event) => void onWarned(event)}>
             <p className="warning">{t('docs.openWarning')}</p>
           </form>

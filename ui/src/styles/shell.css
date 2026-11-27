@@ -51,15 +51,15 @@
   display: none;
 }
 
-/* The pixel icons of the sidebar, at their own 12px grid. */
+/* The pixel icons of the sidebar, at their own 12 by 12 grid. */
 .nav-icon {
-  width: 12px;
-  height: 12px;
+  width: var(--icon);
+  height: var(--icon);
   flex: 0 0 auto;
 }
 
-/* Closing changes the width only: the icons keep their places (an icon sits 14px in from the edge of the column's 40px, so it is in the
-   middle when the sidebar is 64px wide). The names and the logo stay where they are and fade out, while the narrowing column cuts
+/* Closing changes the width only: the icons keep their places (an icon sits 0.875rem in from the edge of the column's 2.5rem, so it is in the
+   middle when the sidebar is 4rem wide). The names and the logo stay where they are and fade out, while the narrowing column cuts
    them off; after that they are hidden, so the keyboard skips them. */
 .app-logo,
 .nav-label {
@@ -122,7 +122,7 @@
   color: var(--foreground);
   font-weight: 600;
   /* The page you are on is marked in the green of the accents. */
-  box-shadow: inset 2px 0 0 var(--primary);
+  box-shadow: inset var(--hairline-2) 0 0 var(--primary);
 }
 
 .sidebar-footer {
@@ -143,7 +143,7 @@
   gap: 0.25rem 1.5rem;
   margin: 0;
   padding: 0.5rem 0 0.25rem;
-  border-top: 1px solid var(--border);
+  border-top: var(--hairline) solid var(--border);
   font-size: 0.8125rem;
   color: var(--muted-foreground);
 }
@@ -180,7 +180,7 @@
 .app-main > main {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 2.5rem 2rem 2rem;
+  padding: var(--space-6) var(--page-pad-x);
 }
 
 .app-shell.is-locked {
@@ -200,7 +200,7 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  padding-bottom: 1rem;
+  padding-bottom: var(--space-4);
 }
 
 .app-shell.is-locked .tx-page {
@@ -219,7 +219,7 @@ body:has(.app-shell.is-locked) {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1rem;
+  gap: var(--page-gap);
   min-width: 0;
   max-width: 100%;
 }
@@ -232,11 +232,6 @@ body:has(.app-shell.is-locked) {
 .app-main main > section > .wide {
   width: 100%;
   max-width: none;
-}
-
-.app-main main > section > .tx-title {
-  width: auto;
-  max-width: 100%;
 }
 
 @media (max-width: 45em) {
@@ -261,7 +256,7 @@ body:has(.app-shell.is-locked) {
     gap: 0.75rem;
     padding: 0.75rem 1rem;
     border-right: none;
-    border-bottom: 1px solid var(--border);
+    border-bottom: var(--hairline) solid var(--border);
   }
 
   /* A window this narrow has no sidebar to close: whatever was saved, the names show. */
@@ -271,8 +266,7 @@ body:has(.app-shell.is-locked) {
     visibility: visible;
   }
 
-  .toolbar.tx-bar,
-  .tx-bar .tx-range {
+  .toolbar.tx-bar {
     flex-wrap: wrap;
   }
 
@@ -294,7 +288,7 @@ body:has(.app-shell.is-locked) {
   }
 
   .app-main > main {
-    padding: 1.75rem 1rem 2rem;
+    padding: var(--space-5) var(--space-4) var(--space-6);
   }
 
   .app-shell.is-locked,

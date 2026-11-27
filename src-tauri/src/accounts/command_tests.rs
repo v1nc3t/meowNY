@@ -51,6 +51,7 @@ fn harness() -> Harness {
             commands::account_history,
             commands::account_breakdown,
             commands::accounts_summary,
+            commands::accounts_pay,
             commands::create_transfer,
             commands::change_currency,
             commands::get_transfer,
@@ -113,7 +114,8 @@ fn accounts_are_made_changed_ordered_archived_restored_and_deleted_through_the_c
             "id": "1", "name": "Main account", "kind": "CHECKING", "number": null, "openingBalance": "0.00", "openingDate": "1970-01-01", "archived": false,
             "isMain": true, "balance": "0.00", "changeThisMonth": "0.00", "lastActivity": null, "entries": 0,
             "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00", "available": "0.00",
-            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "0.00"
+            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "0.00", "setAside": "0.00", "free": "0.00",
+            "interestRate": null, "interestPeriod": null, "installment": null, "liability": null, "returnPerMonth": null
         }])
     );
     let card = h.ok("create_account", json!({ "input": { "name": "Card", "kind": "CREDIT_CARD", "number": "1234", "openingBalance": "-120.00", "openingDate": "2026-01-01" } }));
@@ -123,7 +125,8 @@ fn accounts_are_made_changed_ordered_archived_restored_and_deleted_through_the_c
             "id": "2", "name": "Card", "kind": "CREDIT_CARD", "number": "1234", "openingBalance": "-120.00", "openingDate": "2026-01-01", "archived": false,
             "isMain": false, "balance": "-120.00", "changeThisMonth": "0.00", "lastActivity": null, "entries": 0,
             "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00", "available": "-120.00",
-            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "-120.00"
+            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "-120.00", "setAside": "0.00", "free": "-120.00",
+            "interestRate": null, "interestPeriod": null, "installment": null, "liability": null, "returnPerMonth": null
         })
     );
     // only the name and the kind are needed: the balance is 0.00 and the date is today
@@ -157,7 +160,7 @@ fn accounts_are_made_changed_ordered_archived_restored_and_deleted_through_the_c
     }
     assert_eq!(h.code("update_account", json!({ "id": "99", "patch": {} })), "not_found");
     // what does not have the shape of the input does not reach the code at all
-    assert!(h.call("create_account", json!({ "input": { "name": "A", "kind": "LOAN" } })).is_err());
+    assert!(h.call("create_account", json!({ "input": { "name": "A", "kind": "BROKERAGE" } })).is_err());
     assert!(h.call("create_account", json!({ "input": { "name": "A", "kind": "CASH", "archived": true } })).is_err());
     assert!(h.call("create_account", json!({ "input": { "name": "A", "kind": "CASH", "openingBalance": -1.5 } })).is_err(), "money is text");
     assert!(h.call("update_account", json!({ "id": "2", "patch": { "isMain": true } })).is_err());
@@ -214,7 +217,7 @@ fn transfers_and_rows_with_an_account_go_through_the_commands_and_the_numbers_fo
     let points = history.as_array().unwrap();
     assert_eq!(points.last().unwrap(), &json!({ "month": month, "balance": "127.50" }));
     assert_eq!(points.len(), month[5..].parse::<usize>().unwrap());
-    assert_eq!(h.ok("accounts_summary", json!({})), json!({ "inAccounts": "-43.50", "friends": "0.00", "netWorth": "-43.50", "accounts": 2, "inUse": true }));
+    assert_eq!(h.ok("accounts_summary", json!({})), json!({ "inAccounts": "-43.50", "debts": "0.00", "friends": "0.00", "netWorth": "-43.50", "accounts": 2, "inUse": true }));
 
     // the refusals
     assert_eq!(h.code("create_transfer", json!({ "input": { "fromAccountId": cash, "toAccountId": cash, "amount": "1.00", "date": first } })), "invalid_input");
@@ -283,7 +286,8 @@ fn the_details_of_an_account_go_through_the_commands_with_the_names_of_section_2
             "id": "2", "name": "Card", "kind": "CREDIT_CARD", "number": null, "openingBalance": "-240.00", "openingDate": "2026-01-01", "archived": false,
             "isMain": false, "balance": "-240.00", "changeThisMonth": "0.00", "lastActivity": null, "entries": 0,
             "bic": "DEUTDEFF", "notes": "limit 1000\nrenews in May", "group": "Bank A", "includeInNetWorth": false, "virtualBalance": "1000.00", "available": "760.00",
-            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "-240.00"
+            "currency": "EUR", "foreign": false, "rate": null, "balanceInMain": "-240.00", "setAside": "0.00", "free": "-240.00",
+            "interestRate": null, "interestPeriod": null, "installment": null, "liability": null, "returnPerMonth": null
         })
     );
     // a patch: `null` clears the three texts, the flag and the money change, and what is left out stays
@@ -298,7 +302,7 @@ fn the_details_of_an_account_go_through_the_commands_with_the_names_of_section_2
     assert_eq!(h.ok("list_accounts", json!({}))[0]["bic"], "BOFIIE2D");
     // net worth follows the flag: the card counts again (-240.00) and the main account (0.00) does not
     let today = h.ok("today", json!({}))["date"].as_str().unwrap().to_string();
-    assert_eq!(h.ok("accounts_summary", json!({})), json!({ "inAccounts": "-240.00", "friends": "0.00", "netWorth": "-240.00", "accounts": 2, "inUse": true }), "on {today}");
+    assert_eq!(h.ok("accounts_summary", json!({})), json!({ "inAccounts": "-240.00", "debts": "0.00", "friends": "0.00", "netWorth": "-240.00", "accounts": 2, "inUse": true }), "on {today}");
 
     // what is refused, as the fixed codes the page gets
     for (what, patch) in [
@@ -417,7 +421,8 @@ fn a_currency_of_its_own_goes_through_the_commands_with_the_names_of_section_21_
             "id": "2", "name": "Lei", "kind": "CASH", "number": null, "openingBalance": "100.00", "openingDate": "2026-01-01", "archived": false,
             "isMain": false, "balance": "100.00", "changeThisMonth": "0.00", "lastActivity": null, "entries": 0,
             "bic": null, "notes": null, "group": null, "includeInNetWorth": true, "virtualBalance": "0.00", "available": "100.00",
-            "currency": "RON", "foreign": true, "rate": "5.00", "balanceInMain": "20.00"
+            "currency": "RON", "foreign": true, "rate": "5.00", "balanceInMain": "20.00", "setAside": "0.00", "free": "100.00",
+            "interestRate": null, "interestPeriod": null, "installment": null, "liability": null, "returnPerMonth": null
         })
     );
     let lei_id = lei["id"].as_str().unwrap().to_string();
@@ -499,4 +504,53 @@ fn the_currency_of_the_app_cannot_be_changed_through_the_command_while_an_accoun
     assert_eq!(h.ok("delete_account", json!({ "id": lei })), Value::Null);
     assert_eq!(h.ok("change_currency", json!({ "input": { "currency": "USD", "rate": "2" } }))["accounts"], 0, "and it is allowed again once the account is gone");
     assert_eq!(h.ok("list_accounts", json!({}))[0]["currency"], "USD", "the main account follows");
+}
+
+#[test]
+fn a_liability_is_made_and_paid_through_the_commands_with_the_names_of_the_loans_design() {
+    let h = harness();
+    let today = h.ok("today", json!({}))["date"].as_str().unwrap().to_string();
+    let interest = h.id_of("create_category", json!({ "name": "Interest", "kind": "EXPENSE" }));
+    let flat = h.ok(
+        "create_account",
+        json!({ "input": { "name": "Flat", "kind": "MORTGAGE", "openingBalance": "-180000.00", "openingDate": "2026-01-01", "interestRate": "3.9", "interestPeriod": "YEARLY", "installment": "950.00" } }),
+    );
+    let flat_id = flat["id"].as_str().unwrap().to_string();
+    assert_eq!((flat["kind"].as_str(), flat["interestRate"].as_str(), flat["interestPeriod"].as_str(), flat["installment"].as_str(), flat["returnPerMonth"].clone()), (Some("MORTGAGE"), Some("3.9"), Some("YEARLY"), Some("950.00"), Value::Null));
+    assert_eq!(flat["liability"]["owed"], "180000.00");
+    assert_eq!(flat["liability"]["state"], "OWING");
+    assert_eq!(flat["liability"]["interestPerMonth"], "585.00");
+    assert!(flat["liability"]["payoff"]["months"].is_u64() && flat["liability"]["payoff"]["interestLeft"].is_string() && flat["liability"]["payoff"]["month"].as_str().unwrap().len() == 7, "{flat}");
+
+    // the interest is an expense and the rest a transfer, both dated today when no date is sent
+    let paid = h.ok("accounts_pay", json!({ "input": { "liabilityId": flat_id, "fromAccountId": "1", "amount": "950.00", "interest": "585.00", "categoryId": interest, "note": "November" } }));
+    assert_eq!(paid["transfer"], json!({ "id": "1", "fromAccountId": "1", "toAccountId": flat_id, "amount": "365.00", "toAmount": null, "date": today, "note": "November" }));
+    assert_eq!(
+        paid["transaction"],
+        json!({
+            "id": paid["transaction"]["id"], "categoryId": interest, "accountId": "1", "clientUuid": null, "name": "Flat", "amount": "585.00", "nativeAmount": null,
+            "myShare": "585.00", "split": [], "paidBy": null, "paymentDate": today, "description": "November"
+        })
+    );
+    assert_eq!(h.ok("list_accounts", json!({}))[1]["liability"]["owed"], "179635.00");
+    // all interest: no transfer; no interest: no expense
+    let only_interest = h.ok("accounts_pay", json!({ "input": { "liabilityId": flat_id, "fromAccountId": "1", "amount": "10.00", "interest": "10.00", "categoryId": interest } }));
+    assert_eq!((only_interest["transfer"].clone(), only_interest["transaction"]["amount"].as_str()), (Value::Null, Some("10.00")));
+    let only_principal = h.ok("accounts_pay", json!({ "input": { "liabilityId": flat_id, "fromAccountId": "1", "amount": "20.00", "date": "2026-01-02" } }));
+    assert_eq!((only_principal["transfer"]["date"].as_str(), only_principal["transaction"].clone()), (Some("2026-01-02"), Value::Null));
+    // the summary has the debt in its own figure
+    let summary = h.ok("accounts_summary", json!({}));
+    assert_eq!((summary["debts"].as_str(), summary["inAccounts"].as_str()), (Some("-179615.00"), Some("-980.00")), "the main account paid 950.00, 10.00 and 20.00; the debt fell by 365.00 and 20.00");
+
+    // the refusals, as the fixed codes
+    assert_eq!(h.code("accounts_pay", json!({ "input": { "liabilityId": flat_id, "fromAccountId": "1", "amount": "5.00", "interest": "6.00", "categoryId": interest } })), "invalid_input");
+    assert_eq!(h.code("accounts_pay", json!({ "input": { "liabilityId": flat_id, "fromAccountId": "1", "amount": "5.00", "interest": "1.00" } })), "invalid_input", "interest needs a category");
+    assert_eq!(h.code("accounts_pay", json!({ "input": { "liabilityId": flat_id, "fromAccountId": flat_id, "amount": "5.00" } })), "invalid_input");
+    assert_eq!(h.code("accounts_pay", json!({ "input": { "liabilityId": "1", "fromAccountId": flat_id, "amount": "5.00" } })), "invalid_input", "the main account is not a liability");
+    assert_eq!(h.code("accounts_pay", json!({ "input": { "liabilityId": "99", "fromAccountId": "1", "amount": "5.00" } })), "not_found");
+    // a name the core does not know, or one that is missing, never reaches it
+    assert!(h.call("accounts_pay", json!({ "input": { "liabilityId": flat_id, "fromAccountId": "1", "amount": "5.00", "extra": true } })).is_err());
+    assert!(h.call("accounts_pay", json!({ "input": { "liabilityId": flat_id, "amount": "5.00" } })).is_err());
+    assert!(h.call("accounts_pay", json!({ "liabilityId": flat_id, "fromAccountId": "1", "amount": "5.00" })).is_err(), "the payment is the `input` argument");
+    assert_eq!(h.ok("list_accounts", json!({}))[1]["liability"]["owed"], "179615.00", "nothing of that was written");
 }

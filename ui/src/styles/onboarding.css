@@ -14,11 +14,11 @@
   width: min(100%, 28rem);
 }
 
-/* The headline: what the app is, big, in the pixel font (33px: three pixels of the screen for each pixel of a letter). */
+/* The headline: what the app is, big, in the pixel font (--pixel-lg: three sixteenths of a rem for each pixel of a letter). */
 .gate .onboard-headline {
   margin: 0.25rem 0 0;
-  font-size: var(--pixel-lg, 33px);
-  line-height: 44px;
+  font-size: var(--pixel-lg, 2.0625rem);
+  line-height: 1.3333;
   text-wrap: balance;
 }
 
@@ -105,12 +105,12 @@
 
 .onboard-blocks {
   display: flex;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
 .onboard-blocks > span {
   width: 2.75rem;
-  height: 8px;
+  height: 0.5rem;
   background-color: var(--c-track);
   transition: background-color var(--t-fast, 110ms) steps(2, end);
 }
@@ -119,9 +119,9 @@
   background-color: var(--primary);
 }
 
-/* This step's block is cut into segments, like a bar that is filling up. */
+/* This step's block is half filled, like a bar that is filling up. */
 .onboard-blocks > .is-now {
-  background-image: repeating-linear-gradient(90deg, var(--primary) 0 6px, transparent 6px 8px);
+  background-image: linear-gradient(90deg, var(--primary) 50%, transparent 50%);
 }
 
 /* A step: its title, its fields and its hints, with the gaps of the form. The steps that are not on show are hidden, not removed. */
@@ -157,7 +157,7 @@
 
 .onboard-nav > .ui-btn {
   height: auto;
-  min-height: 2.25rem;
+  min-height: var(--control);
   padding-block: 0.5rem;
   white-space: normal;
 }
@@ -176,25 +176,25 @@
 @keyframes onboard-from-right {
   from {
     opacity: 0;
-    transform: translateX(16px);
+    transform: translateX(1rem);
   }
 }
 
 @keyframes onboard-from-left {
   from {
     opacity: 0;
-    transform: translateX(-16px);
+    transform: translateX(-1rem);
   }
 }
 
-/* The phone: the headline at 22px, one tile under the other. */
+/* The phone: the headline at --pixel-md, one tile under the other. */
 html.is-phone .gate.onboard {
-  padding-top: calc(5dvh + env(safe-area-inset-top, 0px));
+  padding-top: calc(5dvh + env(safe-area-inset-top, 0rem));
 }
 
 html.is-phone .gate .onboard-headline {
-  font-size: var(--pixel-md, 22px);
-  line-height: 33px;
+  font-size: var(--pixel-md, 1.375rem);
+  line-height: 1.5;
 }
 
 html.is-phone .onboard-lead {
@@ -265,8 +265,8 @@ html.is-phone .onboard-features > .onboard-tile {
 }
 
 .first-step:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 4px;
+  outline: var(--hairline-2) solid var(--ring);
+  outline-offset: 0.25rem;
 }
 
 @media (hover: hover) {
@@ -276,7 +276,7 @@ html.is-phone .onboard-features > .onboard-tile {
 
   .first-step:hover .first-step-text > b {
     text-decoration: underline;
-    text-underline-offset: 4px;
+    text-underline-offset: 0.25em;
   }
 }
 

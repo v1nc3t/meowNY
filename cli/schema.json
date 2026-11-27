@@ -877,7 +877,7 @@
         {
           "name": "sections",
           "required": false,
-          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), stashes (money set aside in an account for a goal, with their entries, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
           "type": "string"
         }
       ],
@@ -965,7 +965,7 @@
         {
           "name": "sections",
           "required": false,
-          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), stashes (money set aside in an account for a goal, with their entries, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
           "type": "string"
         }
       ],
@@ -1117,7 +1117,7 @@
         {
           "name": "sections",
           "required": false,
-          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
+          "summary": "The parts of the file, separated by commas, from: transactions, categories, budgets, recurring, accounts (with limits, only the name and type of those the file speaks of), transfers (between accounts, only in a file with no limits), stashes (money set aside in an account for a goal, with their entries, only in a file with no limits), documents, people (the friends and what they owe), due (the overdue recurring payments), ledger (the history of debts) and history (the change history, only in a file with no limits). Leave out for all of them.",
           "type": "string"
         }
       ],
@@ -2057,7 +2057,7 @@
       "name": "accounts.list",
       "params": [],
       "scope": "read",
-      "summary": "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it, and its details: BIC, notes, group, whether net worth counts it, and the virtual balance with what is available (balance plus virtual balance). An account in another currency (foreign true) has its figures in that currency, with the rate typed for it and balanceInMain, its balance in the app's currency. The main account has isMain true."
+      "summary": "The accounts in the person's order, the archived ones last, each with what it holds today (balance), what changed this month, its last activity and how many rows (entries) are in it, and its details: BIC, notes, group, whether net worth counts it, and the virtual balance with what is available (balance plus virtual balance). An account in another currency (foreign true) has its figures in that currency, with the rate typed for it and balanceInMain, its balance in the app's currency. The main account has isMain true. An account can have an interest rate (interestRate, a percent like 3.25, per interestPeriod MONTHLY or YEARLY): an asset then has returnPerMonth, what it returns in a month on what it holds (simple interest, an estimate). A credit, a loan or a mortgage (kind CREDIT, LOAN, MORTGAGE) is a liability: its balance is below zero while you owe, and it has installment (what is paid each month, if set) and liability, with owed (what you owe), state (OWING, PAID_OFF or OVERPAID), interestPerMonth (null without a rate) and payoff: null without an installment or when nothing is owed, {never: true} when the installment does not beat a month's interest, otherwise months (payments still to make), interestLeft (the interest over them) and month (when the last is due, as 2027-11). Assets have no liability and no installment, and liabilities have no returnPerMonth."
     },
     {
       "name": "accounts.show",
@@ -2132,7 +2132,7 @@
       "name": "accounts.summary",
       "params": [],
       "scope": "read",
-      "summary": "Net worth, in the app's currency: what the accounts that count in it hold in all (the archived ones too, an account in another currency turned into the app's currency at its rate), what friends owe you (negative: you owe them) and the two added. An account can be left out of net worth, and a virtual balance is never in it. Also how many accounts there are, those left out too, and whether accounts are in use: there is more than the main account, or it has an opening balance."
+      "summary": "Net worth, in the app's currency: what the accounts that count in it hold in all (the archived ones too, an account in another currency turned into the app's currency at its rate), what friends owe you (negative: you owe them) and the two added. An account can be left out of net worth, and a virtual balance is never in it. Also how many accounts there are, those left out too, and whether accounts are in use: there is more than the main account, or it has an opening balance. inAccounts counts the assets only; debts is what the credits, loans and mortgages that count in net worth hold, below zero while something is owed, and it is in the net worth too."
     },
     {
       "name": "transfers.list",
@@ -2183,13 +2183,16 @@
         {
           "name": "kind",
           "required": true,
-          "summary": "CHECKING (a bank account), SAVINGS, CASH or CREDIT_CARD.",
+          "summary": "CHECKING (a bank account), SAVINGS, CASH, CREDIT_CARD, or a liability: CREDIT, LOAN or MORTGAGE.",
           "type": "string",
           "values": [
             "CHECKING",
             "SAVINGS",
             "CASH",
-            "CREDIT_CARD"
+            "CREDIT_CARD",
+            "CREDIT",
+            "LOAN",
+            "MORTGAGE"
           ]
         },
         {
@@ -2251,10 +2254,32 @@
           "required": false,
           "summary": "How many units of its currency one unit of the app's currency buys, like 5.00 for 1 EUR = 5.00 RON: more than zero, up to 8 decimals. Required with another currency, refused without one. You type it; nothing is fetched.",
           "type": "string"
+        },
+        {
+          "name": "interestRate",
+          "required": false,
+          "summary": "What the account earns, or for a liability what it costs, as a percent from 0 to 100 with at most 3 decimals, like 3.25. Needs interestPeriod. It is not the currency rate (rate). Nothing is booked by itself: the figures are estimates, simple interest.",
+          "type": "string"
+        },
+        {
+          "name": "interestPeriod",
+          "required": false,
+          "summary": "What interestRate is a percent of: MONTHLY or YEARLY. Needs interestRate.",
+          "type": "string",
+          "values": [
+            "MONTHLY",
+            "YEARLY"
+          ]
+        },
+        {
+          "name": "installment",
+          "required": false,
+          "summary": "What a liability is paid each month, like 950.00, 0.01 or more, in the account's currency. Refused for an asset (any other kind). The payoff date follows from it.",
+          "type": "money"
         }
       ],
       "scope": "write",
-      "summary": "Adds an account at the end of the list. Its name is 1 to 50 characters and unique among the accounts that are not archived, whatever the case."
+      "summary": "Adds an account at the end of the list. Its name is 1 to 50 characters and unique among the accounts that are not archived, whatever the case. A kind CREDIT, LOAN or MORTGAGE is a liability, an account you owe on: put what you owe in openingBalance as a negative amount, like -9000.00, and pay it with accounts.pay. interestRate and interestPeriod go together or not at all; installment is for a liability only."
     },
     {
       "name": "accounts.update",
@@ -2274,13 +2299,16 @@
         {
           "name": "kind",
           "required": false,
-          "summary": "CHECKING, SAVINGS, CASH or CREDIT_CARD.",
+          "summary": "CHECKING, SAVINGS, CASH, CREDIT_CARD, CREDIT, LOAN or MORTGAGE: a new kind of the same group, an asset for an asset or a liability for a liability.",
           "type": "string",
           "values": [
             "CHECKING",
             "SAVINGS",
             "CASH",
-            "CREDIT_CARD"
+            "CREDIT_CARD",
+            "CREDIT",
+            "LOAN",
+            "MORTGAGE"
           ]
         },
         {
@@ -2352,10 +2380,34 @@
           "required": false,
           "summary": "What the account holds today, in its own currency, which may be negative, like -50.00: its opening balance moves by the difference. Not together with openingBalance, and refused when the opening date is after today.",
           "type": "string"
+        },
+        {
+          "name": "interestRate",
+          "nullable": true,
+          "required": false,
+          "summary": "The new interest rate as a percent from 0 to 100 with at most 3 decimals, like 3.25, or null to clear it and its period.",
+          "type": "string"
+        },
+        {
+          "name": "interestPeriod",
+          "required": false,
+          "summary": "The new period of the rate: MONTHLY or YEARLY.",
+          "type": "string",
+          "values": [
+            "MONTHLY",
+            "YEARLY"
+          ]
+        },
+        {
+          "name": "installment",
+          "nullable": true,
+          "required": false,
+          "summary": "The new installment of a liability, like 950.00, or null to clear it. Refused for an asset.",
+          "type": "money"
         }
       ],
       "scope": "write",
-      "summary": "Changes an account that is not archived (bring it back first). Fields left out stay as they are; a null number, BIC, notes or group clears it."
+      "summary": "Changes an account that is not archived (bring it back first). Fields left out stay as they are; a null number, BIC, notes, group, interestRate or installment clears it. The kind may change inside its group (CHECKING, SAVINGS, CASH and CREDIT_CARD among themselves; CREDIT, LOAN and MORTGAGE among themselves) and never across: the main account is never a liability. A null interestRate clears the period too; a new interestRate needs an interestPeriod, in the request or already there; an interestPeriod needs a rate. installment is for a liability only."
     },
     {
       "name": "accounts.archive",
@@ -2408,6 +2460,55 @@
       ],
       "scope": "write",
       "summary": "Puts the accounts in a new order; give every account that is not archived, each once."
+    },
+    {
+      "name": "accounts.pay",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The liability being paid: an account of kind CREDIT, LOAN or MORTGAGE that is not archived.",
+          "type": "id"
+        },
+        {
+          "name": "fromAccountId",
+          "required": true,
+          "summary": "The account the money comes from. It must not be archived, must differ from the liability and be in the same currency.",
+          "type": "id"
+        },
+        {
+          "name": "amount",
+          "required": true,
+          "summary": "The whole payment, interest included, more than zero, like 950.00, in the currency of the liability.",
+          "type": "money"
+        },
+        {
+          "name": "interest",
+          "required": false,
+          "summary": "The part of amount that is interest, like 585.00, from 0.00 to amount. 0.00 if left out.",
+          "type": "money"
+        },
+        {
+          "name": "categoryId",
+          "required": false,
+          "summary": "The expense category of the interest. Required when interest is above 0.00.",
+          "type": "id"
+        },
+        {
+          "name": "date",
+          "required": false,
+          "summary": "The day it was paid, not after today. Today if left out.",
+          "type": "date"
+        },
+        {
+          "name": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters. It goes on both rows.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Pays a credit, a loan or a mortgage (a liability) from another account, in one step, split in two: the interest part is an expense of the paying account (named as the liability, in the category given) and the rest, the principal, is a transfer from the paying account into the liability that lowers what you owe. Both are ordinary rows afterwards: changing or deleting one does not touch the other. amount is the whole payment, interest included; interest is the part of it that is interest, 0.00 up to amount (0.00 if left out), and above 0.00 it needs categoryId, an expense category. When the whole payment is interest there is no transfer, and when interest is 0.00 there is no expense. Answers {transfer, transaction}, each null when it was not made. Refused as invalid_input, with nothing written: a liability that is archived or is not one (not_found when there is no such account), a fromAccountId that is archived, is the liability itself or is in another currency, an amount outside 0.01 to 9999999999.99, an interest above the amount, interest without an expense category, and a date after today. Paying more than is owed is allowed: the liability is then OVERPAID."
     },
     {
       "name": "transfers.create",
@@ -2514,6 +2615,418 @@
       ],
       "scope": "write",
       "summary": "Deletes a transfer. The balances of both accounts change by that much. The change history keeps what it said."
+    },
+    {
+      "name": "stashes.list",
+      "params": [
+        {
+          "name": "accountId",
+          "required": false,
+          "summary": "Only the stashes in this account.",
+          "type": "id"
+        }
+      ],
+      "scope": "read",
+      "summary": "The stashes in the person's order, the archived ones last, each with the account it lives in, what it holds (saved), its target and how far it is (left, percent, reached), what to save each month to reach the target date (perMonth, and overdue when the date has passed), how many entries it has (entries) and the day of the last one (lastEntry). A stash is a goal (kind GOAL) or a term deposit (kind DEPOSIT); a deposit has deposit, with its interestRate and interestPeriod, startDate, state (RUNNING, MATURED, BOOKED or BROKEN), brokenOn, returnedOn, expectedReturn (simple interest over the whole term on what it holds now), valueAtMaturity (what it holds plus that) and daysLeft to the maturity, which is its targetDate; deposit is null for a goal, and a deposit has no perMonth. All amounts are in the account's currency (currency). Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Also free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside. Only the stashes of one account if accountId is given."
+    },
+    {
+      "name": "stashes.show",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id"
+        }
+      ],
+      "scope": "read",
+      "summary": "One stash with its entries, newest first. Each entry is an add or a take (kind) of an amount above zero, with its date, its note, the transfer that came with it (transferId) and the account on the other side of that transfer, and what the stash held after it (savedAfter). Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Also free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside."
+    },
+    {
+      "name": "stashes.history",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id"
+        },
+        {
+          "name": "year",
+          "required": true,
+          "summary": "The year, like 2026.",
+          "type": "year"
+        }
+      ],
+      "scope": "read",
+      "summary": "What a stash held at the end of each month of a year, for a chart, in its account's currency: on the last day of a month that is over, today for this month, and no point for a month that has not begun."
+    },
+    {
+      "name": "stashes.summary",
+      "params": [],
+      "scope": "read",
+      "summary": "How many stashes are not archived (stashes), what they hold in all (saved), the targets of those that have one added up (target) and how many have reached theirs (reached), in the app's currency: a stash in an account in another currency is turned into it at the account's rate. The archived ones are left out, though what an archived stash holds stays set aside in its account. Money in a stash stays in its account, so none of this is money that left it."
+    },
+    {
+      "name": "stashes.create",
+      "params": [
+        {
+          "name": "name",
+          "required": true,
+          "summary": "The name.",
+          "type": "string"
+        },
+        {
+          "name": "accountId",
+          "required": true,
+          "summary": "The account the money is set aside in.",
+          "type": "id"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "GOAL, to save towards a target (the default), or DEPOSIT, a term deposit with a rate and a maturity. Fixed once the stash is made.",
+          "type": "string",
+          "values": [
+            "GOAL",
+            "DEPOSIT"
+          ]
+        },
+        {
+          "name": "target",
+          "required": false,
+          "summary": "What you want to save, like 1200.00, in the account's currency.",
+          "type": "money"
+        },
+        {
+          "name": "targetDate",
+          "required": false,
+          "summary": "The day you want to have it by. For a deposit, its maturity: required, and after startDate.",
+          "type": "date"
+        },
+        {
+          "name": "notes",
+          "required": false,
+          "summary": "Notes, up to 1000 characters. Line breaks are kept.",
+          "type": "string"
+        },
+        {
+          "name": "interestRate",
+          "required": false,
+          "summary": "A deposit's rate as a percent from 0 to 100 with at most 3 decimals, like 3.1. Needs interestPeriod. Deposits only.",
+          "type": "string"
+        },
+        {
+          "name": "interestPeriod",
+          "required": false,
+          "summary": "What interestRate is a percent of: MONTHLY or YEARLY. Deposits only.",
+          "type": "string",
+          "values": [
+            "MONTHLY",
+            "YEARLY"
+          ]
+        },
+        {
+          "name": "startDate",
+          "required": false,
+          "summary": "The day a deposit's term begins. Today if left out. Deposits only.",
+          "type": "date"
+        }
+      ],
+      "scope": "write",
+      "summary": "Makes a stash at the end of the list, empty: put money in it with stashes add. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. The name is 1 to 50 characters and unique among the stashes that are not archived, whatever the case (a taken one is refused as name_exists). The account is required, must exist and must not be archived, and the stash lives in it for good unless you move it with stashes update. The target is an amount of 0.01 or more; the target date may be in the past, and the stash is then overdue. Notes are up to 1000 characters, line breaks are kept. The account must not be a credit, a loan or a mortgage. With kind DEPOSIT (a goal if left out) it is a term deposit: interestRate and interestPeriod are required, targetDate is its maturity and is required and must be after startDate, which is today if left out; a goal takes none of interestRate, interestPeriod and startDate. Everything else is refused as invalid_input."
+    },
+    {
+      "name": "stashes.update",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id"
+        },
+        {
+          "name": "name",
+          "required": false,
+          "summary": "The new name.",
+          "type": "string"
+        },
+        {
+          "name": "accountId",
+          "required": false,
+          "summary": "The account to move it to.",
+          "type": "id"
+        },
+        {
+          "name": "kind",
+          "required": false,
+          "summary": "Refused whatever it says: the kind is fixed when the stash is made.",
+          "type": "string",
+          "values": [
+            "GOAL",
+            "DEPOSIT"
+          ]
+        },
+        {
+          "name": "target",
+          "nullable": true,
+          "required": false,
+          "summary": "The new target, like 1500.00, or null to clear it.",
+          "type": "money"
+        },
+        {
+          "name": "targetDate",
+          "nullable": true,
+          "required": false,
+          "summary": "The new target date, or null to clear it. For a deposit, its maturity: it can be moved and not cleared.",
+          "type": "date"
+        },
+        {
+          "name": "notes",
+          "nullable": true,
+          "required": false,
+          "summary": "The new notes, or null to clear them.",
+          "type": "string"
+        },
+        {
+          "name": "interestRate",
+          "required": false,
+          "summary": "A deposit's new rate as a percent from 0 to 100 with at most 3 decimals, like 3.1. Deposits only.",
+          "type": "string"
+        },
+        {
+          "name": "interestPeriod",
+          "required": false,
+          "summary": "A deposit's new period: MONTHLY or YEARLY. Deposits only.",
+          "type": "string",
+          "values": [
+            "MONTHLY",
+            "YEARLY"
+          ]
+        },
+        {
+          "name": "startDate",
+          "required": false,
+          "summary": "A deposit's new start date. Deposits only.",
+          "type": "date"
+        }
+      ],
+      "scope": "write",
+      "summary": "Changes a stash that is not archived (bring it back first). Fields left out stay as they are; a null target, targetDate or notes clears it. A new name must not be taken by another stash that is not archived. A new target may not be below what the stash holds already. A new accountId moves the stash, and what it holds with it: that account must not be archived, must be in the same currency and must have at least that much free (a stash that holds nothing moves to any account of its currency); naming the account the stash is in is not a move and changes nothing. The kind of a stash is fixed when it is made: sending kind is refused as invalid_input, and so are interestRate, interestPeriod and startDate for a goal. For a deposit that has not been broken, interestRate, interestPeriod, startDate and targetDate (the maturity, which must stay after the start date and cannot be cleared) change its terms; from a matured or booked deposit, a new maturity after today starts the next term (returnedOn is cleared and, without a startDate, the start moves to the old maturity). A broken deposit takes no change of terms, only its name, notes, target and account. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Also free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside."
+    },
+    {
+      "name": "stashes.archive",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Takes a stash out of the lists. Its entries stay and what it holds stays set aside in its account, so free does not change. An archived stash takes no more money (an add is refused), but money can still be taken out of it. Archiving an archived stash changes nothing."
+    },
+    {
+      "name": "stashes.unarchive",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Brings back an archived stash, if no other stash has taken its name (refused as name_exists). A stash that is not archived is answered as it is."
+    },
+    {
+      "name": "stashes.delete",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Deletes a stash, archived or not, with all its entries. What it held is free again in its account, where the money stayed all along. The transfers that came with its entries stay. Money in a stash is never out of its account, so no balance changes."
+    },
+    {
+      "name": "stashes.reorder",
+      "params": [
+        {
+          "name": "ids",
+          "required": true,
+          "summary": "Every stash that is not archived, in the new order.",
+          "type": "ids"
+        }
+      ],
+      "scope": "write",
+      "summary": "Puts the stashes in a new order; give every stash that is not archived, each once."
+    },
+    {
+      "name": "stashes.add",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id"
+        },
+        {
+          "name": "amount",
+          "required": true,
+          "summary": "More than zero, like 100.00, in the account's currency.",
+          "type": "money"
+        },
+        {
+          "name": "date",
+          "required": false,
+          "summary": "The day it was set aside, not after today. Today if left out.",
+          "type": "date"
+        },
+        {
+          "name": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters.",
+          "type": "string"
+        },
+        {
+          "name": "fromAccountId",
+          "required": false,
+          "summary": "Bring the money from this account: a transfer from it into the stash's account is made together with the entry. It must differ from the stash's account, not be archived and be in the same currency.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Sets money aside in a stash and answers the stash with its entries. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. The amount has to fit in what is free in the account and in what is left to the target; free is what the account holds that none of its stashes has set aside: the balance minus what its stashes hold, and it can be below zero if money was spent after it was set aside. With fromAccountId the money is brought from another account in the same step: a transfer from that account into the stash's account is made with the entry, with its amount, date and note, and counts as free before the amount is checked; the entry remembers it, and the transfer is its own row after that. Refused as invalid_input, with nothing written and no transfer made: an amount above what is free or above what is left to the target, a date after today, a stash that is archived, an account that is archived, and a fromAccountId that is the stash's own account, is archived or is in another currency."
+    },
+    {
+      "name": "stashes.take",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id"
+        },
+        {
+          "name": "amount",
+          "required": true,
+          "summary": "More than zero, like 40.00, in the account's currency.",
+          "type": "money"
+        },
+        {
+          "name": "date",
+          "required": false,
+          "summary": "The day it was taken out, not after today. Today if left out.",
+          "type": "date"
+        },
+        {
+          "name": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters.",
+          "type": "string"
+        },
+        {
+          "name": "toAccountId",
+          "required": false,
+          "summary": "Send the money on to this account: a transfer from the stash's account to it is made together with the entry. It must differ from the stash's account, not be archived and be in the same currency.",
+          "type": "id"
+        }
+      ],
+      "scope": "write",
+      "summary": "Takes money out of a stash, so it is free again in the account, and answers the stash with its entries. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. It works on an archived stash and in an archived account, so a stash can be emptied. With toAccountId the money is also sent on in the same step: a transfer from the stash's account to that account is made with the entry, with its amount, date and note; the entry remembers it, and the transfer is its own row after that. Refused as invalid_input, with nothing written and no transfer made: an amount above what the stash holds (saved), a date after today, and a toAccountId that is the stash's own account, is archived or is in another currency."
+    },
+    {
+      "name": "stashes.amend",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The entry, as the entries of stashes show give it.",
+          "type": "id"
+        },
+        {
+          "name": "amount",
+          "required": false,
+          "summary": "The new amount, more than zero, like 60.00. It is a size: an add stays an add and a take stays a take.",
+          "type": "money"
+        },
+        {
+          "name": "date",
+          "required": false,
+          "summary": "The new date, not after today.",
+          "type": "date"
+        },
+        {
+          "name": "note",
+          "nullable": true,
+          "required": false,
+          "summary": "The new note, up to 200 characters, or null to clear it.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Changes the amount, the date or the note of an entry and answers its stash with its entries. Fields left out stay as they are; a null note clears it. The kind of an entry never changes: an add stays an add and a take stays a take, and the amount is its size, above zero. The transfer that came with the entry is not changed; it is its own row. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one. Refused as invalid_input, with nothing written: a change that would put more in the stash than is free in the account or than is left to the target, one that would leave less than zero in it, a date after today, and more money going into a stash that is archived or in an account that is archived. Changing only the note is always allowed."
+    },
+    {
+      "name": "stashes.erase",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The entry, as the entries of stashes show give it.",
+          "type": "id"
+        },
+        {
+          "name": "deleteTransfer",
+          "required": false,
+          "summary": "Also delete the transfer that came with the entry, if there is one. False if left out: the transfer stays.",
+          "type": "boolean"
+        }
+      ],
+      "scope": "write",
+      "summary": "Deletes an entry and answers its stash with its entries. The transfer that came with the entry stays, unless deleteTransfer is true: then it is deleted in the same step. Refused as invalid_input, with nothing deleted: an add whose money was taken out since (the stash would hold less than zero), and a take that would put more in the stash than is free in the account or than is left to the target. Money in a stash stays in its account: a stash only says that part of the balance is set aside, so no balance, statement, net worth or budget changes when money goes into or out of one."
+    },
+    {
+      "name": "stashes.return",
+      "params": [
+        {
+          "name": "id",
+          "required": true,
+          "summary": "The stash.",
+          "type": "id"
+        },
+        {
+          "name": "amount",
+          "required": true,
+          "summary": "What the bank paid, more than zero, like 31.00, in the account's currency.",
+          "type": "money"
+        },
+        {
+          "name": "categoryId",
+          "required": true,
+          "summary": "The income category the return is booked in.",
+          "type": "id"
+        },
+        {
+          "name": "date",
+          "required": false,
+          "summary": "The day it was paid: not after today and not before the maturity. Today if left out.",
+          "type": "date"
+        },
+        {
+          "name": "note",
+          "required": false,
+          "summary": "A note, up to 200 characters. It goes on both rows.",
+          "type": "string"
+        }
+      ],
+      "scope": "write",
+      "summary": "Books the return of a term deposit that has matured, and answers the stash. In one step an income of amount is made in the deposit's account (named as the deposit, in the category given, on the date) and the same amount is added to the deposit, so what the bank paid stays in the deposit until you take it out; then the return counts as booked (state BOOKED, returnedOn is the date). The income and the add are ordinary rows afterwards. Refused as invalid_input, with nothing written: a stash that is a goal or is not matured (RUNNING, already BOOKED or BROKEN), a stash that is archived or in an account that is archived, an amount outside 0.01 to 9999999999.99, a categoryId that is not an income category, and a date after today or before the maturity."
     }
   ]
 }

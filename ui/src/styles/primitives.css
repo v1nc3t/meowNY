@@ -1,143 +1,16 @@
-/* Pieces shared by the whole app: the buttons, cards, badges, tables and tabs of the design (every class here starts with "ui-"),
-   and the lists of cards that several pages use. */
+/* Pieces shared by the whole app: the lists of cards that several pages use, and what goes in a row. (The buttons, cards, badges and tabs of
+   the design are the shadcn/ui components in components/ui/, styled with Tailwind: styles/tailwind.css.) */
 
-/* Buttons. A plain <button> is already the ghost look (base.css); these classes pick another look and work on a link too.
-   A button is a flat block with a thin edge; --btn-fill and --btn-edge pick the colours. Only the solid green one (default) stands on
-   a hard shadow and sinks onto it when pressed; every other look is flat and shrinks a little instead. */
-.ui-btn {
-  --btn-fill: transparent;
-  --btn-edge: transparent;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  flex: 0 0 auto;
-  height: 2.25rem;
-  min-width: 0;
-  padding: 0 1rem;
-  border: var(--border-width) solid var(--btn-edge);
-  border-radius: var(--radius-md);
-  background: var(--btn-fill);
-  box-shadow: none;
-  font-family: var(--font);
-  font-size: 0.875rem;
-  font-weight: 400;
-  line-height: 1.4;
-  white-space: nowrap;
-  text-align: center;
-  text-decoration: none;
-  cursor: pointer;
-  transition:
-    color var(--t-fast),
-    opacity var(--t-fast);
-}
-
-.ui-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.ui-btn-default {
-  --btn-fill: var(--primary);
-  --btn-edge: var(--primary);
-  color: var(--primary-foreground);
-  box-shadow: var(--shadow-press);
-}
-
-.ui-btn-outline {
-  --btn-fill: transparent;
-  --btn-edge: var(--input);
-  color: var(--foreground);
-}
-
-.ui-btn-ghost {
-  color: var(--foreground);
-}
-
-.ui-btn-destructive {
-  --btn-fill: var(--destructive-solid);
-  --btn-edge: var(--destructive-solid);
-  color: var(--destructive-foreground);
-}
-
-/* A link reads as text: no block. */
-.ui-btn-link {
-  height: auto;
-  padding: 0;
-  color: var(--foreground);
-  font-size: 0.8125rem;
-  text-underline-offset: 4px;
-}
-
-/* Pressed: the green button loses its shadow, and (with motion) sinks onto where it was; the others shrink a little. */
-.ui-btn-default:active:not(:disabled) {
-  box-shadow: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .ui-btn-default:active:not(:disabled) {
-    transform: translate(2px, 2px);
-  }
-
-  .ui-btn-outline:active:not(:disabled),
-  .ui-btn-destructive:active:not(:disabled),
-  .ui-btn-ghost:active:not(:disabled),
-  .ui-btn-link:active:not(:disabled),
-  .ui-btn-icon:active:not(:disabled) {
-    transform: scale(0.97);
-  }
-}
-
-@media (hover: hover) {
-  .ui-btn-default:hover:not(:disabled),
-  .ui-btn-destructive:hover:not(:disabled) {
-    opacity: 0.9;
-  }
-
-  .ui-btn-outline:hover:not(:disabled),
-  .ui-btn-ghost:hover:not(:disabled) {
-    --btn-fill: var(--accent);
-    --btn-edge: var(--accent);
-    color: var(--accent-foreground);
-  }
-
-  .ui-btn-outline:hover:not(:disabled) {
-    --btn-edge: var(--input);
-  }
-
-  .ui-btn-link:hover:not(:disabled) {
-    color: var(--foreground);
-    text-decoration: underline;
-  }
-}
-
-/* Delete in a row: red text, the same ghost button as the rest. After the hover rules above so the red stays on hover. */
+/* Delete in a row: red text, the same ghost button as the rest. It stays red under the pointer. */
 .row-danger,
 .row-danger:hover:not(:disabled) {
   color: var(--destructive);
 }
 
-.ui-btn-sm {
-  height: 2rem;
-  padding: 0 0.75rem;
-}
-
-.ui-btn-lg {
-  height: 2.5rem;
-  padding: 0 1.5rem;
-}
-
-.ui-btn-icon {
-  width: 2.25rem;
-  min-width: 2.25rem;
-  padding: 0;
-}
-
-/* The pixel icon of a button (NavIcon): 12px, its own grid, so each of its pixels is a pixel of the screen. */
+/* The pixel icon of a button (NavIcon): 0.75rem, its own 12 by 12 grid. */
 .btn-icon {
-  width: 12px;
-  height: 12px;
+  width: var(--icon);
+  height: var(--icon);
   flex: none;
 }
 
@@ -179,144 +52,6 @@
   background: var(--primary);
 }
 
-/* Cards. */
-.ui-card {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  min-width: 0;
-  padding: 1.25rem;
-  color: var(--card-foreground);
-  background: var(--card);
-  border: var(--border-width) solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-}
-
-/* The title on the left, an optional action in the top right corner. */
-.ui-card-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  column-gap: 1rem;
-}
-
-.ui-card-title {
-  grid-column: 1;
-  margin: 0;
-  font-size: 1.0625rem;
-  font-weight: 700;
-  line-height: 1.4;
-  color: var(--card-foreground);
-}
-
-.ui-card-title a {
-  color: inherit;
-  text-decoration: none;
-  text-underline-offset: 4px;
-}
-
-.ui-card-title a:focus-visible {
-  text-decoration: underline;
-}
-
-@media (hover: hover) {
-  .ui-card-title a:hover {
-    text-decoration: underline;
-  }
-}
-
-.ui-card-action {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: start;
-  justify-self: end;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.ui-card-content {
-  min-width: 0;
-}
-
-/* Badges. The coloured ones are outlined in their colour, so a row of them stays calm. */
-.ui-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  width: fit-content;
-  padding: 0.125rem 0.5rem;
-  border: var(--border-width) solid transparent;
-  border-radius: var(--radius-md);
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.ui-badge-secondary {
-  color: var(--secondary-foreground);
-  background: var(--secondary);
-}
-
-.ui-badge-outline {
-  color: var(--foreground);
-  border-color: var(--border);
-}
-
-.ui-badge-destructive {
-  color: var(--destructive);
-  border-color: var(--destructive);
-}
-
-.ui-badge-success {
-  color: var(--success);
-  border-color: var(--success);
-}
-
-/* Tabs: a grey track and a flat white tab on it, marked with a green line below. The triggers are equally wide. */
-.ui-tabs {
-  display: inline-grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  align-items: stretch;
-  width: fit-content;
-  max-width: 100%;
-  height: 2.25rem;
-  padding: 3px;
-  color: var(--muted-foreground);
-  background: var(--muted);
-  border-radius: var(--radius-lg);
-}
-
-.ui-tabs > button {
-  min-width: 0;
-  min-height: 0;
-  padding: 0 0.75rem;
-  color: var(--muted-foreground);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-}
-
-.ui-tabs > button[aria-selected='true'] {
-  color: var(--foreground);
-  background: var(--background);
-  box-shadow: inset 0 -2px 0 var(--primary);
-}
-
-@media (hover: hover) {
-  .ui-tabs > button:hover:not(:disabled, [aria-selected='true']) {
-    color: var(--foreground);
-    background: transparent;
-  }
-}
-
 /* Lists (transactions, debts, documents, tokens...): one box with a thin line, a row for each item, and dashed lines between the rows,
    like a ledger. The row is a grid whose columns are the list's --cols: one column on a narrow screen, the text and its actions from
    52em. A list with columns of its own (a table) is `.card-list.is-table`, sets its --cols, and may start with a `.list-head` row of
@@ -324,7 +59,7 @@
 .card-list {
   --cols: minmax(0, 1fr);
   width: 100%;
-  margin: 0 0 0.5rem;
+  margin: 0 0 var(--space-2);
   overflow: hidden;
   color: var(--card-foreground);
   background: var(--card);
@@ -351,7 +86,7 @@ ul.card-list > li.list-head {
   min-height: 3.5rem;
   padding: 0.875rem 1.25rem;
   border: 0;
-  border-top: 1px dashed var(--border);
+  border-top: var(--hairline) dashed var(--border);
   white-space: normal;
 }
 
@@ -371,7 +106,7 @@ ul.card-list > li.list-head + li {
 ul.card-list > li.card-item.is-open,
 ul.card-list > li.card-item.is-selected {
   background: var(--muted);
-  box-shadow: inset 2px 0 0 var(--primary);
+  box-shadow: inset var(--hairline-2) 0 0 var(--primary);
 }
 
 /* The row that the keyboard is on (not one that was clicked) is tinted in the ring colour, round the button that has the ring. Focus in
@@ -381,7 +116,7 @@ ul.card-list > li.card-item:has(:focus-visible):not(:has(> .row-panel :focus-vis
 }
 
 ul.card-list > li.card-item.tap-row > .row-toggle:focus-visible {
-  outline-offset: -2px;
+  outline-offset: calc(var(--hairline-2) * -1);
 }
 
 /* The transactions and the recurring items open on a click anywhere on the row (toggleRow in lib/toggleRow.ts): the pointer and the shade
@@ -428,14 +163,14 @@ ul.card-list.is-table > li.list-head {
   gap: 0.25rem 1rem;
 }
 
-/* Table rows are low, so their icon buttons are 2rem (below): at the usual 2.25rem they would keep the rows tall. */
+/* Table rows are low, so their icon buttons are --control-sm (below): at the usual --control they would keep the rows tall. */
 ul.card-list.is-table > li.card-item {
-  min-height: 2.5rem;
-  padding-block: 0.25rem;
+  min-height: var(--row-min);
+  padding-block: var(--space-2);
 }
 
 ul.card-list.is-table > li.list-head {
-  padding-block: 0.375rem;
+  padding-block: var(--space-2);
 }
 
 ul.card-list > li.list-head {
@@ -476,7 +211,13 @@ ul.card-list > li.list-head > .is-end {
 
 /* The name cuts its end short, and with it the ring of a link in it: the ring goes inside. */
 .card-name a:focus-visible {
-  outline-offset: -2px;
+  outline-offset: calc(var(--hairline-2) * -1);
+}
+
+/* A cell with nothing to say: a quiet dash, so the eye can skip it. */
+.cell-none {
+  color: var(--muted-foreground);
+  opacity: 0.6;
 }
 
 .cell-sub,
@@ -489,8 +230,8 @@ ul.card-list > li.list-head > .is-end {
   color: var(--muted-foreground);
 }
 
-/* A cut text (any of the ellipsis ones above and elsewhere) slides to show the rest while the mouse is on it (lib/marquee.ts sets
-   the attribute, the distance and the time). The indent moves the one line inside its own clipped box, so no wrapper is needed.
+/* A cut text (any of the ellipsis ones above and elsewhere) slides to show the rest while the mouse is on it, or a finger held on it
+   (lib/marquee.ts sets the attribute, the distance and the time). The indent moves the one line inside its own clipped box, so no wrapper is needed.
    The end value is a var() of the element, which keyframes resolve in every web view. The clip is !important because the ellipsis rules
    are more specific than this one. With reduced motion the ellipsis stays. */
 @media (prefers-reduced-motion: no-preference) {
@@ -510,6 +251,29 @@ ul.card-list > li.list-head > .is-end {
       text-indent: var(--marquee-shift, 0);
     }
   }
+}
+
+/* The box with the whole of a cut text (lib/marquee.ts): one in the body, or in the dialog the text is in, put just above the text. The look
+   of the help popover; the pointer goes through it. */
+.cut-box {
+  position: fixed;
+  z-index: 50;
+  width: max-content;
+  max-width: min(40ch, calc(100vw - 1rem));
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--popover-foreground);
+  background: var(--popover);
+  border: var(--border-width) solid var(--input);
+  border-radius: var(--radius-md);
+  pointer-events: none;
+  animation: panel-in var(--t-fast) var(--ease-step);
 }
 
 .cell-amount {
@@ -542,19 +306,19 @@ ul.card-list > li.list-head > .is-end {
 
 /* Where a row has no chevron, the same room is kept, so the buttons of all rows line up. */
 .cell-actions > .icon-slot {
-  width: 2.25rem;
+  width: var(--control);
   flex: none;
 }
 
-/* The low rows of the tables and the budgets have smaller icon buttons. A phone shows no tables, and its budgets keep 44px buttons
+/* The low rows of the tables and the budgets have smaller icon buttons. A phone shows no tables, and its budgets keep the phone's tall buttons
    (money.css). */
-:is(.is-table, .sum-list, .cat-list) .cell-actions > :is(.icon-btn, .icon-slot) {
-  width: 2rem;
-  min-width: 2rem;
+:is(.is-table, .cat-list) .cell-actions > :is(.icon-btn, .icon-slot) {
+  width: var(--control-sm);
+  min-width: var(--control-sm);
 }
 
-:is(.is-table, .sum-list, .cat-list) .cell-actions > .icon-btn {
-  height: 2rem;
+:is(.is-table, .cat-list) .cell-actions > .icon-btn {
+  height: var(--control-sm);
 }
 
 /* Small grey words after a name (removed, income, deleted later), and the icon of a shared item in a desktop row. */
@@ -573,8 +337,8 @@ ul.card-list > li.list-head > .is-end {
 }
 
 .mark-icon {
-  width: 12px;
-  height: 12px;
+  width: var(--icon);
+  height: var(--icon);
   flex: none;
 }
 
@@ -585,18 +349,39 @@ ul.card-list > li.list-head > .is-end {
   animation: panel-in var(--t-med) var(--ease-step);
 }
 
+/* A tidy table (docs/ui-design.md, rule 2): every cell is one line, whatever it holds. A name is cut with an ellipsis (the whole name is its
+   title); an amount keeps its tabular figures and is cut rather than broken, and the same for an amount in another currency (`is-wrap`). */
+ul.card-list.is-tidy > li.card-item {
+  min-height: var(--row-min);
+}
+
+ul.card-list.is-tidy :is(.cell-amount, .cell-sub, .cell-sub-end) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+ul.card-list.is-tidy :is(.cell-amount, .cell-sub-end).is-wrap {
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
 /* A table narrower than 40em: no head, and two lines a row: the name and the amount, then the other columns under them; the buttons
-   on the right, beside both lines. */
+   on the right, beside both lines. (A tidy table, `is-tidy`, has no second lines: its own styles take columns away instead.) */
 @container (max-width: 40em) {
-  ul.card-list.is-table > li.list-head {
+  ul.card-list.is-table:not(.is-tidy) > li.list-head {
     display: none;
   }
 
-  ul.card-list.is-table > li.list-head + li {
+  ul.card-list.is-table:not(.is-tidy) > li.list-head + li {
     border-top: 0;
   }
 
-  ul.card-list.is-table > li.card-item {
+  ul.card-list.is-table:not(.is-tidy) > li.card-item {
     grid-template-columns: minmax(0, 1fr) auto auto;
     grid-template-areas:
       'name amount actions'
@@ -604,30 +389,31 @@ ul.card-list > li.list-head > .is-end {
     row-gap: 0;
   }
 
-  ul.card-list.is-table .cell-name {
+  ul.card-list.is-table:not(.is-tidy) .cell-name {
     grid-area: name;
   }
 
-  ul.card-list.is-table .cell-amount {
+  ul.card-list.is-table:not(.is-tidy) .cell-amount {
     grid-area: amount;
   }
 
-  ul.card-list.is-table .cell-sub {
+  ul.card-list.is-table:not(.is-tidy) .cell-sub {
     grid-area: sub;
   }
 
-  ul.card-list.is-table .cell-sub-end {
+  ul.card-list.is-table:not(.is-tidy) .cell-sub-end {
     grid-area: sub-end;
     text-align: right;
   }
 
-  ul.card-list.is-table .cell-actions {
+  ul.card-list.is-table:not(.is-tidy) .cell-actions {
     grid-area: actions;
   }
 }
 
-/* A row that opens with a tap (the phone): the whole row is one button, its name and amount on the first line, the rest under them,
-   the chevron on the right. The name wraps rather than being cut. */
+/* A row that opens with a tap (the phone): the whole row is one button, its name and amount on the first line, the chevron on the right.
+   The name is one line, cut with an ellipsis; the amount is right aligned in a column wide enough for the amounts of the other rows, so
+   they end in a line. Under the name, the one grey value (`.cell-meta`). */
 ul.card-list > li.card-item.tap-row {
   display: block;
   padding: 0;
@@ -638,17 +424,17 @@ ul.card-list > li.card-item.tap-row {
   grid-template-columns: minmax(0, 1fr) auto auto;
   grid-template-areas:
     'name amount chevron'
-    'sub sub chevron';
+    'meta meta chevron';
   align-items: center;
-  gap: 0.25rem 0.75rem;
+  gap: 0 0.75rem;
   width: 100%;
   min-width: 0;
   max-width: none;
-  min-height: 4rem;
-  padding: 0.75rem 1rem;
+  min-height: 3.25rem;
+  padding: var(--space-2) var(--space-4);
   font-family: var(--font);
   font-size: 1rem;
-  line-height: 1.5;
+  line-height: 1.4;
   text-align: left;
   white-space: normal;
   color: var(--foreground);
@@ -664,63 +450,130 @@ ul.card-list > li.card-item.tap-row {
   grid-area: name;
 }
 
-.row-toggle > .cell-name > .card-name {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
 .row-toggle > .cell-amount {
   grid-area: amount;
   align-self: start;
+  min-width: 6.5rem;
 }
 
-/* The line under the name is one line of small grey parts, each after a dot (also the parts inside the first). When it is too long the
-   first part is cut with an ellipsis (the category, what it was; four characters stay, so the line does not start with a dot), so the
-   date or the state at the end stays whole. In a language with long words and on a narrow screen the end may still be cut. A part with
-   `.is-line` is a line of its own. */
-.row-toggle > .cell-sub {
-  grid-area: sub;
-  display: flex;
-}
-
-.row-toggle > .cell-sub > * {
-  flex: none;
-}
-
-.row-toggle > .cell-sub > :first-child {
-  flex: 0 1 auto;
-  min-width: 4ch;
+/* The one grey value under the name: one line, cut with an ellipsis. */
+.row-toggle > .cell-meta {
+  grid-area: meta;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.row-toggle > .cell-sub span + span:not(.is-line)::before {
-  content: '·';
-  margin-inline: 0.25rem;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  line-height: 1.4;
   color: var(--muted-foreground);
-}
-
-.row-toggle > .cell-sub:has(> .is-line) {
-  flex-direction: column;
 }
 
 .row-toggle > .chevron {
   grid-area: chevron;
-  width: 12px;
-  height: 12px;
+  width: var(--icon);
+  height: var(--icon);
   color: var(--muted-foreground);
 }
 
-.tap-row > .row-panel {
-  padding: 0 1rem 1rem;
+/* A name with one mark after it (an icon): the name is cut, the mark stays whole. */
+.name-mark {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
 }
 
-/* The labelled buttons of an open row on the phone: they wrap, each one a full tap target. */
+.name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name-mark > :not(.name-text) {
+  flex: none;
+}
+
+.tap-row > .row-panel {
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+/* The buttons of an open row on the phone, in one row (they wrap only when the words are long): each one a full tap target. With the
+   words, the buttons share the row; with icons alone (more than three) they sit side by side. */
 .row-panel-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  padding-top: 0.25rem;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
+
+.tap-row > .tx-detail > .facts {
+  align-self: stretch;
+}
+
+.row-panel-actions:not(.is-icons) > :is(.ui-btn, a) {
+  flex: 1 1 auto;
+}
+
+/* A flat list (the phone): a group's heading line with its total at the right, then the rows between hairlines, with no box round them
+   (`ListGroup`). The rows' text starts where the heading's does. */
+.list-group + .list-group {
+  margin-top: var(--group-gap);
+}
+
+.list-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-2);
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+.list-group-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-group-total {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+ul.card-list.is-flat {
+  margin: 0;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+ul.card-list.is-flat > li.card-item {
+  border-top: var(--border-width) solid var(--border);
+}
+
+ul.card-list.is-flat > li.card-item:last-child {
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+ul.card-list.is-flat > li.card-item.tap-row > .row-toggle {
+  padding-inline: 0;
+}
+
+ul.card-list.is-flat > li.card-item.tap-row > .row-panel {
+  padding-inline: 0;
+}
+
+ul.card-list.is-flat > li.card-item.is-open {
+  background: transparent;
+  box-shadow: none;
 }
 
 /* Debts and shared bills (phase 10). */
@@ -740,8 +593,8 @@ ul.card-list > li.card-item.tap-row {
 .detail-section {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  margin-top: 0.5rem;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
 }
 
 .detail-section .detail-title {

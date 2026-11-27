@@ -7,6 +7,15 @@
 //! * An account with rows is archived, not deleted: its history and its balance stay.
 //! * An account may be in a currency of its own (section 21): its numbers are in that currency, and only `balance_in_main` and net worth are in
 //!   the app's. Budgets, statistics and the like never see a foreign amount.
+//! * Stashes (`stashes`, `docs/stash-design.md`) set money aside inside an account. They move no balance: `Account.set_aside` is what they
+//!   hold and `Account.free` is the balance minus it, both worked out in the same query as the balance (stash design, section 4.5).
+//!   An account with a stash is not deleted: the stashes count in `entries`.
+//! * The kinds `CREDIT`, `LOAN` and `MORTGAGE` are liabilities (`docs/loans-deposits-design.md`): their balance is what you owe (below 0), and
+//!   `Account.liability` works out what is owed, its state, a month of interest and the payoff from it. Any account may have a rate (a percent,
+//!   per month or per year, `rates`): an asset shows what it returns each month, a liability what its debt costs. `pay` splits a payment into
+//!   the interest, an expense, and the rest, a transfer that lowers the debt.
+
+use std::cmp::Ordering;
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -14,10 +23,13 @@ use serde::{Deserialize, Serialize};
 use crate::budgets;
 use crate::categories::{clean_name, parse_id, present_or_null, serialize_id};
 use crate::currency;
-use crate::money::{format_amount, parse_signed_amount, MAX_MINOR};
+use crate::money::{format_amount, parse_amount, parse_positive_amount, parse_signed_amount, MAX_MINOR};
+use crate::rates::{self, format_rate, month_interest, parse_rate, Payoff, Period};
+use crate::stashes;
 use crate::transactions::{clean_date, clean_lines};
 use crate::vault::AppError;
 
+pub mod pay;
 pub mod transfers;
 
 #[cfg(test)]
@@ -28,6 +40,8 @@ mod command_tests;
 pub(crate) mod fixtures;
 #[cfg(test)]
 mod lifecycle_tests;
+#[cfg(test)]
+mod pay_tests;
 #[cfg(test)]
 mod table_tests;
 #[cfg(test)]
@@ -51,15 +65,27 @@ pub enum Kind {
     Savings,
     Cash,
     CreditCard,
+    /// A liability: what you owe on a credit. It, `Loan` and `Mortgage` are the kinds of the debts tab.
+    Credit,
+    Loan,
+    Mortgage,
 }
 
 impl Kind {
+    /// Whether the account is one you owe on (`Credit`, `Loan`, `Mortgage`): its balance is what you owe, below 0. The other four are assets.
+    pub fn is_liability(self) -> bool {
+        matches!(self, Kind::Credit | Kind::Loan | Kind::Mortgage)
+    }
+
     pub fn as_sql(self) -> &'static str {
         match self {
             Kind::Checking => "CHECKING",
             Kind::Savings => "SAVINGS",
             Kind::Cash => "CASH",
             Kind::CreditCard => "CREDIT_CARD",
+            Kind::Credit => "CREDIT",
+            Kind::Loan => "LOAN",
+            Kind::Mortgage => "MORTGAGE",
         }
     }
 
@@ -69,9 +95,43 @@ impl Kind {
             "SAVINGS" => Ok(Kind::Savings),
             "CASH" => Ok(Kind::Cash),
             "CREDIT_CARD" => Ok(Kind::CreditCard),
+            "CREDIT" => Ok(Kind::Credit),
+            "LOAN" => Ok(Kind::Loan),
+            "MORTGAGE" => Ok(Kind::Mortgage),
             _ => Err(AppError::Internal),
         }
     }
+}
+
+/// Whether a liability still owes anything, from its balance (`docs/loans-deposits-design.md`, section 3.2). It is stored nowhere.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum LiabilityState {
+    /// The balance is below 0.
+    Owing,
+    /// The balance is 0.
+    PaidOff,
+    /// The balance is above 0: more was paid than was owed.
+    Overpaid,
+}
+
+/// What a liability (a credit, a loan, a mortgage) owes today, worked out from its balance and in the account's currency. JSON:
+///
+/// ```json
+/// { "owed": "9000.00", "state": "OWING", "interestPerMonth": "48.75", "payoff": { "months": 12, "interestLeft": "123.45", "month": "2027-11" } }
+/// ```
+///
+/// `interestPerMonth` is null without a rate. `payoff` is null without an installment or when nothing is owed, `{ "never": true }` when the
+/// installment does not beat the interest of a month (or the debt would take over 1200 months), and otherwise `months` (payments still to
+/// make), `interestLeft` (the interest that adds up over them) and `month` (the month of the last one, "YYYY-MM") (`rates::Payoff`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Liability {
+    /// What is owed: the balance turned positive, 0 when it is 0 or above. Never negative.
+    pub owed: String,
+    pub state: LiabilityState,
+    pub interest_per_month: Option<String>,
+    pub payoff: Option<Payoff>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -94,7 +154,7 @@ pub struct Account {
     pub change_this_month: String,
     /// The latest day up to today on which something other than the opening balance moved it.
     pub last_activity: Option<String>,
-    /// How many transactions, recurring items, ledger entries and transfers point at it. An account with none can be deleted.
+    /// How many transactions, recurring items, ledger entries, transfers and stashes point at it. An account with none can be deleted.
     pub entries: u32,
     /// The bank's identifier code.
     pub bic: Option<String>,
@@ -117,6 +177,21 @@ pub struct Account {
     pub rate: Option<String>,
     /// `balance` in the app's currency: at `rate` for a foreign account, the same as `balance` for the others.
     pub balance_in_main: String,
+    /// What the stashes in the account hold, the archived ones too, in the account's currency. Never below 0 (stash design, section 3).
+    pub set_aside: String,
+    /// What no stash has set aside: `balance` minus `set_aside`, signed. It is below 0 when the stashes hold more than the account has.
+    pub free: String,
+    /// The percent the account earns or costs, as `rates::format_rate` writes it: "3.25", "4", "0.5". None without a rate. Not the currency `rate`.
+    pub interest_rate: Option<String>,
+    /// Whether `interest_rate` is per month or per year. Set exactly when `interest_rate` is.
+    pub interest_period: Option<Period>,
+    /// What a liability is paid each month, "950.00". None for an asset, and for a liability that has none.
+    pub installment: Option<String>,
+    /// What the account owes, and when it will be paid off. Some for a liability (`Kind::is_liability`), none for an asset.
+    pub liability: Option<Liability>,
+    /// What an asset with a rate returns in a month on what it holds (a balance below 0 returns nothing): "0.00" or more. None without a rate
+    /// and for a liability (`Liability.interest_per_month` is its cost).
+    pub return_per_month: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -150,9 +225,17 @@ pub struct NewAccount {
     /// Required with another currency (section 21.3).
     #[serde(default)]
     pub rate: Option<String>,
+    /// A percent from "0" to "100" with at most 3 decimals ("3.25"). Given together with `interest_period` or not at all.
+    #[serde(default)]
+    pub interest_rate: Option<String>,
+    #[serde(default)]
+    pub interest_period: Option<Period>,
+    /// "0.01" to "9999999999.99", for a liability only.
+    #[serde(default)]
+    pub installment: Option<String>,
 }
 
-/// Fields left out stay as they are. `number`, `bic`, `notes` and `group` clear with `null`.
+/// Fields left out stay as they are. `number`, `bic`, `notes`, `group`, `interest_rate` and `installment` clear with `null`.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AccountPatch {
@@ -186,6 +269,15 @@ pub struct AccountPatch {
     /// `opening_balance`.
     #[serde(default)]
     pub balance: Option<String>,
+    /// `null` clears the rate and its period. A new rate needs a period, in this patch or already there.
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub interest_rate: Option<Option<String>>,
+    /// Needs a rate, in this patch or already there.
+    #[serde(default)]
+    pub interest_period: Option<Period>,
+    /// For a liability only; `null` clears it.
+    #[serde(default, deserialize_with = "present_or_null")]
+    pub installment: Option<Option<String>>,
 }
 
 /// A number or a BIC: one line of at most `max` characters. Empty means "none".
@@ -198,7 +290,7 @@ fn clean_short(text: Option<&str>, max: usize) -> Result<Option<String>, AppErro
 }
 
 /// Notes may hold line breaks and no other control character, as a description does. Empty means "no notes".
-fn clean_notes(text: Option<&str>) -> Result<Option<String>, AppError> {
+pub(crate) fn clean_notes(text: Option<&str>) -> Result<Option<String>, AppError> {
     let Some(text) = text.map(str::trim).filter(|t| !t.is_empty()) else { return Ok(None) };
     let text = clean_lines(text).ok_or(AppError::InvalidInput)?;
     if text.chars().count() > NOTES_MAX_CHARS {
@@ -220,6 +312,30 @@ fn clean_rate(text: &str) -> Result<String, AppError> {
         return Err(AppError::InvalidInput);
     }
     Ok(text.to_string())
+}
+
+/// The interest rate an account ends with (`docs/loans-deposits-design.md`, section 5.1): `current` is what it has now (none for a new one),
+/// `rate` what the input says of it (left out, a new one, or `null` to clear it) and `period` the new period if there is one. A rate and its
+/// period are both there or both absent: a new rate needs a period, in the input or already there; a period alone needs a rate that is already
+/// there; and a `null` rate takes its period with it, so it cannot come with one.
+fn resolve_interest(current: Option<(i64, Period)>, rate: Option<Option<&str>>, period: Option<Period>) -> Result<Option<(i64, Period)>, AppError> {
+    match (rate, period) {
+        (Some(None), None) => Ok(None),
+        (Some(None), Some(_)) => Err(AppError::InvalidInput),
+        (Some(Some(text)), period) => Ok(Some((parse_rate(text)?, period.or(current.map(|c| c.1)).ok_or(AppError::InvalidInput)?))),
+        (None, Some(period)) => Ok(Some((current.ok_or(AppError::InvalidInput)?.0, period))),
+        (None, None) => Ok(current),
+    }
+}
+
+/// The installment an account of `kind` ends with: `current` is what it has, `given` what the input says (left out, an amount, or `null` to
+/// clear it). Only a liability has one, so anything given for another kind is refused, `null` too.
+fn resolve_installment(kind: Kind, current: Option<i64>, given: Option<Option<&str>>) -> Result<Option<i64>, AppError> {
+    let Some(given) = given else { return Ok(current) };
+    if !kind.is_liability() {
+        return Err(AppError::InvalidInput);
+    }
+    given.map(parse_positive_amount).transpose()
 }
 
 /// The currency and the rate an account ends with (section 21.3); `current` is what it has now, none and none for a new one, and `entries`
@@ -289,11 +405,17 @@ pub fn to_main(minor: i64, rate: &str) -> Result<i64, AppError> {
 
 /// What `minor` is worth in the app's currency for an account with this `rate` (none: an account in the main currency). An amount that does
 /// not fit shows the bound it passed, so one odd rate never makes the whole list of accounts unreadable.
-fn in_main(minor: i64, rate: Option<&str>) -> i64 {
+pub(crate) fn in_main(minor: i64, rate: Option<&str>) -> i64 {
     match rate {
         None => minor,
         Some(rate) => to_main(minor, rate).unwrap_or(MAX_MINOR * minor.signum()),
     }
+}
+
+/// Whether the account is a liability (`Kind::is_liability`). A missing account is not.
+pub(crate) fn is_liability(conn: &Connection, id: i64) -> Result<bool, AppError> {
+    let kind: Option<String> = conn.query_row("SELECT kind FROM accounts WHERE id = ?1", [id], |r| r.get(0)).optional()?;
+    Ok(kind.map(|kind| Kind::from_sql(&kind)).transpose()?.is_some_and(Kind::is_liability))
 }
 
 /// Whether the account exists and is not archived.
@@ -321,13 +443,17 @@ pub(crate) fn for_moved_row(conn: &Connection, current: i64, account_id: Option<
     }
 }
 
-/// Whether the accounts are as they must be: the main account is there, with its own `sync_id`, not archived and in the main currency, and
-/// every account has a rate exactly when it has a currency of its own. A sync checks it before its commit and a restore before it keeps a file.
+/// Whether the accounts are as they must be: the main account is there, with its own `sync_id`, not archived, in the main currency and an asset
+/// (never a liability), and every account has a rate exactly when it has a currency of its own. A sync checks it before its commit and a restore before it keeps a file.
 /// A restore checks a file of an older schema in a database of that schema, before it is migrated forward: where the table has no currency
 /// yet, only the first part can be asked.
 pub fn check(conn: &Connection) -> Result<bool, AppError> {
     let main = conn
-        .query_row("SELECT 1 FROM accounts WHERE id = ?1 AND sync_id = ?2 AND archived = 0", params![MAIN_ID, MAIN_SYNC_ID], |_| Ok(()))
+        .query_row(
+            "SELECT 1 FROM accounts WHERE id = ?1 AND sync_id = ?2 AND archived = 0 AND kind NOT IN ('CREDIT', 'LOAN', 'MORTGAGE')",
+            params![MAIN_ID, MAIN_SYNC_ID],
+            |_| Ok(()),
+        )
         .optional()?
         .is_some();
     let has_currency: bool = conn.query_row("SELECT count(*) > 0 FROM pragma_table_info('accounts') WHERE name = 'currency'", [], |r| r.get(0))?;
@@ -342,26 +468,58 @@ pub fn check(conn: &Connection) -> Result<bool, AppError> {
     )?)
 }
 
-/// `?1` is today. The numbers come from the view, so there is one definition of what moves an account.
+/// `?1` is today. The numbers come from the view, so there is one definition of what moves an account. Liability and return worked out
+/// from these (`from_row`) take the balance and the rate that are read here.
 const SELECT: &str = "SELECT a.id, a.name, a.kind, a.number, a.opening_balance_minor, a.opening_date, a.archived,
        COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1), 0),
        COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1 AND m.day >= substr(?1, 1, 8) || '01'), 0),
        (SELECT MAX(m.day) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1 AND m.source <> 'OPENING'),
        (SELECT count(*) FROM transactions WHERE account_id = a.id) + (SELECT count(*) FROM recurring_transactions WHERE account_id = a.id)
-       + (SELECT count(*) FROM ledger_entries WHERE account_id = a.id) + (SELECT count(*) FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id),
+       + (SELECT count(*) FROM ledger_entries WHERE account_id = a.id) + (SELECT count(*) FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id)
+       + (SELECT count(*) FROM stashes WHERE account_id = a.id),
        a.bic, a.notes, a.group_name, a.include_net_worth, a.virtual_balance_minor,
-       COALESCE(a.currency, (SELECT currency FROM settings WHERE id = 1)), a.currency IS NOT NULL, a.rate
+       COALESCE(a.currency, (SELECT currency FROM settings WHERE id = 1)), a.currency IS NOT NULL, a.rate,
+       @SET_ASIDE, a.rate_milli, a.rate_period, a.installment_minor
      FROM accounts a";
 
-fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Account> {
+fn select() -> String {
+    SELECT.replace("@SET_ASIDE", stashes::SET_ASIDE)
+}
+
+/// `today` is the day the payoff of a liability counts its months from.
+fn from_row(row: &rusqlite::Row, today: &str) -> rusqlite::Result<Account> {
     let kind: String = row.get(2)?;
+    let kind = Kind::from_sql(&kind).map_err(|_| rusqlite::Error::InvalidQuery)?;
     let id: i64 = row.get(0)?;
     let (balance, virtual_balance): (i64, i64) = (row.get(7)?, row.get(15)?);
     let rate: Option<String> = row.get(18)?;
+    let set_aside: i64 = row.get(19)?;
+    let milli: Option<i64> = row.get(20)?;
+    let period = row.get::<_, Option<String>>(21)?.map(|text| Period::from_sql(&text)).transpose().map_err(|_| rusqlite::Error::InvalidQuery)?;
+    let installment: Option<i64> = row.get(22)?;
+    let interest = milli.zip(period);
+    // an asset shows what its rate returns on what it holds, a liability what it owes and what its debt costs (loans design, sections 3.1 and 3.2)
+    let (liability, return_per_month) = if kind.is_liability() {
+        let owed = (-balance).max(0);
+        let state = match balance.cmp(&0) {
+            Ordering::Less => LiabilityState::Owing,
+            Ordering::Equal => LiabilityState::PaidOff,
+            Ordering::Greater => LiabilityState::Overpaid,
+        };
+        let liability = Liability {
+            owed: format_amount(owed),
+            state,
+            interest_per_month: interest.map(|(milli, period)| format_amount(month_interest(owed, milli, period))),
+            payoff: rates::payoff(owed, installment, milli.unwrap_or(0), period.unwrap_or(Period::Yearly), today),
+        };
+        (Some(liability), None)
+    } else {
+        (None, interest.map(|(milli, period)| format_amount(month_interest(balance.max(0), milli, period))))
+    };
     Ok(Account {
         id,
         name: row.get(1)?,
-        kind: Kind::from_sql(&kind).map_err(|_| rusqlite::Error::InvalidQuery)?,
+        kind,
         number: row.get(3)?,
         opening_balance: format_amount(row.get(4)?),
         opening_date: row.get(5)?,
@@ -381,20 +539,27 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Account> {
         foreign: row.get::<_, i64>(17)? == 1,
         balance_in_main: format_amount(in_main(balance, rate.as_deref())),
         rate,
+        set_aside: format_amount(set_aside),
+        free: format_amount(balance - set_aside),
+        interest_rate: milli.map(format_rate),
+        interest_period: period,
+        installment: installment.map(format_amount),
+        liability,
+        return_per_month,
     })
 }
 
 /// The accounts in the person's order, the archived ones after the others.
 pub fn list(conn: &Connection, today: &str) -> Result<Vec<Account>, AppError> {
     let today = clean_date(today)?;
-    let mut statement = conn.prepare_cached(&format!("{SELECT} ORDER BY a.archived, a.position, a.id"))?;
-    let rows = statement.query_map([&today], from_row)?;
+    let mut statement = conn.prepare_cached(&format!("{} ORDER BY a.archived, a.position, a.id", select()))?;
+    let rows = statement.query_map([&today], |r| from_row(r, &today))?;
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
 pub fn get(conn: &Connection, id: i64, today: &str) -> Result<Account, AppError> {
     let today = clean_date(today)?;
-    conn.query_row(&format!("{SELECT} WHERE a.id = ?2"), params![today, id], from_row).optional()?.ok_or(AppError::NotFound)
+    conn.query_row(&format!("{} WHERE a.id = ?2", select()), params![today, id], |r| from_row(r, &today)).optional()?.ok_or(AppError::NotFound)
 }
 
 /// A name is checked on this device only, among the accounts that are not archived, ignoring case (SQLite folds ASCII letters only). There
@@ -417,14 +582,33 @@ pub fn create(conn: &Connection, input: &NewAccount, today: &str) -> Result<Acco
     let group = clean_group(input.group.as_deref())?;
     let virtual_balance = input.virtual_balance.as_deref().map(parse_signed_amount).transpose()?.unwrap_or(0);
     let (currency, rate) = resolve_currency(conn, (None, None), 0, input.currency.as_deref(), input.rate.as_deref())?;
+    let interest = resolve_interest(None, input.interest_rate.as_deref().map(Some), input.interest_period)?;
+    let installment = resolve_installment(input.kind, None, input.installment.as_deref().map(Some))?;
     let tx = conn.unchecked_transaction()?;
     if name_is_taken(&tx, &name, None)? {
         return Err(AppError::NameExists);
     }
     tx.execute(
-        "INSERT INTO accounts (name, kind, number, opening_balance_minor, opening_date, position, bic, notes, group_name, include_net_worth, virtual_balance_minor, currency, rate)
-         VALUES (?1, ?2, ?3, ?4, ?5, (SELECT MAX(position) + 1 FROM accounts), ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-        params![name, input.kind.as_sql(), number, opening, date, bic, notes, group, input.include_in_net_worth.unwrap_or(true), virtual_balance, currency, rate],
+        "INSERT INTO accounts (name, kind, number, opening_balance_minor, opening_date, position, bic, notes, group_name, include_net_worth, virtual_balance_minor, currency, rate,
+                               rate_milli, rate_period, installment_minor)
+         VALUES (?1, ?2, ?3, ?4, ?5, (SELECT MAX(position) + 1 FROM accounts), ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+        params![
+            name,
+            input.kind.as_sql(),
+            number,
+            opening,
+            date,
+            bic,
+            notes,
+            group,
+            input.include_in_net_worth.unwrap_or(true),
+            virtual_balance,
+            currency,
+            rate,
+            interest.map(|i| i.0),
+            interest.map(|i| i.1.as_sql()),
+            installment
+        ],
     )?;
     let account = get(&tx, tx.last_insert_rowid(), today)?;
     tx.commit()?;
@@ -445,6 +629,10 @@ pub fn update(conn: &Connection, id: i64, patch: &AccountPatch, today: &str) -> 
         None => current.name,
     };
     let kind = patch.kind.unwrap_or(current.kind);
+    // an asset never becomes a liability or the other way round: the balance of one is what it holds, of the other what is owed (section 5.1)
+    if kind.is_liability() != current.kind.is_liability() {
+        return Err(AppError::InvalidInput);
+    }
     let number = match &patch.number {
         Some(number) => clean_short(number.as_deref(), NUMBER_MAX_CHARS)?,
         None => current.number,
@@ -482,13 +670,21 @@ pub fn update(conn: &Connection, id: i64, patch: &AccountPatch, today: &str) -> 
     let virtual_balance = parse_signed_amount(patch.virtual_balance.as_deref().unwrap_or(&current.virtual_balance))?;
     let held = current.foreign.then_some(current.currency.as_str());
     let (currency, rate) = resolve_currency(&tx, (held, current.rate.as_deref()), current.entries, patch.currency.as_deref(), patch.rate.as_deref())?;
+    let stored_interest = match (current.interest_rate.as_deref(), current.interest_period) {
+        (Some(rate), Some(period)) => Some((parse_rate(rate)?, period)),
+        _ => None,
+    };
+    let interest = resolve_interest(stored_interest, patch.interest_rate.as_ref().map(|r| r.as_deref()), patch.interest_period)?;
+    let stored_installment = current.installment.as_deref().map(parse_amount).transpose()?;
+    let installment = resolve_installment(kind, stored_installment, patch.installment.as_ref().map(|i| i.as_deref()))?;
     if name_is_taken(&tx, &name, Some(id))? {
         return Err(AppError::NameExists);
     }
     tx.execute(
         "UPDATE accounts SET name = ?1, kind = ?2, number = ?3, opening_balance_minor = ?4, opening_date = ?5,
-                bic = ?6, notes = ?7, group_name = ?8, include_net_worth = ?9, virtual_balance_minor = ?10, currency = ?12, rate = ?13 WHERE id = ?11",
-        params![name, kind.as_sql(), number, opening, date, bic, notes, group, include, virtual_balance, id, currency, rate],
+                bic = ?6, notes = ?7, group_name = ?8, include_net_worth = ?9, virtual_balance_minor = ?10, currency = ?12, rate = ?13,
+                rate_milli = ?14, rate_period = ?15, installment_minor = ?16 WHERE id = ?11",
+        params![name, kind.as_sql(), number, opening, date, bic, notes, group, include, virtual_balance, id, currency, rate, interest.map(|i| i.0), interest.map(|i| i.1.as_sql()), installment],
     )?;
     let account = get(&tx, id, today)?;
     tx.commit()?;
@@ -549,7 +745,7 @@ pub fn restore(conn: &Connection, id: i64, today: &str) -> Result<Account, AppEr
     Ok(account)
 }
 
-/// Deletes an account that nothing points at, archived or not. The main account and an account with rows are refused; the trigger
+/// Deletes an account that nothing points at, archived or not. The main account and an account with rows or stashes are refused; the trigger
 /// `trg_accounts_keep_main` and the foreign keys are the net under this.
 pub fn delete(conn: &Connection, id: i64) -> Result<(), AppError> {
     let tx = conn.unchecked_transaction()?;
@@ -557,6 +753,7 @@ pub fn delete(conn: &Connection, id: i64) -> Result<(), AppError> {
         .query_row(
             "SELECT (SELECT count(*) FROM transactions WHERE account_id = a.id) + (SELECT count(*) FROM recurring_transactions WHERE account_id = a.id)
                   + (SELECT count(*) FROM ledger_entries WHERE account_id = a.id) + (SELECT count(*) FROM transfers WHERE from_account_id = a.id OR to_account_id = a.id)
+                  + (SELECT count(*) FROM stashes WHERE account_id = a.id)
              FROM accounts a WHERE a.id = ?1",
             [id],
             |r| r.get(0),
@@ -688,10 +885,14 @@ pub fn history(conn: &Connection, id: i64, year: &str, today: &str) -> Result<Ve
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Summary {
-    /// What every account that counts in net worth holds today, the archived ones too, in the app's currency: a foreign account at its rate.
+    /// What every asset account (not a liability) that counts in net worth holds today, the archived ones too, in the app's currency: a foreign
+    /// account at its rate.
     pub in_accounts: String,
+    /// What every liability that counts in net worth holds today, in the app's currency: signed, below 0 while something is owed.
+    pub debts: String,
     /// What friends owe you minus what you owe them: money a friend owes you is yours.
     pub friends: String,
+    /// `in_accounts` plus `debts` plus `friends`.
     pub net_worth: String,
     /// How many accounts there are, the archived ones too, and the ones that do not count in net worth.
     pub accounts: u32,
@@ -703,20 +904,37 @@ pub fn summary(conn: &Connection, today: &str) -> Result<Summary, AppError> {
     let today = clean_date(today)?;
     let tx = conn.unchecked_transaction()?;
     // each account is turned into the app's currency on its own: a sum over several currencies is no number
-    let in_accounts: i64 = tx
-        .prepare(
-            "SELECT a.rate, COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1), 0)
+    let (mut in_accounts, mut debts) = (0i64, 0i64);
+    {
+        let mut statement = tx.prepare(
+            "SELECT a.rate, a.kind, COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1), 0)
              FROM accounts a WHERE a.include_net_worth = 1",
-        )?
-        .query_map([&today], |r| Ok(in_main(r.get(1)?, r.get::<_, Option<String>>(0)?.as_deref())))?
-        .sum::<Result<i64, _>>()?;
+        )?;
+        let rows = statement.query_map([&today], |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))?;
+        for row in rows {
+            let (rate, kind, balance) = row?;
+            let value = in_main(balance, rate.as_deref());
+            if Kind::from_sql(&kind)?.is_liability() {
+                debts += value;
+            } else {
+                in_accounts += value;
+            }
+        }
+    }
     let friends: i64 = tx.query_row("SELECT COALESCE(SUM(balance_minor), 0) FROM person_balances", [], |r| r.get(0))?;
     let (accounts, in_use): (u32, bool) = tx.query_row(
         "SELECT count(*), count(*) > 1 OR COALESCE(SUM(opening_balance_minor <> 0), 0) > 0 FROM accounts",
         [],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
-    Ok(Summary { in_accounts: format_amount(in_accounts), friends: format_amount(friends), net_worth: format_amount(in_accounts + friends), accounts, in_use })
+    Ok(Summary {
+        in_accounts: format_amount(in_accounts),
+        debts: format_amount(debts),
+        friends: format_amount(friends),
+        net_worth: format_amount(in_accounts + debts + friends),
+        accounts,
+        in_use,
+    })
 }
 
 /// What an account paid or took in for one category in a period.

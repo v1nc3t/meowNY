@@ -30,9 +30,9 @@
   overflow: hidden;
   background: var(--popover);
   color: var(--popover-foreground);
-  border: 1px solid var(--border);
+  border: var(--hairline) solid var(--border);
   /* The stripe on the left is the kind's colour. */
-  border-left: 3px solid var(--toast-color);
+  border-left: 0.1875rem solid var(--toast-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   font-family: var(--font);
@@ -66,6 +66,11 @@
 }
 
 /* The × sits in the corner and does not make the toast taller. */
+.toast-close-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
 .toast-close {
   flex: none;
   width: 1.5rem;
@@ -81,7 +86,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  height: 3px;
+  height: 0.1875rem;
   background: var(--muted);
 }
 
@@ -134,7 +139,7 @@ html.is-phone .toaster {
   left: 1rem;
   right: 1rem;
   width: auto;
-  bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 1rem + 3.5rem + 0.5rem);
+  bottom: calc(3.5rem + env(safe-area-inset-bottom, 0rem) + 1rem + 3.5rem + 0.5rem);
   align-items: stretch;
 }
 

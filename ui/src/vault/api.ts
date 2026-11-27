@@ -1,6 +1,7 @@
 import { listen } from '@tauri-apps/api/event'
 import { z } from 'zod'
 import { call, errorText, inDesktopApp, ApiError, type ErrorCode } from '../api/invoke'
+import { forgetLayouts } from '../lib/dashboardStorage'
 import { forgetChoices } from '../lib/sticky'
 import type { Settings } from './rules'
 
@@ -15,6 +16,10 @@ const Conversion = z.object({
   transactions: z.number().int().nonnegative(),
   recurring: z.number().int().nonnegative(),
   budgets: z.number().int().nonnegative(),
+  // stashes with a target or an entry that were converted, and their entries (docs/stash-design.md, section 8). The keys are as the Rust struct
+  // names them; an app from before stashes leaves them out.
+  stashes: z.number().int().nonnegative().default(0),
+  stash_entries: z.number().int().nonnegative().default(0),
 })
 const RecoveryKey = z.string().regex(/^([0-9A-Z]{4}-){7}[0-9A-Z]{4}$/)
 const Status = z.enum(['not_set_up', 'locked', 'unlocked'])
@@ -50,6 +55,7 @@ const done = <T>(promise: Promise<T>) => promise.then(() => undefined)
 /** All data is new (erased, created or restored): what the lists remembered about the old data (a category) means nothing now. */
 const fresh = <T>(answer: T) => {
   forgetChoices()
+  forgetLayouts()
   return answer
 }
 

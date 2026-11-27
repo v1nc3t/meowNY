@@ -1,6 +1,7 @@
 export type { Category } from '../api/categories'
 import type { Overview } from '../api/budgets'
 import type { Category } from '../api/categories'
+import { fromMinor, toMinor } from './money'
 
 /** The categories as the options of a dropdown, in two sections: expense categories, then income ones, each in the order they came in. */
 export function categoryOptions(categories: Category[], names: { expense: string; income: string }): { value: string; label: string; group: string }[] {
@@ -46,6 +47,32 @@ export function spentClass(spent: string, budget: string | null): string {
 export function earnedClass(earned: string, budget: string | null): string {
   return budget !== null && Number(earned) > Number(budget) ? 'cell-amount is-income' : 'cell-amount'
 }
+
+/** What a budget row shows past its two amounts: what is left of the budget (or still to come, for income), and how much of it is used. */
+export type BudgetGap = {
+  /** Budget minus what was spent or earned, as an amount: below 0 when an expense went over; never below 0 for income (reached is its word). */
+  left: string
+  /** `floor(used x 100 / budget)`; it may be above 100. */
+  percent: number
+  /** From 0 to 1: how full the bar is. */
+  fill: number
+  /** over: an expense above its budget (red); good: income that reached its budget (green); plain otherwise. */
+  tone: 'plain' | 'over' | 'good'
+}
+
+/** The left and used columns of a category (or of a side): none without a budget above 0. Whole cents, no floating point in the amounts. */
+export function budgetGap(used: string, budget: string | null, type: Side): BudgetGap | null {
+  const aim = budget === null ? null : minor(budget)
+  if (aim === null || aim <= 0n) return null
+  const done = minor(used)
+  const rest = aim - done
+  const percent = done > 0n ? Number((done * 100n) / aim) : 0
+  const fill = Math.min(1, Math.max(0, percent / 100))
+  if (type === 'EXPENSE') return { left: fromMinor(rest), percent, fill, tone: rest < 0n ? 'over' : 'plain' }
+  return { left: fromMinor(rest > 0n ? rest : 0n), percent, fill, tone: rest <= 0n ? 'good' : 'plain' }
+}
+
+const minor = (amount: string): bigint => toMinor(amount) ?? 0n
 
 export function amountsFor(overview: Overview[] | null, type: Side): Map<string, string> {
   const row = overview?.find((item) => item.type === type)

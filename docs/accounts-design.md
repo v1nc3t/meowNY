@@ -3,6 +3,15 @@
 How accounts, balances, transfers and net worth work. Section numbers are cited in the code; keep them.
 User side: the [guide](https://v1nc3t.github.io/meowNY/guide.html#accounts). Status: built (migration `0018`, sync protocol 9).
 
+## In short
+
+- An account is a place your money is. Every transaction, recurring item and debt entry is in exactly one.
+- A transfer moves money between two accounts. It is never income, an expense, a budget or a statistic.
+- A balance is worked out from the movements up to any day. It is stored nowhere.
+- There is always a main account. With one account, no form asks about accounts.
+- An account can be in another currency, with a rate you type. Net worth adds the accounts, minus debts, plus what friends owe.
+- Sync, backups, exports and the command line carry accounts like everything else.
+
 ## 1. What it has to do
 
 - An account is a place your money is: a bank account, savings, cash, a credit card. It has a name, a kind, an optional number, an
@@ -13,8 +22,9 @@ User side: the [guide](https://v1nc3t.github.io/meowNY/guide.html#accounts). Sta
 - A person who never wants accounts is not bothered: there is always one account (the main account), everything goes into it,
   and with one account no form shows an account field.
 - Everything follows sync, currency changes, backups, exports, the demo data and the CLI. No network. No new dependency.
-- Not goals: expense and revenue (counterparty) accounts, liabilities (the debts feature covers them), piggy banks, rules,
-  reconciliation, bank import, a currency per account, an export limited to one account, splitting one transaction over accounts.
+- Not goals: expense and revenue (counterparty) accounts, liabilities (the debts feature covers them), piggy banks (money set aside
+  for a goal is built as stashes, `stash-design.md`), rules, reconciliation, bank import, a currency per account, an export limited
+  to one account, splitting one transaction over accounts.
 
 ## 2. The pieces
 
@@ -50,7 +60,7 @@ Integers in minor units. One currency, the app's (`settings.currency`).
 
 - **Balance of account A on day D** = sum of `delta_minor` where `account_id = A AND day <= D`. Nothing else. The current balance
   is D = the app's today (`sync-design.md`, section 10).
-- **The opening balance is a movement dated `opening_date`**, as in Firefly. Rows dated before it still count; no row is ever
+- **The opening balance is a movement dated `opening_date`.** Rows dated before it still count; no row is ever
   refused or ignored for its date. Before `opening_date` the balance simply does not hold the opening amount yet. Why: no refused
   save, no sync rule for "a row before its account opened", and an opening date typed too late only bends the chart.
 - **Future-dated rows** count from their day, so they are not in today's balance. The chart and the statement end at today
@@ -616,14 +626,16 @@ an id) if it is still active, else the first active account in the list. It is r
 
 - **Accounts page** (`pages/AccountsPage.tsx`, route `accounts/:accountId?`, in `pages/index.ts`, `App.tsx`, `AppSidebar.tsx`
   after transactions with icon `accounts` in `NavIcon.tsx`, shortcut `goAccounts` = `g` then `a` in `keys/shortcuts.ts`; on the
-  phone an icon in the top bar before documents).
-  - Toolbar: **add account**; **transfer** (shown with two or more active accounts); the total "in accounts" at the right.
-  - Table, in the person's order, reordered as categories are (hold and drag, `Alt` + arrows): name, type, number, last
-    activity, this month (signed, green or red), balance. Row buttons: edit; archive (not on the main account); delete in its
-    place when `entries == 0`. A click on the row opens the account. Phone: `TapRow` with the balance as the amount and
-    "type · last activity · this month" under the name; the panel has **open**, **edit**, **transfer**, **archive** or **delete**.
-  - Archived accounts apart: a switch **archived (n)** under the list (remembered, `choice.accounts.archived`) opens a second
-    list: name, type, balance, **restore**, and **delete** when empty.
+  phone a line of the menu behind the logo, after transactions: `PHONE_ITEMS` in `lib/navItems.ts`).
+  - Title row (`PageHeader`): **add account** (on the phone, the first line of the round add button's menu); **transfer** (shown
+    with two or more active accounts; on the phone in the "⋯" menu); the total "in accounts" beside the title.
+  - Table, in the person's order, reordered as categories are (hold and drag, `Alt` + arrows): name, type, this month (signed,
+    green or red), set aside, free, balance; a narrower list drops columns, never wraps (`ui-design.md` rule 2). Row buttons: edit;
+    archive (not on the main account); delete in its place when `entries == 0`. A click on the row opens the account. Phone:
+    `TapRow` with the balance as the amount and the type as the one grey value under the name; the number, this month, set aside,
+    free and last activity are `Facts` in the open row, with the buttons **open**, **edit**, **transfer**, **archive** or **delete**.
+  - Archived accounts apart: a switch **show archived (n)** in the "⋯" menu (remembered, `choice.accounts.archived`) shows a
+    second group under its own heading: name, type, balance, **restore**, and **delete** when empty.
   - Archive asks first (`ConfirmModal`); when the balance is not 0 the question says how much the account still holds.
     Delete asks first.
 - **An account** (same page, the account in the address, as the debts page shows a friend; **back** returns to the list):
@@ -740,7 +752,7 @@ Reused as they are: `common.name`, `common.type`, `common.optional`, `common.del
   archive and restore, delete an empty one, the main account, what the balance counts, split bills in one sentence) and
   `transfers` ("Move money between accounts").
 - **Debts**: in "Friends and the history" and "Mark as paid", one sentence: with several accounts, choose where the money went.
-- **Your phone**, "On the phone": accounts is an icon in the top bar. **Backup**, "Export": accounts and transfers are in the files.
+- **Your phone**, "On the phone": accounts is a line of the menu behind the logo. **Backup**, "Export": accounts and transfers are in the files.
 - **Keyboard shortcuts**: `g` then `a`.
 - **Privacy**, "What is stored": the first row becomes "Categories, budgets, accounts (names, numbers, opening balances),
   transfers, transactions, ..."; the filters row gains "the account filter, whether archived accounts are shown, the last account
@@ -838,14 +850,14 @@ demo data). Everyone runs `npm run check` before handing over.
 
 **Package 6**: `npm run check:docs`.
 
-## 20. Round two: closer to Firefly III
+## 20. Round two: three kinds of entry and more account details
 
 Asked by the owner after the first round was built. Section numbers 1 to 19 stay; where this section disagrees with them, this
 section wins. Migration `0019_account_details.sql`. Sync protocol **10**.
 
 ### 20.1 What changes
 
-1. **Three kinds of entry, as Firefly's withdrawal, deposit and transfer.** The add dialog on the transactions page (and the quick
+1. **Three kinds of entry: expense, income and transfer.** The add dialog on the transactions page (and the quick
    add) has three tabs: **expense**, **income**, **transfer**. The expense tab lists only expense categories, the income tab only
    income categories, the transfer tab holds the fields of `TransferModal`. An edit opens on the tab of the row and shows no tabs.
 2. **Income names its account.** On the income tab (transaction and recurring) the account field is always shown, also with one
@@ -855,15 +867,15 @@ section wins. Migration `0019_account_details.sql`. Sync protocol **10**.
    and account filters and the pager; a row opens the transfer dialog.
 4. **Recurring items are two lists**: recurring expenses and recurring income, each with its own title, count and monthly total.
    The recurring dialog has two tabs (expense, income); the income tab has the account field of point 2.
-5. **Income moves to the accounts page**, as Firefly keeps revenue under Accounts. The accounts page has two tabs: **accounts**
+5. **Income moves to the accounts page** (undone: it is on the categories page again, see 20.7). The accounts page has two tabs: **accounts**
    and **income**. The income tab is the income half that the categories page had (income categories, their budgets, what came
    in this month, add, rename, delete, reorder). The categories page keeps expenses and history.
-6. **More of what a Firefly account has** (20.2): BIC, notes, a group, "include in net worth", a virtual balance; on the account's
+6. **More of what an account has** (20.2): BIC, notes, a group, "include in net worth", a virtual balance; on the account's
    page what was spent and what came in by category for the period shown, a month to month navigation, and "add" buttons that
    open the dialog of point 1 with this account already chosen.
 
-Not built, with the reason: a currency per account, liabilities and piggy banks (not goals, section 1); expense and revenue
-counterparty accounts (categories do that job here); reconciliation (it needs a fourth kind of movement; correct the opening
+Not built, with the reason: a currency per account, liabilities and piggy banks (not goals, section 1; money set aside for a goal is
+built as stashes, `stash-design.md`); expense and revenue counterparty accounts (categories do that job here); reconciliation (it needs a fourth kind of movement; correct the opening
 balance instead); attachments on an account (the document links table would have to be rebuilt); the "shared" role and a
 credit card's payment day (the kind `CHECK` of 0018 cannot be widened without rebuilding a table four others point at);
 recurring transfers; rules.
@@ -958,8 +970,8 @@ and at 1280 px.
   hidden. With `several` false the transfers tab is hidden (there is nothing to move money between).
 - **Recurring page**: two sections, expenses first; an empty section shows its empty line, not nothing.
 - **Accounts page**: the list, no tabs (20.1 point 5 was undone). List rows are grouped under their group's name when any account has a group
-  (accounts without one under "no group", last); reorder works inside a group. A row shows "available" under the balance when
-  20.3 says so, and a small mark when it is left out of net worth.
+  (accounts without one under "no group", last); reorder works inside a group. A row has a **free** column (the balance less
+  what is set aside, **available** when 20.3 says so) and a small mark when it is left out of net worth.
 - **Account dialog**: name, type, number, opening balance and date as now; below them, shut behind "more": BIC, group (a text
   field that offers the groups in use), virtual balance, "count in net worth" (a switch, on), notes.
 - **Account's page**: under the chart a month navigation (`MonthNav`) that sets the period of the statement and of two small
@@ -993,7 +1005,7 @@ section 20.1's "a currency per account" in the not-built list. Migration `0020_a
   its own currency.
 - A transaction in a foreign account has **two amounts**: `amount` in the main currency, which is what every budget and statistic
   counts, exactly as before; and `nativeAmount`, what really left or reached the account, in the account's currency. In a
-  main-currency account there is only `amount`. (Firefly calls this the foreign amount.)
+  main-currency account there is only `amount`.
 - A transfer between two accounts with different currencies has two amounts: `amount` leaves the first account in its currency and
   `toAmount` reaches the second in its currency.
 - A foreign account has a **rate**, typed by the person, never fetched: how many units of its currency one unit of the main currency

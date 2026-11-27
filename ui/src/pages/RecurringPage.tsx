@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import PageHeader from '../components/PageHeader'
 import AccountField from '../components/AccountField'
 import AddCategoryModal from '../components/AddCategoryModal'
 import AttachArea from '../components/AttachArea'
@@ -11,12 +12,16 @@ import Dropdown from '../components/Dropdown'
 import ConfirmModal from '../components/ConfirmModal'
 import DuePayments from '../components/DuePayments'
 import EntryTabs from '../components/EntryTabs'
+import Facts, { type FactItem } from '../components/Facts'
 import PaidLatePayments from '../components/PaidLatePayments'
 import Icon from '../components/NavIcon'
-import { IconAction, Row, Table, TapRow } from '../components/RowParts'
+import { IconAction, ListGroup, NameMark, PanelActions, Row, Table, TapRow, type PanelAction } from '../components/RowParts'
 import SectionTabs from '../components/SectionTabs'
 import Modal, { modalFormId } from '../components/Modal'
-import Button from '../components/ui/Button'
+import { Badge } from '../components/ui/badge'
+import { Button } from '../components/ui/button'
+import { cn } from '../components/ui/cn'
+import { EmptyState } from '../components/ui/Pixel'
 import type { Account } from '../api/accounts'
 import { categories as categoriesApi, type Category } from '../api/categories'
 import { debts, type Due, type DuePayment, type Person } from '../api/debts'
@@ -26,7 +31,7 @@ import { stats, type Commitments } from '../api/stats'
 import { useToday, type Today } from '../api/today'
 import { accountChoice, rememberAccount } from '../lib/accountsView'
 import { categoryChoices, entryTabs, tabOfCategory, type EntryTab } from '../lib/entryDialog'
-import { groupByType } from '../lib/recurringView'
+import { groupByType, sharedWith } from '../lib/recurringView'
 import { amountString, formatDate, formatMoney } from '../lib/money'
 import { draftOfTemplate, NOT_SPLIT, reducedWeights, toInput, type SplitState } from '../lib/split'
 import { tabPanelProps } from '../lib/tabs'
@@ -40,7 +45,6 @@ import { useProfile } from '../hooks/profile'
 import { useToast } from '../hooks/toast'
 import { useT } from '../i18n/context'
 import { useShortcut } from '../keys/registry'
-import { tip } from '../keys/tip'
 import { useRowNavigation } from '../keys/useRowNavigation'
 
 const MAX_COUNT = 1000
@@ -422,14 +426,30 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
 
   const resume = (item: Recurring) => void run(() => recurringApi.setActive(item.id, true))
 
-  // A desktop row: name, amount, next due date (with "overdue" or "due today" under it), category, how often, ongoing, paused or ended, an
-  // icon if it is shared, then the one thing to do (mark as paid), edit, delete and the chevron. Skip, pause and end are in the panel
-  // the chevron opens.
+  /** The state in words: "overdue", "due today", "paused", "ended", and "ongoing" for the one that simply runs. */
+  const stateText = (status: Status) => (status === 'overdue' ? t('rec.overdue') : status === 'today' ? t('rec.dueToday') : status === 'paused' ? t('rec.paused') : status === 'ended' ? t('rec.ended') : t('rec.ongoing'))
+
+  /** The icon after the name of an item that is shared with friends. A mark is no button, so it may have a title. */
+  const sharedMark = (
+    <span className="row-mark-icon" role="img" aria-label={t('tx.shared')} title={t('tx.shared')}>
+      <Icon name="qr" className="mark-icon" />
+    </span>
+  )
+
+  // A desktop row, one column for each thing: name (and its documents), category, how often, the next due date, where it stands (overdue and due
+  // today in colour, ongoing, paused and ended quiet), the amount, an icon if it is shared, then the one thing to do as an icon button (mark as
+  // paid, or resume a paused one), edit, delete and the chevron. Skip, pause and end are in the panel the chevron opens, with the end date. Every
+  // cell is one line: a narrower list has fewer columns (money.css).
   function tableRow({ item, category }: { item: Recurring; category: string }) {
     const status = statusOf(item, now.date)
     const badge = badgeOf(item, status)
+    const facts: FactItem[] = status === 'ended' || !item.endDate ? [] : [{ label: t('rec.endDate'), value: formatDate(item.endDate, settings.locale) }]
     const more = status !== 'ended' || Boolean(item.split) || Boolean(item.description?.trim())
-    const late = status === 'overdue' || status === 'today'
+    const actions: (PanelAction | false)[] = [
+      item.isActive && { label: t('rec.skip'), icon: 'skip', onClick: () => setConfirming({ kind: 'skip', item }) },
+      item.isActive && { label: t('rec.pause'), icon: 'pause', onClick: () => setConfirming({ kind: 'pause', item }) },
+      status !== 'ended' && { label: t('rec.end'), icon: 'stop', onClick: () => setConfirming({ kind: 'end', item }) },
+    ]
     return (
       <Row
         key={item.id}
@@ -440,14 +460,12 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         actions={
           <>
             {item.isActive ? (
-              <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => openPay(item)}>
-                {t('rec.pay')}
-              </Button>
+              <IconAction icon="check" label={`${t('rec.pay')}: ${item.name}`} className="icon-btn rec-pay" data-row-focus onClick={() => openPay(item)} />
             ) : status === 'paused' ? (
-              <Button variant="outline" size="sm" className="row-primary" data-row-focus onClick={() => resume(item)}>
-                {t('rec.resume')}
-              </Button>
-            ) : null}
+              <IconAction icon="play" label={`${t('rec.resume')}: ${item.name}`} data-row-focus onClick={() => resume(item)} />
+            ) : (
+              <span className="icon-slot" />
+            )}
             <IconAction icon="pencil" label={t('common.edit')} data-row-focus={item.isActive || status === 'paused' ? undefined : true} onClick={() => openEdit(item)} />
             <IconAction icon="trash" label={t('common.delete')} danger onClick={() => setConfirming({ kind: 'delete', item })} />
           </>
@@ -455,24 +473,9 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         panel={
           more ? (
             <>
+              <Facts items={facts} className="acct-facts" />
               {details(item)}
-              <div className="row-panel-actions">
-                {item.isActive ? (
-                  <>
-                    <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'skip', item })}>
-                      {t('rec.skip')}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'pause', item })}>
-                      {t('rec.pause')}
-                    </Button>
-                  </>
-                ) : null}
-                {status !== 'ended' ? (
-                  <Button variant="outline" size="sm" onClick={() => setConfirming({ kind: 'end', item })}>
-                    {t('rec.end')}
-                  </Button>
-                ) : null}
-              </div>
+              <PanelActions actions={actions} />
             </>
           ) : null
         }
@@ -483,39 +486,56 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
           </span>
           {marks(item)}
         </div>
-        {amount(item)}
-        <span className={status === 'overdue' ? 'cell-sub-end is-overdue' : 'cell-sub-end'}>
-          {badge.date}
-          {late ? <span className="cell-fine">{badge.state}</span> : null}
+        <span className="cell-sub rec-cat" title={category}>
+          {category}
         </span>
-        <div className="rec-sub">
-          <span className="cell-sub" title={category}>
-            {category}
-          </span>
-          <span className="cell-sub rec-often" title={everyText(item)}>
-            {everyText(item)}
-          </span>
-          <span className="cell-sub rec-state">{t(status === 'paused' ? 'rec.paused' : status === 'ended' ? 'rec.ended' : 'rec.ongoing')}</span>
-          <span className="cell-mark">
-            {item.split ? (
-              <span className="row-mark-icon" title={t('tx.shared')}>
-                <Icon name="qr" className="mark-icon" />
-                <span className="sr-only">{t('tx.shared')}</span>
-              </span>
-            ) : null}
-          </span>
-        </div>
+        <span className="cell-sub rec-often" title={everyText(item)}>
+          {everyText(item)}
+        </span>
+        <span className={cn('cell-sub rec-next', status === 'overdue' && 'is-overdue')}>{badge.date}</span>
+        <span className={cn('cell-sub rec-state', `is-${status}`)}>{stateText(status)}</span>
+        {amount(item)}
+        <span className="cell-mark">{item.split ? sharedMark : null}</span>
       </Row>
     )
   }
 
-  // A phone row: the name and amount, and under them one line with the category, how often, the next due date and whether it is shared
-  // (the date is red when it is overdue; a paused or ended item says so instead). It opens to the details and a labelled button for
-  // everything that can be done with the item.
+  /** The one mark after a phone row's name: overdue in red, paused or ended in grey, and for a running item the icon of one that is shared. */
+  function phoneMark(item: Recurring, status: Status) {
+    if (status === 'overdue') return <Badge variant="destructive">{t('rec.overdue')}</Badge>
+    if (status === 'paused' || status === 'ended') return <Badge variant="secondary">{stateText(status)}</Badge>
+    return item.split ? sharedMark : null
+  }
+
+  /** The one grey line under a phone row's name: when it is next due ("due 1 dec"), or for one that has ended, the day it ended. */
+  function phoneMeta(status: Status, date: string) {
+    if (status === 'today') return t('rec.dueToday')
+    if (status === 'ended') return `${t('rec.endDate')} ${date}`
+    return t('debts.dueOn', { date })
+  }
+
+  // A phone row: the name (with one mark) and the amount; the next due date under the name. It opens to the facts, the details (who shares it,
+  // the description, the documents) and a button for everything that can be done with the item.
   function tapRow({ item, category }: { item: Recurring; category: string }) {
     const status = statusOf(item, now.date)
     const badge = badgeOf(item, status)
-    const when = status === 'upcoming' ? t('debts.dueOn', { date: badge.date }) : status === 'today' || status === 'paused' ? badge.state : `${badge.state} ${badge.date}`
+    const facts: FactItem[] = [
+      { label: t('common.category'), value: category },
+      { label: t('sync.field.every'), value: everyText(item) },
+      { label: t('sync.field.nextDue'), value: status === 'ended' ? null : badge.date, tone: status === 'overdue' ? 'negative' : undefined },
+      { label: t('rec.endDate'), value: item.endDate ? formatDate(item.endDate, settings.locale) : null },
+      { label: t('tx.shared'), value: item.split ? sharedWith(item).join(', ') || t('common.yes') : null },
+      { label: t('debts.colStatus'), value: stateText(status), tone: status === 'overdue' ? 'negative' : status === 'upcoming' || status === 'today' ? undefined : 'muted' },
+    ]
+    const actions: (PanelAction | false)[] = [
+      item.isActive && { label: t('rec.pay'), icon: 'check', onClick: () => openPay(item) },
+      status === 'paused' && { label: t('rec.resume'), icon: 'play', onClick: () => resume(item) },
+      { label: t('common.edit'), icon: 'pencil', onClick: () => openEdit(item) },
+      item.isActive && { label: t('rec.skip'), icon: 'skip', onClick: () => setConfirming({ kind: 'skip', item }) },
+      item.isActive && { label: t('rec.pause'), icon: 'pause', onClick: () => setConfirming({ kind: 'pause', item }) },
+      status !== 'ended' && { label: t('rec.end'), icon: 'stop', onClick: () => setConfirming({ kind: 'end', item }) },
+      { label: t('common.delete'), icon: 'trash', danger: true, onClick: () => setConfirming({ kind: 'delete', item }) },
+    ]
     return (
       <TapRow
         key={item.id}
@@ -524,16 +544,10 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         data-status={status}
         open={openRows.isOpen(item.id)}
         onToggle={() => openRows.toggle(item.id)}
-        name={item.name}
+        name={<NameMark mark={phoneMark(item, status)}>{item.name}</NameMark>}
         amount={amount(item)}
-        sub={
-          <>
-            <span>{category}</span>
-            <span>{everyText(item)}</span>
-            <span className={status === 'overdue' ? 'due-late' : undefined}>{when}</span>
-            {item.split ? <span>{t('tx.shared')}</span> : null}
-          </>
-        }
+        meta={phoneMeta(status, badge.date)}
+        facts={facts}
       >
         {details(item)}
         {clips[item.id] ? (
@@ -542,67 +556,32 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
             <ClipPreview target={{ kind: 'recurring', id: item.id }} name={item.name} count={clips[item.id] ?? 0} />
           </section>
         ) : null}
-        <div className="row-panel-actions">
-          {item.isActive ? (
-            <Button variant="outline" onClick={() => openPay(item)}>
-              {t('rec.pay')}
-            </Button>
-          ) : status === 'paused' ? (
-            <Button variant="outline" onClick={() => resume(item)}>
-              {t('rec.resume')}
-            </Button>
-          ) : null}
-          <Button variant="outline" onClick={() => openEdit(item)}>
-            <Icon name="pencil" className="btn-icon" />
-            {t('common.edit')}
-          </Button>
-          {item.isActive ? (
-            <>
-              <Button variant="outline" onClick={() => setConfirming({ kind: 'skip', item })}>
-                {t('rec.skip')}
-              </Button>
-              <Button variant="outline" onClick={() => setConfirming({ kind: 'pause', item })}>
-                {t('rec.pause')}
-              </Button>
-            </>
-          ) : null}
-          {status !== 'ended' ? (
-            <Button variant="outline" onClick={() => setConfirming({ kind: 'end', item })}>
-              {t('rec.end')}
-            </Button>
-          ) : null}
-          <Button variant="outline" className="row-danger" onClick={() => setConfirming({ kind: 'delete', item })}>
-            <Icon name="trash" className="btn-icon" />
-            {t('common.delete')}
-          </Button>
-        </div>
+        <PanelActions actions={actions} />
       </TapRow>
     )
   }
 
-  // The title of each list says how many it holds and, when the running ones with a fixed amount come to something, what they come to a month.
-  const summaryOf = (count: number, total: string | undefined) => {
-    const month = total !== undefined && Number(total) > 0 ? ` · ${formatMoney(total, settings.currency, settings.locale)} ${t('dashboard.perMonth')}` : ''
-    return count === 0 ? '' : `${count}${month}`
-  }
+  // What the running items with a fixed amount of a list come to a month, at the right of the list's heading.
+  const monthOf = (total: string | undefined) => (total !== undefined && Number(total) > 0 ? `${formatMoney(total, settings.currency, settings.locale)} ${t('dashboard.perMonth')}` : undefined)
   const sections = [
-    { tab: 'EXPENSE' as const, title: t('rec.expenses'), rows: lists.expenses, empty: t('rec.emptyExpenses'), summary: summaryOf(lists.expenses.length, commitments?.expense) },
-    { tab: 'INCOME' as const, title: t('rec.income'), rows: lists.income, empty: t('rec.emptyIncome'), summary: summaryOf(lists.income.length, commitments?.income) },
-  ]
+    { tab: 'EXPENSE' as const, title: t('rec.expenses'), rows: lists.expenses, total: monthOf(commitments?.expense) },
+    { tab: 'INCOME' as const, title: t('rec.income'), rows: lists.income, total: monthOf(commitments?.income) },
+  ].filter((section) => section.rows.length > 0)
+  /** What the page's top line says on the tab of due payments: what is due. The list of items has its totals in the headings of its groups. */
+  const aside =
+    tab === 'due' && due && due.payments.length > 0 ? (
+      <>
+        {t('debts.dueTotal')} <b>{formatMoney(due.total, settings.currency, settings.locale)}</b>
+      </>
+    ) : null
 
   return (
     <section className="tx-page">
-      <div className="tx-title one-line">
-        <h1>{t('rec.title')}</h1>
-        {/* The phone has the add button of each list for this. */}
-        {phone ? null : (
-          <div className="tx-actions">
-            <Button onClick={() => openAdd()} {...tip('new', t('rec.add'))}>
-              {t('rec.add')}
-            </Button>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title={t('rec.title')}
+        actions={[{ label: t('rec.add'), icon: 'add', primary: true, shortcut: 'new', onClick: () => openAdd() }]}
+        aside={aside}
+      />
       {adding || editing ? (
         <RecurringModal
           key={editing ? editing.id : `new-${adding}`}
@@ -648,11 +627,14 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
         />
       ) : null}
       {paying ? (
-        <Modal title={t('rec.payTitle')} pending={pending} onClose={closeModals}>
+        <Modal title={t('rec.payTitle')} pending={pending} onClose={closeModals} help={paying.item.amount === null ? <p>{t('rec.payHint')}</p> : undefined}>
           <form id={modalFormId} onSubmit={(event) => void onPay(event)}>
-            <p>{paying.item.name}</p>
-            {paying.dueDate ? <p className="hint">{t('debts.dueOn', { date: formatDate(paying.dueDate, settings.locale) })}</p> : null}
-            {paying.item.amount === null ? <p className="hint">{t('rec.payHint')}</p> : null}
+            <Facts
+              items={[
+                { label: t('common.name'), value: paying.item.name },
+                { label: t('debts.colDue'), value: paying.dueDate ? formatDate(paying.dueDate, settings.locale) : null },
+              ]}
+            />
             <label>
               {t('rec.paidAmount')}
               <input name="amount" required autoFocus={paying.item.amount === null} inputMode="decimal" defaultValue={paying.item.amount ?? ''} autoComplete="off" />
@@ -677,37 +659,44 @@ function RecurringView({ settings, now }: { settings: MoneySettings; now: Today 
       />
       {tab === 'due' && due ? (
         <div className="tx-pane wide pane-stack rec-due" {...tabPanelProps(tab)}>
-          <h2 className="debts-heading">{t('rec.tabDue')}</h2>
           <DuePayments due={due} currency={settings.currency} locale={settings.locale} onPay={payDue} onSkip={setSkipping} />
           <PaidLatePayments currency={settings.currency} locale={settings.locale} reload={reload} />
         </div>
       ) : null}
       {tab === 'items' && items ? (
         <div className="tx-pane wide pane-stack" {...tabPanelProps(tab)}>
-          {sections.map((section) => (
-            <Fragment key={section.tab}>
-              <div className="rec-head">
-                <h2 className="rec-title">{section.title}</h2>
-                <span className="rec-count">{section.summary}</span>
-                <Button variant="outline" size="sm" aria-label={`${t('common.add')}: ${section.title}`} onClick={() => openAdd(section.tab)}>
-                  {t('common.add')}
-                </Button>
-              </div>
-              {section.rows.length === 0 ? (
-                <p className="hint">{section.empty}</p>
-              ) : phone ? (
-                <ul className="card-list">{section.rows.map(tapRow)}</ul>
-              ) : (
+          {sections.length === 0 ? <EmptyState text={t('rec.empty')} action={{ label: t('rec.add'), onClick: () => openAdd() }} /> : null}
+          {sections.map((section) =>
+            phone ? (
+              <ListGroup key={section.tab} heading={section.title} total={section.total}>
+                {section.rows.map(tapRow)}
+              </ListGroup>
+            ) : (
+              <Fragment key={section.tab}>
+                <h2 className="acct-group rec-group">
+                  <span className="rec-group-name">{section.title}</span>
+                  {section.total ? <span className="rec-group-total">{section.total}</span> : null}
+                </h2>
                 <Table
                   className="rec-table"
-                  heads={[t('common.name'), { label: t('tx.amount'), className: 'is-end' }, t('sync.field.nextDue'), t('common.category'), t('sync.field.every'), t('debts.colStatus'), '', '']}
+                  tidy
+                  heads={[
+                    t('common.name'),
+                    { label: t('common.category'), className: 'head-cat' },
+                    { label: t('sync.field.every'), className: 'head-often' },
+                    { label: t('sync.field.nextDue'), className: 'head-next' },
+                    { label: t('debts.colStatus'), className: 'head-state' },
+                    { label: t('tx.amount'), className: 'is-end' },
+                    '',
+                    '',
+                  ]}
                   opens
                 >
                   {section.rows.map(tableRow)}
                 </Table>
-              )}
-            </Fragment>
-          ))}
+              </Fragment>
+            ),
+          )}
         </div>
       ) : null}
     </section>

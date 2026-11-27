@@ -10,7 +10,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
-use super::{accounts, confirmed, debts, documents, read, write, Approval, ApiError, API_VERSION};
+use super::{accounts, confirmed, debts, documents, read, stashes, write, Approval, ApiError, API_VERSION};
 use crate::clock;
 use crate::migrate;
 use crate::tokens::{Grant, Scope};
@@ -372,9 +372,25 @@ pub static ALL: &[Route] = &[
     accounts::ACCOUNTS_UNARCHIVE,
     accounts::ACCOUNTS_DELETE,
     accounts::ACCOUNTS_REORDER,
+    accounts::ACCOUNTS_PAY,
     accounts::TRANSFERS_CREATE,
     accounts::TRANSFERS_UPDATE,
     accounts::TRANSFERS_DELETE,
+    stashes::STASHES_LIST,
+    stashes::STASHES_SHOW,
+    stashes::STASHES_HISTORY,
+    stashes::STASHES_SUMMARY,
+    stashes::STASHES_CREATE,
+    stashes::STASHES_UPDATE,
+    stashes::STASHES_ARCHIVE,
+    stashes::STASHES_UNARCHIVE,
+    stashes::STASHES_DELETE,
+    stashes::STASHES_REORDER,
+    stashes::STASHES_ADD,
+    stashes::STASHES_TAKE,
+    stashes::STASHES_AMEND,
+    stashes::STASHES_ERASE,
+    stashes::STASHES_RETURN,
 ];
 
 #[cfg(test)]

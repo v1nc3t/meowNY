@@ -15,6 +15,10 @@
 //! changed over the months, and the net worth on that day. An account that net worth leaves out is listed and marked, and is not in the
 //! net worth (`docs/accounts-design.md`, sections 10 and 20.3). An account in a currency of its own is listed in that currency, with its code
 //! in front of the numbers, and is turned into the app's currency at its rate for the net worth, which is the only total (section 21.6).
+//!
+//! A report of every category also has a short table of the stashes once there is one: each with its account, what it held on the last day (the
+//! entries dated on or before it) and its target. A stash is in its account's currency, so its numbers carry that code when the account has a
+//! currency of its own, and there is no total (`docs/stash-design.md`, section 10).
 
 // What a report reads is only used by the PDF, which the phone's build leaves out.
 #![cfg_attr(mobile, allow(dead_code))]
@@ -102,6 +106,25 @@ pub struct ReportLabels {
     /// The mark of an account that net worth leaves out. A caller from before the account details may leave it out too.
     #[serde(default = "words::not_in_net_worth")]
     pub not_in_net_worth: String,
+    /// The table of stashes: its title and its two columns of numbers (the column of names and the one of accounts are `name` and `accounts`). A
+    /// caller from before stashes may leave them out, and they are then in English, as the command line writes them.
+    #[serde(default = "words::stashes")]
+    pub stashes: String,
+    #[serde(default = "words::saved")]
+    pub saved: String,
+    #[serde(default = "words::target")]
+    pub target: String,
+    /// The words that name the three kinds of account you owe on, written beside the name of such an account in the table of accounts, and the
+    /// line of what they add up to above the net worth (`docs/loans-deposits-design.md`, section 8). A caller from before loans may leave them
+    /// out, and they are then in English, as the command line writes them.
+    #[serde(default = "words::kind_credit")]
+    pub kind_credit: String,
+    #[serde(default = "words::kind_loan")]
+    pub kind_loan: String,
+    #[serde(default = "words::kind_mortgage")]
+    pub kind_mortgage: String,
+    #[serde(default = "words::debts")]
+    pub debts: String,
 }
 
 /// The English words of the table of accounts.
@@ -124,6 +147,34 @@ mod words {
 
     pub(super) fn not_in_net_worth() -> String {
         "(not in net worth)".to_string()
+    }
+
+    pub(super) fn stashes() -> String {
+        "Stashes".to_string()
+    }
+
+    pub(super) fn saved() -> String {
+        "Saved".to_string()
+    }
+
+    pub(super) fn target() -> String {
+        "Target".to_string()
+    }
+
+    pub(super) fn kind_credit() -> String {
+        "Credit".to_string()
+    }
+
+    pub(super) fn kind_loan() -> String {
+        "Loan".to_string()
+    }
+
+    pub(super) fn kind_mortgage() -> String {
+        "Mortgage".to_string()
+    }
+
+    pub(super) fn debts() -> String {
+        "Debts".to_string()
     }
 }
 
@@ -170,15 +221,32 @@ impl ReportLabels {
             change: words::change(),
             net_worth: words::net_worth(),
             not_in_net_worth: words::not_in_net_worth(),
+            stashes: words::stashes(),
+            saved: words::saved(),
+            target: words::target(),
+            kind_credit: words::kind_credit(),
+            kind_loan: words::kind_loan(),
+            kind_mortgage: words::kind_mortgage(),
+            debts: words::debts(),
         })
     }
 
-    fn all(&self) -> [&String; 23] {
+    /// The word for a kind of account you owe on.
+    fn liability_word(&self, kind: crate::accounts::Kind) -> Option<&str> {
+        match kind {
+            crate::accounts::Kind::Credit => Some(&self.kind_credit),
+            crate::accounts::Kind::Loan => Some(&self.kind_loan),
+            crate::accounts::Kind::Mortgage => Some(&self.kind_mortgage),
+            _ => None,
+        }
+    }
+
+    fn all(&self) -> [&String; 30] {
         [
             &self.title, &self.period, &self.income, &self.expenses, &self.savings, &self.savings_rate, &self.by_month,
             &self.spending, &self.other, &self.budget_vs_actual, &self.no_budget, &self.transactions, &self.date,
             &self.category, &self.name, &self.amount, &self.page, &self.no_data, &self.accounts, &self.balance, &self.change, &self.net_worth,
-            &self.not_in_net_worth,
+            &self.not_in_net_worth, &self.stashes, &self.saved, &self.target, &self.kind_credit, &self.kind_loan, &self.kind_mortgage, &self.debts,
         ]
     }
 }
@@ -255,16 +323,41 @@ pub(crate) struct ReportData {
     pub debts: Option<export::debts::DebtsPart>,
     /// The accounts, in a report of every category once accounts are in use.
     pub accounts: Option<AccountsPart>,
+    /// The stashes, in a report of every category once there is one.
+    pub stashes: Option<Vec<StashLine>>,
 }
+
+/// One account of the table: name, held on the last day, changed over the months, counts in net worth, code of its own currency, and its kind when
+/// it is one you owe on.
+pub(crate) type AccountLine = (String, i64, i64, bool, Option<String>, Option<crate::accounts::Kind>);
 
 /// What a report says about accounts, as of the last day of its months.
 pub(crate) struct AccountsPart {
     /// Each account, the archived ones last: its name, what it held on the last day, what it changed over the months, whether net worth counts
     /// it, and the code of its currency when it has one of its own (the two numbers are then in that currency). An account that net worth leaves
     /// out is listed all the same, with its balance.
-    pub accounts: Vec<(String, i64, i64, bool, Option<String>)>,
-    /// What every account that counts held on the last day plus what friends owed you then, as the dashboard counts it (`accounts::summary`).
+    /// The last of the six is the kind of an account you owe on (`Kind::is_liability`) and none for the others: it is named beside the account.
+    pub accounts: Vec<AccountLine>,
+    /// What the accounts you owe on that count held on the last day, in the app's currency: below 0 while something is owed. None without such
+    /// an account that counts: the report has no line for it then.
+    pub debts: Option<i64>,
+    /// What the accounts that count and are not ones you owe on held on the last day, plus the debts, plus what friends owed you then, as the
+    /// dashboard counts it (`accounts::summary`: `in_accounts + debts + friends`).
     pub net_worth: i64,
+}
+
+/// One stash of a report, as of the last day of its months.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StashLine {
+    pub name: String,
+    /// The name of the account it lives in.
+    pub account: String,
+    /// What the entries dated on or before the last day add up to. It can be below 0 after a sync (`docs/stash-design.md`, section 7.6).
+    pub saved: i64,
+    pub target: Option<i64>,
+    /// The code of the account's currency when it has one of its own: `saved` and `target` are then in that currency.
+    pub currency: Option<String>,
+    pub archived: bool,
 }
 
 fn months_between(from: &str, to: &str) -> Result<Vec<String>, AppError> {
@@ -393,6 +486,8 @@ fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono
 
     // the accounts belong to a report of everything: a limit to some categories would leave out what moved them
     let accounts = if accounts_in_use && sel.categories.is_none() { Some(accounts_part(conn, &first_day.to_string(), &last_day.to_string())?) } else { None };
+    // so do the stashes: a stash sets aside part of an account, and a limited report does not speak of the accounts
+    let stashes = if sel.categories.is_none() { stashes_part(conn, &last_day.to_string())? } else { None };
 
     Ok(ReportData {
         currency: export::currency(conn)?,
@@ -406,7 +501,25 @@ fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono
         transactions,
         debts,
         accounts,
+        stashes,
     })
+}
+
+/// The stashes of a report: each with its account, what it held on `last_day` (the sum of the entries dated on or before it, whatever happened
+/// after) and its target, those that are not archived first by position and then the archived ones, as the screens list them. None when there is
+/// no stash at all, so a report of someone who has none has no table (`docs/stash-design.md`, sections 3 and 10).
+fn stashes_part(conn: &Connection, last_day: &str) -> Result<Option<Vec<StashLine>>, AppError> {
+    let mut statement = conn.prepare(
+        "SELECT s.name, a.name, COALESCE((SELECT SUM(e.amount_minor) FROM stash_entries e WHERE e.stash_id = s.id AND e.entry_date <= ?1), 0),
+                s.target_minor, a.currency, s.archived
+         FROM stashes s JOIN accounts a ON a.id = s.account_id ORDER BY s.archived, s.position, s.id",
+    )?;
+    let lines: Vec<StashLine> = statement
+        .query_map([last_day], |r| {
+            Ok(StashLine { name: r.get(0)?, account: r.get(1)?, saved: r.get(2)?, target: r.get(3)?, currency: r.get(4)?, archived: r.get::<_, i64>(5)? == 1 })
+        })?
+        .collect::<Result<_, _>>()?;
+    Ok(if lines.is_empty() { None } else { Some(lines) })
 }
 
 /// The accounts of a report: what each held on `last_day`, what it changed from `first_day` to `last_day` (both included), and the net worth on
@@ -414,36 +527,46 @@ fn load(conn: &Connection, options: &ReportOptions, now: chrono::DateTime<chrono
 /// sums of the movements of the accounts, as the account screens have them; what friends owed you is read from their statements, as in the
 /// debts of a report. A virtual balance is in none of it. The numbers of an account in a currency of its own are in that currency: the net
 /// worth turns each balance into the app's currency at the account's rate, one account at a time, as `accounts::summary` does, and adds up
-/// nothing in two currencies.
+/// nothing in two currencies. The accounts you owe on are counted apart from the others (`debts`), as `accounts::summary` has them
+/// (`docs/loans-deposits-design.md`, section 6).
 fn accounts_part(conn: &Connection, first_day: &str, last_day: &str) -> Result<AccountsPart, AppError> {
     let mut statement = conn.prepare(
         "SELECT a.name,
                 COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day <= ?1), 0),
                 COALESCE((SELECT SUM(m.delta_minor) FROM account_movements m WHERE m.account_id = a.id AND m.day < ?2), 0),
-                a.include_net_worth, a.currency, a.rate
+                a.include_net_worth, a.currency, a.rate, a.kind
          FROM accounts a ORDER BY a.archived, a.position, a.id",
     )?;
-    // (name, held on the last day, held before the first, counts in net worth, currency of its own, rate)
-    type Read = (String, i64, i64, bool, Option<String>, Option<String>);
+    // (name, held on the last day, held before the first, counts in net worth, currency of its own, rate, kind)
+    type Read = (String, i64, i64, bool, Option<String>, Option<String>, String);
     let rows: Vec<Read> = statement
-        .query_map([last_day, first_day], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)? == 1, r.get(4)?, r.get(5)?)))?
+        .query_map([last_day, first_day], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)? == 1, r.get(4)?, r.get(5)?, r.get(6)?)))?
         .collect::<Result<_, _>>()?;
-    // what the accounts that count hold, in the app's currency; one that does not fit shows the bound it passed
-    let in_accounts: i64 = rows
-        .iter()
-        .filter(|row| row.3)
-        .map(|(_, after, _, _, _, rate)| match rate {
-            None => *after,
-            Some(rate) => crate::accounts::to_main(*after, rate).unwrap_or(crate::money::MAX_MINOR * after.signum()),
-        })
-        .sum();
-    let accounts: Vec<(String, i64, i64, bool, Option<String>)> = rows.into_iter().map(|(name, after, before, counts, currency, _)| (name, after, after - before, counts, currency)).collect();
+    // what the accounts that count hold, in the app's currency, the ones you owe on apart from the others; one that does not fit shows the bound
+    // it passed
+    let (mut in_accounts, mut debts) = (0i64, None::<i64>);
+    let mut lines = Vec::with_capacity(rows.len());
+    for (name, after, before, counts, currency, rate, kind) in rows {
+        let kind = crate::accounts::Kind::from_sql(&kind)?;
+        if counts {
+            let value = match &rate {
+                None => after,
+                Some(rate) => crate::accounts::to_main(after, rate).unwrap_or(crate::money::MAX_MINOR * after.signum()),
+            };
+            if kind.is_liability() {
+                debts = Some(debts.unwrap_or(0) + value);
+            } else {
+                in_accounts += value;
+            }
+        }
+        lines.push((name, after, after - before, counts, currency, kind.is_liability().then_some(kind)));
+    }
     let mut friends = 0;
     for person in crate::debts::people::list(conn, true)? {
         let statement = crate::debts::ledger::statement_in(conn, person.id)?;
         friends += statement.lines.iter().rev().find(|l| l.date.as_str() <= last_day).map_or(0, |l| l.balance_minor);
     }
-    Ok(AccountsPart { net_worth: in_accounts + friends, accounts })
+    Ok(AccountsPart { net_worth: in_accounts + debts.unwrap_or(0) + friends, debts, accounts: lines })
 }
 
 /// The numbers of a report, read from the database. Laying out and writing the PDF (`Report::pdf`)
@@ -577,6 +700,13 @@ mod tests {
             change: s("Change"),
             net_worth: s("Net worth"),
             not_in_net_worth: s("(not in net worth)"),
+            stashes: s("Stashes"),
+            saved: s("Saved"),
+            target: s("Target"),
+            kind_credit: s("Credit"),
+            kind_loan: s("Loan"),
+            kind_mortgage: s("Mortgage"),
+            debts: s("Debts"),
         }
     }
 
@@ -1404,7 +1534,12 @@ mod tests {
         let part = accounts_of(&o, &w, APRIL).expect("accounts are in use");
         assert_eq!(
             part.accounts,
-            [("Main account".to_string(), 571_380, 571_380, true, None), ("Savings".into(), 125_000, 25_000, true, None), ("Credit card".into(), -14_000, 10_000, true, None), ("Old".into(), 0, -5_000, true, None)],
+            [
+                ("Main account".to_string(), 571_380, 571_380, true, None, None),
+                ("Savings".into(), 125_000, 25_000, true, None, None),
+                ("Credit card".into(), -14_000, 10_000, true, None, None),
+                ("Old".into(), 0, -5_000, true, None, None)
+            ],
             "the person's order, the archived one last; the change leaves out what the account held before the first day"
         );
         assert_eq!(part.net_worth, 571_380 + 125_000 - 14_000);
@@ -1412,7 +1547,7 @@ mod tests {
         let summary = accounts::summary(&w.conn, "2026-04-15").unwrap();
         assert_eq!(part.accounts.iter().map(|a| a.1).sum::<i64>().to_string(), summary.in_accounts.replace('.', ""));
         assert_eq!(part.net_worth.to_string(), summary.net_worth.replace('.', ""));
-        for (name, balance, _, _, _) in &part.accounts {
+        for (name, balance, _, _, _, _) in &part.accounts {
             let id: i64 = w.conn.query_row("SELECT id FROM accounts WHERE name = ?1", [name], |r| r.get(0)).unwrap();
             let held = accounts::history(&w.conn, id, "2026", "2026-04-15").unwrap();
             assert_eq!(format!("{}.{:02}", balance / 100, (balance % 100).abs()), held[2].balance, "{name}: the chart has the balance of the end of March");
@@ -1420,8 +1555,8 @@ mod tests {
         // one month: the change is that of the month, and the rest is what was held before it. Main account: two pays, two rents, 356.20 of food
         // in January, 450.00 and 80.00 in February and the 200.00 to Savings; and of those, in February: one pay, one rent, 450.00, 80.00 and 200.00
         let february = accounts_of(&options("2026-02", "2026-02"), &w, APRIL).unwrap();
-        assert_eq!(february.accounts[0], ("Main account".to_string(), 351_380, 157_000, true, None));
-        assert_eq!(february.accounts[1], ("Savings".to_string(), 125_000, 20_000, true, None), "1,000.00 and 50.00 from the old account, and the 200.00 of the month");
+        assert_eq!(february.accounts[0], ("Main account".to_string(), 351_380, 157_000, true, None, None));
+        assert_eq!(february.accounts[1], ("Savings".to_string(), 125_000, 20_000, true, None, None), "1,000.00 and 50.00 from the old account, and the 200.00 of the month");
     }
 
     #[test]
@@ -1588,6 +1723,53 @@ mod tests {
         let o = options("2026-01", "2026-03");
         read_at(&w.conn, &o, at(APRIL)).unwrap().pdf(&o).unwrap();
         assert_eq!(crate::accounts::fixtures::snapshot(&w.conn), before);
+    }
+
+    #[test]
+    fn an_account_you_owe_on_is_named_by_its_kind_and_the_debts_line_comes_before_the_net_worth() {
+        let w = with_accounts();
+        let o = options("2026-01", "2026-03");
+        assert_eq!(accounts_of(&o, &w, APRIL).unwrap().debts, None, "no such account, no line");
+        assert!(!texts(&o, &w).iter().any(|t| t == "Debts"));
+        let owe = |name: &str, kind: AccountKind, owed: &str, counts: bool| {
+            let new = NewAccount { kind, opening_balance: Some(format!("-{owed}")), opening_date: Some("2025-12-01".into()), include_in_net_worth: Some(counts), ..new_account(name) };
+            accounts::create(&w.conn, &new, "2026-04-15").unwrap().id
+        };
+        owe("Flat", AccountKind::Mortgage, "1000.00", true);
+        owe("Car", AccountKind::Loan, "500.00", false);
+        let part = accounts_of(&o, &w, APRIL).unwrap();
+        let kinds: Vec<_> = part.accounts.iter().map(|a| (a.0.as_str(), a.1, a.5)).collect();
+        assert_eq!(
+            kinds,
+            [("Main account", 571_380, None), ("Savings", 125_000, None), ("Credit card", -14_000, None), ("Flat", -100_000, Some(AccountKind::Mortgage)), ("Car", -50_000, Some(AccountKind::Loan)), ("Old", 0, None)],
+            "the credit card, an asset, has no kind to name"
+        );
+        assert_eq!(part.debts, Some(-100_000), "the one that net worth leaves out is in none of it");
+        assert_eq!(part.net_worth, 571_380 + 125_000 - 14_000 - 100_000);
+        let summary = accounts::summary(&w.conn, "2026-04-15").unwrap();
+        assert_eq!((summary.debts.as_str(), summary.net_worth.replace('.', "")), ("-1000.00", part.net_worth.to_string()), "as the dashboard counts it");
+        let page = texts(&o, &w);
+        let place = |needle: &str| page.iter().position(|t| t == needle).unwrap_or_else(|| panic!("{needle:?} is not on the page: {page:?}"));
+        assert!(place("Flat") < place("Mortgage") && place("Mortgage") < place("Car"), "the kind is beside the name: {page:?}");
+        place("Loan (not in net worth)");
+        assert!(place("Credit card") < place("Debts") && place("Debts") < place("Net worth"), "{page:?}");
+        assert!(page.iter().any(|t| t == "-1,000.00") && page.iter().any(|t| t == "5,823.80"), "{page:?}");
+        // the words are the labels', and a caller from before loans leaves them out
+        let mut french = options("2026-01", "2026-03");
+        french.labels.kind_mortgage = "Hypothèque".into();
+        french.labels.debts = "Dettes".into();
+        let page = texts(&french, &w);
+        assert!(["Hypothèque", "Dettes"].iter().all(|word| page.iter().any(|t| t == word)) && !page.iter().any(|t| t == "Mortgage" || t == "Debts"));
+        let old: ReportLabels = serde_json::from_value(serde_json::json!({
+            "title": "t", "period": "p", "income": "i", "expenses": "e", "savings": "s", "savingsRate": "sr", "byMonth": "b", "spending": "w", "other": "o",
+            "budgetVsActual": "v", "noBudget": "n", "transactions": "x", "date": "d", "category": "c", "name": "m", "amount": "a", "page": "g", "noData": "z",
+            "kindLoan": "Prêt",
+        }))
+        .unwrap();
+        assert_eq!((old.kind_credit.as_str(), old.kind_loan.as_str(), old.kind_mortgage.as_str(), old.debts.as_str()), ("Credit", "Prêt", "Mortgage", "Debts"));
+        let mut long = options("2026-01", "2026-03");
+        long.labels.debts = "x".repeat(LABEL_MAX_CHARS + 1);
+        assert_eq!(read(&w.conn, &long).err(), Some(AppError::InvalidInput));
     }
 
     // ---- an account that net worth leaves out (docs/accounts-design.md, section 20.3) ----------------------------------
@@ -1809,7 +1991,7 @@ mod tests {
         let after = texts(&o, &w);
         assert_eq!(after, before, "the page is the same, down to the net worth: no virtual balance, BIC, note or group");
         let part = accounts_of(&o, &w, APRIL).unwrap();
-        assert_eq!(part.accounts[2], ("Credit card".to_string(), -14_000, 10_000, true, None));
+        assert_eq!(part.accounts[2], ("Credit card".to_string(), -14_000, 10_000, true, None, None));
         assert!(!after.iter().any(|t| t.contains("PRIVATE-NOTE") || t.contains("DEUTDEFF") || t.contains("1,000.00") || t == "Cards"));
     }
 
@@ -2021,6 +2203,281 @@ mod tests {
     #[test]
     fn reading_a_report_with_foreign_accounts_changes_nothing() {
         let (w, _) = with_lei();
+        let before = crate::accounts::fixtures::snapshot(&w.conn);
+        let o = options("2026-01", "2026-03");
+        read_at(&w.conn, &o, at(APRIL)).unwrap().pdf(&o).unwrap();
+        assert_eq!(crate::accounts::fixtures::snapshot(&w.conn), before);
+    }
+
+    // ---- stashes in the report (docs/stash-design.md, section 10) -----------------------------------------------------
+
+    use super::layout::{INK, MUTED, OVER_TEXT};
+    use crate::stashes::entries::{self as stash_entries, NewEntry as NewStashEntry, NewTake};
+    use crate::stashes::{self, NewStash};
+
+    fn make_stash(conn: &Connection, name: &str, account: i64, target: Option<&str>) -> i64 {
+        stashes::create(conn, &NewStash { name: name.into(), account_id: account.to_string(), target: target.map(str::to_string), target_date: None, notes: None, kind: None, interest_rate: None, interest_period: None, start_date: None }, "2026-04-15").unwrap().id
+    }
+
+    fn put_in(conn: &Connection, stash: i64, amount: &str, date: &str) {
+        stash_entries::add(conn, stash, &NewStashEntry { amount: amount.into(), date: Some(date.into()), note: None, from_account_id: None }, "2026-04-15").unwrap();
+    }
+
+    fn take_out(conn: &Connection, stash: i64, amount: &str, date: &str) {
+        stash_entries::take(conn, stash, &NewTake { amount: amount.into(), date: Some(date.into()), note: None, to_account_id: None }, "2026-04-15").unwrap();
+    }
+
+    fn stashes_of(o: &ReportOptions, w: &World) -> Option<Vec<StashLine>> {
+        read_at(&w.conn, o, at(APRIL)).unwrap().0.stashes
+    }
+
+    fn line(name: &str, account: &str, saved: i64, target: Option<i64>, currency: Option<&str>, archived: bool) -> StashLine {
+        StashLine { name: name.into(), account: account.into(), saved, target, currency: currency.map(str::to_string), archived }
+    }
+
+    /// `with_lei()` and four stashes, listed in this order after a reorder: New laptop (the main account, no target; 50.00 on 2026-02-01), Wedding
+    /// gift (the account in lei, target 1,000.00; 300.00 lei on 2026-02-01), Holiday in Lisbon (Savings, target 1,200.00; 100.00 on the 20th of
+    /// January, February and March, a take of 40.00 on 2026-03-25 and 100.00 on 2026-04-05, after the months of the reports below) and, archived,
+    /// Bike (Savings, target 450.00; 450.00 on 2026-01-05 and taken out on 2026-02-10).
+    fn with_stashes() -> World {
+        let (w, lei) = with_lei();
+        let savings: i64 = w.conn.query_row("SELECT id FROM accounts WHERE name = 'Savings'", [], |r| r.get(0)).unwrap();
+        let holiday = make_stash(&w.conn, "Holiday in Lisbon", savings, Some("1200.00"));
+        for day in ["2026-01-20", "2026-02-20", "2026-03-20", "2026-04-05"] {
+            put_in(&w.conn, holiday, "100.00", day);
+        }
+        take_out(&w.conn, holiday, "40.00", "2026-03-25");
+        let laptop = make_stash(&w.conn, "New laptop", MAIN_ID, None);
+        put_in(&w.conn, laptop, "50.00", "2026-02-01");
+        let wedding = make_stash(&w.conn, "Wedding gift", lei, Some("1000.00"));
+        put_in(&w.conn, wedding, "300.00", "2026-02-01");
+        let bike = make_stash(&w.conn, "Bike", savings, Some("450.00"));
+        put_in(&w.conn, bike, "450.00", "2026-01-05");
+        take_out(&w.conn, bike, "450.00", "2026-02-10");
+        stashes::archive(&w.conn, bike, "2026-04-15").unwrap();
+        stashes::reorder(&w.conn, &[laptop, wedding, holiday]).unwrap();
+        w
+    }
+
+    #[test]
+    fn the_stashes_table_has_each_stash_with_its_account_what_it_held_on_the_last_day_and_its_target() {
+        let w = with_stashes();
+        let o = options("2026-01", "2026-03");
+        assert_eq!(
+            stashes_of(&o, &w).expect("there are stashes"),
+            [
+                line("New laptop", "Main account", 5_000, None, None, false),
+                line("Wedding gift", "Lei account", 30_000, Some(100_000), Some("RON"), false),
+                line("Holiday in Lisbon", "Savings", 26_000, Some(120_000), None, false),
+                line("Bike", "Savings", 0, Some(45_000), None, true),
+            ],
+            "by position, then the archived one; the 100.00 of April and the take of March: the entries up to the last day (March 31) only"
+        );
+        // the last day is the last day of the last month: later months count later entries, earlier ones fewer
+        let saved = |from: &str, to: &str| -> Vec<i64> { stashes_of(&options(from, to), &w).unwrap().iter().map(|l| l.saved).collect() };
+        assert_eq!(saved("2026-01", "2026-01"), [0, 0, 10_000, 45_000], "January: 100.00 in the holiday, the bike was 450.00 until February");
+        assert_eq!(saved("2026-02", "2026-02"), [5_000, 30_000, 20_000, 0], "the first month does not matter, the last day does");
+        assert_eq!(saved("2026-01", "2026-04"), [5_000, 30_000, 36_000, 0], "the 100.00 of the 5th of April");
+        assert_eq!(saved("2026-01", "2026-12"), saved("2026-01", "2026-04"), "and nothing more after it");
+        // what the screens say it holds today is the same as the report of the day
+        for (shown, in_report) in stashes::list(&w.conn, None, "2026-04-15").unwrap().iter().zip(stashes_of(&options("2026-01", "2026-04"), &w).unwrap()) {
+            assert_eq!((shown.name.as_str(), crate::money::parse_signed_amount(&shown.saved).unwrap()), (in_report.name.as_str(), in_report.saved));
+        }
+    }
+
+    #[test]
+    fn the_stashes_table_is_on_the_page_after_the_accounts_with_the_words_of_the_labels_and_foreign_amounts_carry_their_code() {
+        let w = with_stashes();
+        let o = options("2026-01", "2026-03");
+        let page = texts(&o, &w);
+        let place = |needle: &str| page.iter().position(|t| t == needle).unwrap_or_else(|| panic!("{needle:?} is not on the page: {page:?}"));
+        let title = place("Stashes");
+        assert!(place("Net worth") < title, "after the accounts table");
+        assert!(place("Where the money went") < title);
+        let table: Vec<&str> = page[title..title + 21].iter().map(String::as_str).collect();
+        assert_eq!(
+            table,
+            [
+                "Stashes", "Name", "Accounts", "Saved", "Target",
+                "New laptop", "Main account", "50.00", "\u{2013}",
+                "Wedding gift", "Lei account", "RON 300.00", "RON 1,000.00",
+                "Holiday in Lisbon", "Savings", "260.00", "1,200.00",
+                "Bike", "Savings", "0.00", "450.00",
+            ],
+            "a title, the heads, and a row for each stash: its name, its account, what it held and its target or a dash; an amount in lei has the code"
+        );
+        // the table comes before the long list, as the accounts do
+        let mut listed = options("2026-01", "2026-03");
+        listed.include_transactions = true;
+        let with_list = texts(&listed, &w);
+        assert!(with_list.iter().position(|t| t == "Bike") < with_list.iter().position(|t| t == "Transactions"));
+        // the words are the labels'
+        let mut french = options("2026-01", "2026-03");
+        french.labels.stashes = "Cagnottes".into();
+        french.labels.saved = "Épargné".into();
+        french.labels.target = "Objectif".into();
+        let page = texts(&french, &w);
+        assert!(["Cagnottes", "Épargné", "Objectif"].iter().all(|word| page.iter().any(|t| t == word)), "{page:?}");
+        assert!(!page.iter().any(|t| t == "Stashes" || t == "Saved" || t == "Target"));
+        // and it is in the file
+        assert!(read(&w.conn, &o).unwrap().pdf(&o).unwrap().starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn an_archived_stash_is_in_the_muted_colour_and_one_below_zero_is_in_red() {
+        let w = with_stashes();
+        let colour_of = |o: &ReportOptions, text: &str| -> (u8, u8, u8) {
+            let doc = layout::build(&read_at(&w.conn, o, at(APRIL)).unwrap().0, o).unwrap();
+            doc.pages
+                .iter()
+                .flatten()
+                .find_map(|op| match op {
+                    Op::Text { text: t, color, .. } if t == text => Some(*color),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{text:?} is not on the page"))
+        };
+        let o = options("2026-01", "2026-03");
+        assert_eq!((colour_of(&o, "Holiday in Lisbon"), colour_of(&o, "Bike")), (INK, MUTED));
+        assert_eq!(colour_of(&o, "\u{2013}"), MUTED, "the dash of a stash with no target");
+        // what a sync can leave: more taken out than put in, as of the last day
+        let laptop: i64 = w.conn.query_row("SELECT id FROM stashes WHERE name = 'New laptop'", [], |r| r.get(0)).unwrap();
+        w.conn.execute("INSERT INTO stash_entries (stash_id, amount_minor, entry_date) VALUES (?1, -10000, '2026-03-01')", [laptop]).unwrap();
+        assert_eq!(stashes_of(&o, &w).unwrap()[0].saved, -5_000);
+        assert_eq!(colour_of(&o, "-50.00"), OVER_TEXT);
+    }
+
+    #[test]
+    fn the_table_is_absent_without_a_stash_and_with_a_limit_to_categories_and_present_with_one_account() {
+        // nobody who has made none is shown a table
+        let w = with_accounts();
+        assert!(stashes_of(&options("2026-01", "2026-03"), &w).is_none());
+        let page = texts(&options("2026-01", "2026-03"), &w);
+        for absent in ["Stashes", "Saved", "Target"] {
+            assert!(!page.iter().any(|t| t == absent), "{absent} is in a report of someone with no stash");
+        }
+        // a limit to some categories leaves it out, as it leaves out the accounts
+        let w = with_stashes();
+        let limited = ReportOptions { category_ids: Some(vec![w.rent.to_string()]), ..options("2026-01", "2026-03") };
+        assert!(stashes_of(&limited, &w).is_none());
+        let page = texts(&limited, &w);
+        assert!(!page.iter().any(|t| t == "Stashes" || t == "Holiday in Lisbon" || t == "Bike"), "{page:?}");
+        let every = ReportOptions { category_ids: Some(vec![w.rent.to_string(), w.salary.to_string(), w.food.to_string(), w.therapy.to_string()]), ..options("2026-01", "2026-03") };
+        assert!(stashes_of(&every, &w).is_none(), "naming every category is still a limit, as for the accounts");
+        // with one account the accounts table is absent and the stashes table is not: a stash is a thing of its own
+        let w = world();
+        let solo = make_stash(&w.conn, "Solo", MAIN_ID, Some("100.00"));
+        put_in(&w.conn, solo, "25.00", "2026-02-01");
+        assert!(accounts_of(&options("2026-01", "2026-03"), &w, APRIL).is_none());
+        assert_eq!(stashes_of(&options("2026-01", "2026-03"), &w).unwrap(), [line("Solo", "Main account", 2_500, Some(10_000), None, false)]);
+        let page = texts(&options("2026-01", "2026-03"), &w);
+        assert!(page.iter().any(|t| t == "Stashes") && page.iter().any(|t| t == "25.00") && !page.iter().any(|t| t == "Net worth"), "{page:?}");
+    }
+
+    #[test]
+    fn a_month_with_nothing_but_stashes_shows_them_and_not_the_empty_message() {
+        let w = world();
+        let empty = options("2030-01", "2030-02");
+        assert!(texts(&empty, &w).iter().any(|t| t == "No transactions in this period."), "with no stash it is the empty report");
+        let solo = make_stash(&w.conn, "Solo", MAIN_ID, None);
+        put_in(&w.conn, solo, "25.00", "2026-02-01");
+        let page = texts(&empty, &w);
+        assert!(!page.iter().any(|t| t == "No transactions in this period."), "{page:?}");
+        assert!(page.iter().any(|t| t == "Stashes") && page.iter().any(|t| t == "Solo") && page.iter().any(|t| t == "25.00"), "what it held on the last day, years later: {page:?}");
+        assert!(!page.iter().any(|t| t == "Where the money went"), "and no charts of nothing");
+        assert!(read(&w.conn, &empty).unwrap().pdf(&empty).unwrap().starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn a_long_odd_stash_name_is_cut_to_fit_and_a_long_stashes_table_runs_onto_more_pages() {
+        let w = with_stashes();
+        make_stash(&w.conn, &"W".repeat(48), MAIN_ID, None);
+        make_stash(&w.conn, "寿司 stash", MAIN_ID, None);
+        for i in 0..70 {
+            make_stash(&w.conn, &format!("Pot {i}"), MAIN_ID, Some("10.00"));
+        }
+        let o = options("2026-01", "2026-03");
+        let doc = layout::build(&read_at(&w.conn, &o, at(APRIL)).unwrap().0, &o).unwrap();
+        assert!(doc.pages.len() >= 2, "{} pages", doc.pages.len());
+        let metrics = Metrics::new().unwrap();
+        for op in doc.pages.iter().flatten() {
+            if let Op::Text { x, y, size, bold, text, .. } = op {
+                assert!(x + metrics.width(text, *size, *bold) <= doc.width - 44.0 + 0.5, "{text:?} runs past the margin");
+                assert!(*y < doc.height - 30.0 || *y > doc.height - 40.0, "text over the footer area: {y}");
+            }
+        }
+        let texts = doc.texts();
+        assert!(texts.iter().any(|t| t.starts_with("WWW") && t.ends_with('\u{2026}')), "the name is cut with an ellipsis");
+        assert!(texts.iter().any(|t| t.starts_with("?? stash")), "what the font lacks is a question mark, as everywhere else");
+        assert_eq!(texts.iter().filter(|t| **t == "Stashes").count(), 1);
+        assert!(texts.contains(&"Pot 69"), "every stash is in");
+        assert!(read(&w.conn, &o).unwrap().pdf(&o).unwrap().starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn a_long_name_next_to_a_foreign_amount_stays_inside_the_margins() {
+        let w = with_stashes();
+        w.conn.execute("UPDATE stashes SET name = ?1 WHERE name = 'Wedding gift'", ["W".repeat(48)]).unwrap();
+        w.conn.execute("UPDATE stashes SET target_minor = 99999999999 WHERE target_minor = 100000", []).unwrap();
+        let o = options("2026-01", "2026-03");
+        let doc = layout::build(&read(&w.conn, &o).unwrap().0, &o).unwrap();
+        let metrics = Metrics::new().unwrap();
+        for op in doc.pages.iter().flatten() {
+            if let Op::Text { x, size, bold, text, .. } = op {
+                assert!(x + metrics.width(text, *size, *bold) <= doc.width - 44.0 + 0.5, "{text:?} runs past the margin");
+            }
+        }
+        assert!(doc.texts().iter().any(|t| t.starts_with("RON ") && t.contains("999,999,999.99")), "{:?}", doc.texts());
+    }
+
+    #[test]
+    fn the_words_of_the_stashes_table_default_to_english_and_are_checked_like_the_others() {
+        // a caller from before stashes (the app does not send them yet, and the command line builds its own labels) leaves them out
+        let mut sent = serde_json::json!({
+            "title": "t", "period": "p", "income": "i", "expenses": "e", "savings": "s", "savingsRate": "sr", "byMonth": "b", "spending": "w", "other": "o",
+            "budgetVsActual": "v", "noBudget": "n", "transactions": "x", "date": "d", "category": "c", "name": "m", "amount": "a", "page": "g", "noData": "z",
+        });
+        let old: ReportLabels = serde_json::from_value(sent.clone()).unwrap();
+        assert_eq!((old.stashes.as_str(), old.saved.as_str(), old.target.as_str()), ("Stashes", "Saved", "Target"));
+        let english = ReportLabels::english("2026-01", "2026-01").unwrap();
+        assert_eq!((english.stashes, english.saved, english.target), (old.stashes.clone(), old.saved.clone(), old.target.clone()), "the command line writes them as the default does");
+        // a caller that sends the words of the accounts and not these gets the English ones
+        for (key, word) in [("accounts", "A"), ("balance", "B"), ("change", "C"), ("netWorth", "N"), ("notInNetWorth", "(n)")] {
+            sent[key] = word.into();
+        }
+        let before_stashes: ReportLabels = serde_json::from_value(sent.clone()).unwrap();
+        assert_eq!((before_stashes.stashes.as_str(), before_stashes.saved.as_str(), before_stashes.target.as_str(), before_stashes.accounts.as_str()), ("Stashes", "Saved", "Target", "A"));
+        // sent, they are used; an unknown one is still refused
+        sent["stashes"] = "Cagnottes".into();
+        sent["saved"] = "Épargné".into();
+        sent["target"] = "Objectif".into();
+        let french: ReportLabels = serde_json::from_value(sent.clone()).unwrap();
+        assert_eq!((french.stashes.as_str(), french.saved.as_str(), french.target.as_str()), ("Cagnottes", "Épargné", "Objectif"));
+        sent["colour"] = "red".into();
+        assert!(serde_json::from_value::<ReportLabels>(sent).is_err());
+        // and they are held to the limits of the rest: a report with a bad one is refused and reads nothing
+        let w = with_stashes();
+        for set in [
+            (|l: &mut ReportLabels| l.stashes = "x".repeat(LABEL_MAX_CHARS + 1)) as fn(&mut ReportLabels),
+            |l| l.saved = "a\nb".into(),
+            |l| l.target = "\u{7}".into(),
+            |l| l.target = "x".repeat(LABEL_MAX_CHARS + 1),
+        ] {
+            let mut o = options("2026-01", "2026-03");
+            set(&mut o.labels);
+            let before = crate::accounts::fixtures::snapshot(&w.conn);
+            assert_eq!(read(&w.conn, &o).err(), Some(AppError::InvalidInput));
+            assert_eq!(crate::accounts::fixtures::snapshot(&w.conn), before);
+        }
+        let mut longest = options("2026-01", "2026-03");
+        longest.labels.stashes = "x".repeat(LABEL_MAX_CHARS);
+        assert!(read(&w.conn, &longest).is_ok(), "the limit itself is allowed");
+        assert_eq!(ReportLabels::english("2026-01", "2026-01").unwrap().all().len(), 30);
+    }
+
+    #[test]
+    fn reading_the_report_with_stashes_changes_nothing() {
+        let w = with_stashes();
         let before = crate::accounts::fixtures::snapshot(&w.conn);
         let o = options("2026-01", "2026-03");
         read_at(&w.conn, &o, at(APRIL)).unwrap().pdf(&o).unwrap();

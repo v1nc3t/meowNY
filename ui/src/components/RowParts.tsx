@@ -1,11 +1,14 @@
-import type { ComponentProps, ReactNode } from 'react'
+import type { ComponentProps, ReactNode, Ref } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { closeOnEscape, type OpenRows } from '../hooks/useOpenRow'
 import { useT } from '../i18n/context'
 import { byDay, dayHeading } from '../lib/dayHeading'
 import { toggleRow } from '../lib/toggleRow'
+import Facts, { type FactItem } from './Facts'
+import MoreMenu from './MoreMenu'
 import Icon from './NavIcon'
-import Button from './ui/Button'
-import { cn } from './ui/cn'
+import { Button } from './ui/button'
+import { buttonClass, cn } from './ui/cn'
 
 /**
  * The box of a table on the desktop and its head: one small grey label for each column, `{ label, className }` for one with a class of its
@@ -16,16 +19,25 @@ export function Table({
   className,
   heads,
   opens = false,
+  tidy = false,
+  listRef,
   children,
 }: {
   /** What names this list in the styles (`tx-list`): the columns are its `--cols`. */
   className: string
   heads: (string | { label: string; className: string })[]
   opens?: boolean
+  /**
+   * A list that follows docs/ui-design.md: every cell is one line (a name is cut with an ellipsis, an amount never breaks), and a narrow
+   * list has fewer columns instead of rows of two lines. The list's own styles say which columns go, and when.
+   */
+  tidy?: boolean
+  /** The list's own element, for what listens on it (the `listRef` of `useReorder`). */
+  listRef?: Ref<HTMLUListElement>
   children: ReactNode
 }) {
   return (
-    <ul className={`card-list is-table ${className}`} onClick={opens ? toggleRow : undefined}>
+    <ul ref={listRef} className={cn('card-list is-table', tidy && 'is-tidy', className)} onClick={opens ? toggleRow : undefined}>
       <li className="list-head" aria-hidden="true">
         {heads.map((head, column) =>
           typeof head === 'string' ? (
@@ -94,8 +106,8 @@ export function Row({
 }
 
 /**
- * The phone's list by day: a small heading over the rows of each day. `children` draws one row (a `TapRow`); `today` is a date, for the
- * heading to leave out the year of this one.
+ * The phone's list by day: a flat list (`ListGroup`) with the day as its heading, for each day. `children` draws one row (a `TapRow`);
+ * `today` is a date, for the heading to leave out the year of this one.
  */
 export function DayGroups<T>({
   rows,
@@ -109,15 +121,14 @@ export function DayGroups<T>({
   dateOf: (row: T) => string
   locale: string
   today: string
-  /** Added to the `card-list` of each day. */
+  /** Added to the list of each day. */
   className?: string
   children: (row: T) => ReactNode
 }) {
   return byDay(rows, dateOf).map((day) => (
-    <div key={day.date} className="list-day">
-      <h2>{dayHeading(day.date, locale, today.slice(0, 4))}</h2>
-      <ul className={cn('card-list', className)}>{day.rows.map((row) => children(row))}</ul>
-    </div>
+    <ListGroup key={day.date} heading={dayHeading(day.date, locale, today.slice(0, 4))} className={className}>
+      {day.rows.map((row) => children(row))}
+    </ListGroup>
   ))
 }
 
@@ -133,6 +144,18 @@ export function IconAction({
       <Icon name={icon} className="btn-icon" />
     </Button>
   )
+}
+
+/**
+ * The "more" button at the end of a table row: a menu of everything that can be done with the row's thing (`PanelAction`s, as in the phone's open row),
+ * named for it ("more: Holiday") for a screen reader. A `false` or `null` is left out; with no action there is no button. `rowFocus` makes it the stop of j and
+ * k in its row, for a row whose name is not a link.
+ */
+export function RowMore({ name, actions: given, rowFocus = false }: { name: string; actions: (PanelAction | false | null | undefined)[]; rowFocus?: boolean }) {
+  const t = useT()
+  const navigate = useNavigate()
+  const items = given.filter((action) => !!action).map((action) => ({ label: action.label, icon: action.icon, danger: action.danger, onSelect: () => (action.to ? navigate(action.to) : action.onClick?.()) }))
+  return <MoreMenu items={items} label={`${t('common.more')}: ${name}`} rowFocus={rowFocus} />
 }
 
 /** The chevron that opens a row's panel; where a row has nothing to open it is an empty slot, so the buttons of all rows line up. */
@@ -167,9 +190,91 @@ export function NoteSection({ note }: { note: string }) {
 }
 
 /**
- * A row of a list on the phone: the name and the amount on the first line, what else under them, a chevron on the right. Tapping it
- * opens `children` under it (the details and a labelled button for everything that can be done). A row with no `children` has nothing
- * to open: it is plain, and the room of its chevron is left empty, so its amount ends where the others do.
+ * A flat list on the phone (docs/ui-design.md, section 5): no box round it, a hairline between the rows, and over them a small heading line:
+ * the group's name at the left and what its rows add up to (`total`) at the right. `heading` and `total` may each be left out; with neither
+ * there is no heading line. The rows (`TapRow`) are the children.
+ */
+export function ListGroup({
+  heading,
+  total,
+  className,
+  children,
+}: {
+  heading?: string
+  /** What the group's rows hold together, at the right of the heading line. */
+  total?: ReactNode
+  /** Added to the list. */
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <section className="list-group">
+      {heading || total ? (
+        <h2 className="list-group-head">
+          <span className="list-group-name">{heading}</span>
+          {total ? <span className="list-group-total">{total}</span> : null}
+        </h2>
+      ) : null}
+      <ul className={cn('card-list is-flat', className)}>{children}</ul>
+    </section>
+  )
+}
+
+/**
+ * A name with one mark after it (an icon, a short badge): the name is cut with an ellipsis when it is too long, the mark always stays whole.
+ * With no mark it is the name alone.
+ */
+export function NameMark({ children, mark }: { children: ReactNode; mark?: ReactNode }) {
+  return mark ? (
+    <span className="name-mark">
+      <span className="name-text">{children}</span>
+      {mark}
+    </span>
+  ) : (
+    children
+  )
+}
+
+/** One button of the open panel of a phone row (see `PanelActions`): a button that runs `onClick`, or a link to `to`. */
+export type PanelAction = { label: string; icon: string; onClick?: () => void; to?: string; danger?: boolean }
+
+/**
+ * The buttons of an open phone row, in one row, under its facts: an icon with a short word each; with more than three, only the icons (each
+ * keeps its label for screen readers). Every action the row has is here, so nothing is out of reach on a phone. A `false` or `null` in the
+ * list is left out (`canEdit && { … }`).
+ */
+export function PanelActions({ actions: given }: { actions: (PanelAction | false | null | undefined)[] }) {
+  const actions = given.filter((action) => !!action)
+  const words = actions.length <= 3
+  return (
+    <div className={cn('row-panel-actions', !words && 'is-icons')}>
+      {actions.map((action) => {
+        const content = (
+          <>
+            <Icon name={action.icon} className="btn-icon" />
+            {words ? action.label : null}
+          </>
+        )
+        const className = cn(action.to ? buttonClass('outline', words ? 'default' : 'icon') : undefined, action.danger && 'row-danger')
+        return action.to ? (
+          <Link key={action.label} to={action.to} className={className} aria-label={words ? undefined : action.label}>
+            {content}
+          </Link>
+        ) : (
+          <Button key={action.label} variant="outline" size={words ? 'default' : 'icon'} className={cn(action.danger && 'row-danger')} aria-label={words ? undefined : action.label} onClick={action.onClick}>
+            {content}
+          </Button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * A row of a list on the phone: the name and the amount on the first line and a chevron on the right, and under the name, at most, one
+ * short grey value (`meta`). Tapping it opens its panel: `facts` (label and value pairs), then `children` (the buttons: see
+ * `PanelActions`). A row with no `facts` and no `children` has nothing to open: it is plain, and the room of its chevron is left empty,
+ * so its amount ends where the others do.
  */
 export function TapRow({
   id,
@@ -179,7 +284,9 @@ export function TapRow({
   name,
   amount,
   action,
-  sub,
+  meta,
+  facts,
+  className,
   children,
   ...rest
 }: {
@@ -189,31 +296,37 @@ export function TapRow({
   item?: string
   open?: boolean
   onToggle?: () => void
+  /** One line, cut with an ellipsis; at most one mark after it (an icon, a short badge). */
   name: ReactNode
+  /** Right aligned, in tabular figures, as wide as the amounts of the other rows: they end in a line. */
   amount?: ReactNode
-  /** A button at the end of the first line, where the amount would be: only for a row with nothing to open (no `children`), as a button cannot sit in the one that opens. */
+  /** A button at the end of the first line, where the amount would be: only for a row with nothing to open (no `facts`, no `children`), as a button cannot sit in the one that opens. */
   action?: ReactNode
-  /** One small grey line: a few short parts (spans), each after a dot. If it is too long for the row, the first part is cut with an ellipsis, so the last stays whole. A part with the class `is-line` is a line of its own. */
-  sub?: ReactNode
+  /** The one fact you scan for in this list, in small grey under the name (a category, a next due date, an account's type). One short value, never several joined by dots. */
+  meta?: ReactNode
+  /** What the open row shows first: label and value pairs, then `children`. */
+  facts?: FactItem[]
+  /** The buttons of the open row, after its facts. */
   children?: ReactNode
 } & Omit<ComponentProps<'li'>, 'children' | 'id' | 'onToggle'>) {
+  const details = Boolean(children) || (facts !== undefined && facts.length > 0)
   const inside = (
     <>
       <span className="cell-name">
         <span className="card-name">{name}</span>
       </span>
       {amount}
-      {sub ? <span className="cell-sub">{sub}</span> : null}
+      {meta ? <span className="cell-meta">{meta}</span> : null}
     </>
   )
   return (
     <li
-      className={open ? 'card-item tap-row is-open' : 'card-item tap-row'}
+      className={cn('card-item tap-row', open && 'is-open', className)}
       data-item={item}
       onKeyDown={onToggle ? (event) => closeOnEscape(event, open, onToggle) : undefined}
       {...rest}
     >
-      {children ? (
+      {details ? (
         <button type="button" className="row-toggle" aria-expanded={open} aria-controls={open ? id : undefined} onClick={onToggle}>
           {inside}
           <Icon name="chevron-down" className="chevron" />
@@ -224,8 +337,9 @@ export function TapRow({
           {action ?? <span className="chevron" />}
         </div>
       )}
-      {open && children ? (
+      {open && details ? (
         <div className="row-panel tx-detail" id={id}>
+          {facts ? <Facts items={facts} /> : null}
           {children}
         </div>
       ) : null}

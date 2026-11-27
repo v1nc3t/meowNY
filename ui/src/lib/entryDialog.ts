@@ -10,7 +10,7 @@ import { draftOfBill, isShared, NOT_SPLIT, type SplitState } from './split'
 // What the add dialog decides, apart from drawing: its tabs, what a change of tab keeps, the categories and the account of each tab, and the
 // check of a transaction before it is sent (docs/accounts-design.md, sections 20.1 and 20.7).
 
-/** An entry is an expense, an income or a transfer (Firefly's withdrawal, deposit and transfer). */
+/** An entry is an expense, an income or a transfer. */
 export type EntryTab = 'EXPENSE' | 'INCOME' | 'TRANSFER'
 
 /** The tabs in their order: `Alt+1`, `Alt+2` and `Alt+3` choose them. */

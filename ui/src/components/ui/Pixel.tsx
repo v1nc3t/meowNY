@@ -1,4 +1,4 @@
-import Button from './Button'
+import { Button } from './button'
 
 /**
  * The pixel art of the app: the logo (the coin cat of scripts/logo.py, served as /favicon.svg), a dozing cat for a list with nothing
@@ -6,9 +6,10 @@ import Button from './Button'
  * shown at whole multiples of the grid.
  */
 
-/** The logo. `size` in CSS pixels, a multiple of 16 so every pixel stays square. */
+/** The logo. `size` is its side in 16ths of a rem (32 is 2rem), a multiple of 16 so every pixel of the picture is a whole 16th of a rem. */
 export function Logo({ size = 32, className }: { size?: number; className?: string }) {
-  return <img src="/favicon.svg" width={size} height={size} alt="" className={className ? `pixel-logo ${className}` : 'pixel-logo'} />
+  const side = `${size / 16}rem`
+  return <img src="/favicon.svg" style={{ width: side, height: side }} alt="" className={className ? `pixel-logo ${className}` : 'pixel-logo'} />
 }
 
 // K is the text colour (muted where it is used), Y the gold of the logo, G the green of the app.
@@ -50,7 +51,7 @@ function paths(rows: readonly string[]) {
 const CAT_PATHS = paths(DOZING_CAT)
 
 /** A list with nothing in it: the dozing cat over the hint, and a button for the first thing to do when there is one. */
-export function EmptyState({ text, action }: { text: string; action?: { label: string; onClick: () => void } }) {
+export function EmptyState({ title, text, action }: { title?: string; text: string; action?: { label: string; onClick: () => void } }) {
   const w = DOZING_CAT[0].length
   const h = DOZING_CAT.length
   return (
@@ -58,6 +59,7 @@ export function EmptyState({ text, action }: { text: string; action?: { label: s
       <svg viewBox={`0 0 ${w} ${h}`} width={w * 4} height={h * 4} shapeRendering="crispEdges" aria-hidden="true">
         {CAT_PATHS}
       </svg>
+      {title ? <h2 className="empty-title">{title}</h2> : null}
       <p className="hint">{text}</p>
       {action ? <Button onClick={action.onClick}>{action.label}</Button> : null}
     </div>
@@ -166,14 +168,13 @@ const PICTURE_PATHS = Object.fromEntries(Object.entries(PICTURES).map(([name, ro
   ReturnType<typeof paths>
 >
 
-/** One of the pictures of what the app does. `scale` is how many CSS pixels one pixel of the grid takes (a whole number). */
+/** One of the pictures of what the app does. `scale` is how many 16ths of a rem one pixel of the grid takes (a whole number). */
 export function Illustration({ name, scale = 3, className }: { name: PictureName; scale?: number; className?: string }) {
   return (
     <svg
       className={className ? `pixel-art ${className}` : 'pixel-art'}
       viewBox="0 0 16 16"
-      width={16 * scale}
-      height={16 * scale}
+      style={{ width: `${scale}rem`, height: `${scale}rem` }}
       shapeRendering="crispEdges"
       aria-hidden="true"
     >

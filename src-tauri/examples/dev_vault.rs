@@ -2,6 +2,8 @@
 //!
 //!   cargo run --example dev_vault -- <data-dir>
 //!   MEOWNY_DEV_PASSPHRASE='a passphrase' cargo run --example dev_vault -- <data-dir>
+//!   MEOWNY_DATA_DIR=/tmp/meowny-demo cargo run --example dev_vault   # a folder of its own, the keychain untouched;
+//!   MEOWNY_DATA_DIR=/tmp/meowny-demo npm run tauri dev                # then the app opens that folder
 //!
 //! `<data-dir>` is the folder the app keeps its data file in (on Linux `~/.local/share/org.meowny.app`).
 //! It does what "delete all my data" does (the data file, the key in the OS keychain, the settings file and any
@@ -21,8 +23,11 @@ use meowny_lib::keys::{FileStore, KeychainStore, SecretStore};
 use meowny_lib::vault::{AppError, Policy, Settings, Vault, VaultStatus};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(dir) = std::env::args().nth(1).map(PathBuf::from) else {
-        eprintln!("usage: dev_vault <data-dir>");
+    // `MEOWNY_DATA_DIR` (the same variable a debug build of the app reads) is a folder of its own: no folder argument, and the
+    // secret in a file there instead of the OS keychain, so the real data and its key are never touched.
+    let own = meowny_lib::dev_data_dir();
+    let Some(dir) = own.clone().or_else(|| std::env::args().nth(1).map(PathBuf::from)) else {
+        eprintln!("usage: dev_vault <data-dir>   or   MEOWNY_DATA_DIR=<folder> dev_vault");
         std::process::exit(2);
     };
     let passphrase = std::env::var("MEOWNY_DEV_PASSPHRASE").ok().filter(|p| !p.is_empty());
@@ -30,7 +35,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if phone && passphrase.is_none() {
         return Err("the phone's vault needs a passphrase: set MEOWNY_DEV_PASSPHRASE".into());
     }
-    let vault = if phone {
+    let vault = if own.is_some() && !phone {
+        std::fs::create_dir_all(&dir)?;
+        Vault::with_policy(dir.clone(), Box::new(FileStore::new(dir.join("dev.secret"))), Policy::DESKTOP)
+    } else if phone {
         // The same file and policy as the app's phone vault (`phone_vault` in lib.rs).
         Vault::with_policy(dir.clone(), Box::new(FileStore::new(dir.join("phone.secret"))), Policy::PHONE)
     } else {
@@ -56,6 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     })?;
     seeded?;
+    meowny_lib::seed::seed_documents(&vault)?;
     if let Some(prefs) = prefs {
         vault.save_lock_prefs(&prefs)?;
     }

@@ -1,27 +1,15 @@
 import { NavLink, Link } from 'react-router-dom'
-import { preloadPage, type PageName } from '../pages'
-import { vault } from '../vault/api'
+import { preloadPage } from '../pages'
 import { useProfile } from '../hooks/profile'
 import Icon from './NavIcon'
 import { Logo } from './ui/Pixel'
 import { useT } from '../i18n/context'
 import { runShortcut } from '../keys/registry'
-import type { ShortcutId } from '../keys/shortcuts'
+import { lockApp } from '../lib/lock'
+import { SIDEBAR_ITEMS } from '../lib/navItems'
 import { tip } from '../keys/tip'
 
-
-const items = [
-  { to: '/app/dashboard', label: 'nav.dashboard', icon: 'dashboard', page: 'dashboard', shortcut: 'goDashboard' },
-  { to: '/app/transactions', label: 'nav.transactions', icon: 'transactions', page: 'transactions', shortcut: 'goTransactions' },
-  { to: '/app/accounts', label: 'nav.accounts', icon: 'accounts', page: 'accounts', shortcut: 'goAccounts' },
-  { to: '/app/categories', label: 'nav.categories', icon: 'categories', page: 'categories', shortcut: 'goCategories' },
-  { to: '/app/recurring', label: 'nav.recurring', icon: 'recurring', page: 'recurring', shortcut: 'goRecurring' },
-  { to: '/app/debts', label: 'nav.debts', icon: 'debts', page: 'debts', shortcut: 'goDebts' },
-  { to: '/app/documents', label: 'nav.documents', icon: 'documents', page: 'documents', shortcut: 'goDocuments' },
-  { to: '/app/export', label: 'nav.export', icon: 'export', page: 'export', shortcut: 'goExport' },
-  { to: '/app/settings', label: 'nav.settings', icon: 'settings', page: 'settings', shortcut: 'goSettings' },
-] as const satisfies readonly { to: string; label: string; icon: string; page: PageName; shortcut: ShortcutId }[]
-
+/** The desktop's sidebar. A phone has none: its pages are in the menu behind the logo (`PhoneMenu`). */
 export default function AppSidebar({
   collapsed,
   onToggle,
@@ -31,56 +19,7 @@ export default function AppSidebar({
 }) {
   const t = useT()
   const phone = useProfile() === 'phone'
-  const lock = () => void vault.lock().then(() => window.location.reload(), () => undefined)
-  if (phone) {
-    // A phone has a bar at the top: the name on the left, and accounts, documents, sync, settings and lock on the right (the other pages are tabs).
-    return (
-      <header className="phone-header">
-        {/* the name has a label of its own: the word goes when the bar is too narrow for it (phone.css) */}
-        <Link to="/app/dashboard" className="app-logo" aria-label="meowny">
-          <Logo />
-          <span className="app-logo-word">meowny</span>
-        </Link>
-        <nav className="phone-actions" aria-label={t('nav.settings')}>
-          <NavLink
-            to="/app/accounts"
-            aria-label={t('nav.accounts')}
-            onPointerDown={() => preloadPage('accounts')}
-            className={({ isActive }) => (isActive ? 'phone-action active' : 'phone-action')}
-          >
-            <Icon name="accounts" className="tab-icon" />
-          </NavLink>
-          <NavLink
-            to="/app/documents"
-            aria-label={t('nav.documents')}
-            onPointerDown={() => preloadPage('documents')}
-            className={({ isActive }) => (isActive ? 'phone-action active' : 'phone-action')}
-          >
-            <Icon name="documents" className="tab-icon" />
-          </NavLink>
-          <NavLink
-            to="/app/sync"
-            aria-label={t('nav.sync')}
-            onPointerDown={() => preloadPage('sync')}
-            className={({ isActive }) => (isActive ? 'phone-action active' : 'phone-action')}
-          >
-            <Icon name="sync" className="tab-icon" />
-          </NavLink>
-          <NavLink
-            to="/app/settings"
-            aria-label={t('nav.settings')}
-            onPointerDown={() => preloadPage('settings')}
-            className={({ isActive }) => (isActive ? 'phone-action active' : 'phone-action')}
-          >
-            <Icon name="settings" className="tab-icon" />
-          </NavLink>
-          <button type="button" className="phone-action" aria-label={t('nav.lockTitle')} onClick={lock}>
-            <Icon name="exit" className="tab-icon" />
-          </button>
-        </nav>
-      </header>
-    )
-  }
+  if (phone) return null
   return (
     <aside className="app-sidebar">
       <div className="sidebar-header">
@@ -102,7 +41,7 @@ export default function AppSidebar({
       </div>
 
       <nav className="sidebar-nav">
-        {items.map((item) => (
+        {SIDEBAR_ITEMS.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -119,7 +58,7 @@ export default function AppSidebar({
       </nav>
 
       <div className="sidebar-footer">
-        <button type="button" className="exit-btn" aria-label={t('nav.lockTitle')} {...tip('lock')} onClick={lock}>
+        <button type="button" className="exit-btn" aria-label={t('nav.lockTitle')} {...tip('lock')} onClick={lockApp}>
           <Icon name="exit" />
           <span className="nav-label">{t('nav.lock')}</span>
         </button>

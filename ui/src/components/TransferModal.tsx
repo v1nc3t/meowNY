@@ -17,16 +17,17 @@ import {
   type DialogState,
   type TransferFields,
 } from '../lib/accountDialogs'
-import { accountOptions, rememberAccount } from '../lib/accountsView'
+import { rememberAccount, transferOptions } from '../lib/accountsView'
 import Icon from './NavIcon'
 import Modal, { modalFormId } from './Modal'
 import TransferInputs from './TransferInputs'
-import Button from './ui/Button'
+import { Button } from './ui/button'
 
 /**
  * Money moved from one of the person's accounts to another: a new transfer, or one being changed. Choosing in one list the account the
  * other holds swaps the two, so the same account on both sides cannot be made. A side of an old transfer that is archived by now shows
- * as "name (archived)" and stays unless it is changed. The states are those of docs/accounts-design.md, section 5.4.
+ * as "name (archived)" and stays unless it is changed. Every account that is not archived is offered, a credit, loan or mortgage too: that is how
+ * money reaches one by hand. The states are those of docs/accounts-design.md, section 5.4.
  */
 export default function TransferModal({
   transfer,
@@ -59,7 +60,7 @@ export default function TransferModal({
     setFields((current) => (arrives === undefined ? { ...current, ...rest } : { ...withArrival(current, arrives), ...rest }))
   const choose = (side: 'from' | 'to', id: string) => setFields((current) => ({ ...current, ...chooseSide(current, side, id) }))
   // the accounts to choose from, and the sides the transfer was saved with if they are archived by now
-  const options = accountOptions(accounts, t, [transfer?.fromAccountId, transfer?.toAccountId])
+  const options = transferOptions(accounts, t, [transfer?.fromAccountId, transfer?.toAccountId])
   const currencies = transferCurrencies(accounts, fields)
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -84,7 +85,20 @@ export default function TransferModal({
   }
 
   return (
-    <Modal title={transfer ? t('transfers.editTitle') : t('transfers.addTitle')} pending={state === 'SAVING'} onClose={onClose}>
+    <Modal
+      title={transfer ? t('transfers.editTitle') : t('transfers.addTitle')}
+      pending={state === 'SAVING'}
+      onClose={onClose}
+      // delete is at the left of the row of buttons, away from the two answers
+      leading={
+        transfer && onDelete ? (
+          <Button variant="outline" className="row-danger" onClick={onDelete}>
+            <Icon name="trash" className="btn-icon" />
+            {t('common.delete')}
+          </Button>
+        ) : undefined
+      }
+    >
       <form id={modalFormId} onSubmit={(event) => void onSubmit(event)}>
         <TransferInputs
           from={fields.from}
@@ -99,12 +113,6 @@ export default function TransferModal({
           onChoose={choose}
           onChange={set}
         />
-        {transfer && onDelete ? (
-          <Button variant="outline" size="sm" className="row-danger" onClick={onDelete}>
-            <Icon name="trash" className="btn-icon" />
-            {t('common.delete')}
-          </Button>
-        ) : null}
       </form>
     </Modal>
   )
