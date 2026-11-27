@@ -47,6 +47,8 @@ meowNY is a local-first budget app for your computer and your phone. It is a [Ta
 
 iPhone and Mac are not available yet: see [support](#support).
 
+**Self-hosted:** to use meowNY in a browser from a machine you run, start it with Docker (`docker compose up -d`). It is the same app and the same encrypted data, for one person: [self-hosting](docs/self-host.md).
+
 **Pre-release.** Tried on a real Android phone, not yet on a real iPhone. The desktop installers are not signed yet. Nobody outside the project has reviewed the sync protocol; that review comes before 1.0.
 
 ## Run from source
@@ -67,6 +69,7 @@ What is stored where, and what ever leaves the device: [privacy](https://v1nc3t.
 
 ## Documentation
 
+- [Self-hosting](docs/self-host.md): running `meowny-server` in Docker.
 - [Website](https://v1nc3t.github.io/meowNY/): the guide, the command line reference (also as [Markdown](https://v1nc3t.github.io/meowNY/CLI.md)) and the develop page.
 - Design notes, for how it is built and how the screens are laid out: [sync](docs/sync-design.md), [documents](docs/documents-design.md), [debts](docs/debts-design.md), [accounts](docs/accounts-design.md), [stashes](docs/stash-design.md), [loans and deposits](docs/loans-deposits-design.md), [UI](docs/ui-design.md).
 

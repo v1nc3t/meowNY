@@ -62,6 +62,16 @@ const SECTIONS = [
           'Open **meowNY**, then pair it with your computer ([your phone](#phone)).',
         ],
       },
+      { t: 'p', text: '**Your own server** (Docker), to use meowNY in a browser' },
+      {
+        t: 'ol',
+        items: [
+          `Get the source: \`git clone ${REPO}.git\` and \`cd meowNY\`.`,
+          'Start it: `docker compose up -d`.',
+          'Open `http://127.0.0.1:8080` and set it up. The passphrase is required: it signs you in from any browser.',
+        ],
+      },
+      { t: 'p', text: `To reach it from other devices, put it behind HTTPS. What a server leaves out (the phone sync, the command line, notifications): [self-hosting](${doc('self-host.md')}).` },
       { t: 'note', kind: 'warn', text: `**iPhone and Mac: not available yet.** The App Store and Google Play need paid developer accounts. [Support meowNY on Ko-fi](${SPONSOR}) to help.` },
       { t: 'p', text: 'Check a download with `sha256sum -c SHA256SUMS --ignore-missing`. To build meowNY yourself: [develop](develop.html).' },
       { t: 'h3', id: 'updates', text: 'Update' },
