@@ -521,8 +521,8 @@ fn tour(app: &App) -> (Map<String, Value>, Vec<Value>) {
     t.example("people unarchive", write, &format!("meowny people unarchive {bob}"), &["people", "unarchive", &bob], false, true, None);
     t.example("ledger delete", write, &format!("meowny ledger delete {loan} --yes"), &["ledger", "delete", &loan, "--yes"], true, false, None);
     t.example("transactions delete", write, &format!("meowny transactions delete {bread} --yes"), &["transactions", "delete", &bread, "--yes"], true, false, None);
-    let listed = t.capture(read, &Tour::strings(&["categories", "list", "--type", "expense", "--json"]), None, &[]);
-    let listed: Value = serde_json::from_str(listed["stdout"].as_str().unwrap()).unwrap();
+    // whole: an example keeps only the first 700 characters, and the list of categories is longer
+    let listed = t.data(read, &["categories", "list", "--type", "expense"]);
     let order: Vec<&str> = listed.as_array().unwrap().iter().map(|c| c["id"].as_str().unwrap()).filter(|id| *id != pets).collect();
     let ids = format!("{pets},{}", order.join(","));
     // Accounts: bring the card to the top of the list, put it away and back, and delete an account that has nothing in it.
