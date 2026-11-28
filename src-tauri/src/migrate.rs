@@ -85,6 +85,14 @@ fn apply(conn: &mut Connection, migrations: &[&str]) -> Result<(), MigrateError>
     // of the table it drops, so foreign keys are off while a migration runs, as SQLite's own guide says. The
     // switch only works outside a transaction. Before the commit they are checked, so a migration that
     // leaves a dangling row is rolled back.
+    #[cfg(test)]
+    if current == 0 && template::load(conn, migrations)? {
+        return Ok(());
+    }
+    steps(conn, migrations, current)
+}
+
+fn steps(conn: &mut Connection, migrations: &[&str], current: i64) -> Result<(), MigrateError> {
     let foreign_keys: bool = conn.query_row("PRAGMA foreign_keys", [], |r| r.get(0))?;
     for (index, sql) in migrations.iter().enumerate().skip(current as usize) {
         if foreign_keys {
@@ -97,6 +105,57 @@ fn apply(conn: &mut Connection, migrations: &[&str]) -> Result<(), MigrateError>
         applied?;
     }
     Ok(())
+}
+
+/// Tests make thousands of new databases in memory, and migrating each one took most of their time (an hour on CI's macOS
+/// runner). In a test build, the first new database of each version is migrated for real and kept as bytes; the next ones are
+/// copies of it, given a device id and a clock of their own as migration 0008 would. A file, or a database with anything in it,
+/// is migrated for real.
+#[cfg(test)]
+mod template {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    use rusqlite::{Connection, MAIN_DB};
+
+    use super::{steps, MigrateError, MIGRATIONS};
+
+    static KEPT: OnceLock<Mutex<HashMap<usize, Vec<u8>>>> = OnceLock::new();
+
+    /// True when `conn` now holds a copy of the database migrated up to `migrations.len()`.
+    pub(super) fn load(conn: &mut Connection, migrations: &[&str]) -> Result<bool, MigrateError> {
+        // Only the app's own list: a test's own migrations are applied as they are.
+        if migrations.len() > MIGRATIONS.len() || migrations != &MIGRATIONS[..migrations.len()] || !matches!(conn.path(), None | Some("")) {
+            return Ok(false);
+        }
+        let empty: bool = conn.query_row("SELECT NOT EXISTS (SELECT 1 FROM sqlite_master)", [], |r| r.get(0))?;
+        if !empty {
+            return Ok(false);
+        }
+        let version = migrations.len();
+        let kept = KEPT.get_or_init(Default::default).lock().unwrap().get(&version).cloned();
+        let bytes = match kept {
+            Some(bytes) => bytes,
+            None => {
+                let mut fresh = Connection::open_in_memory()?;
+                steps(&mut fresh, migrations, 0)?;
+                let bytes = fresh.serialize(MAIN_DB)?.to_vec();
+                KEPT.get_or_init(Default::default).lock().unwrap().insert(version, bytes.clone());
+                bytes
+            }
+        };
+        let size = bytes.len();
+        conn.deserialize_read_exact(MAIN_DB, bytes.as_slice(), size, false)?;
+        // What migration 0008 makes for each database: a device id of its own, and its clock at the time it was made.
+        let has_clock: bool = conn.query_row("SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE name = 'sync_clock')", [], |r| r.get(0))?;
+        if has_clock {
+            conn.execute_batch(
+                "UPDATE sync_clock SET device_id = lower(hex(randomblob(16))), \
+                 last_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000 + CAST(substr(strftime('%f', 'now'), 4) AS INTEGER)",
+            )?;
+        }
+        Ok(true)
+    }
 }
 
 fn apply_one(conn: &mut Connection, sql: &str, version: i64) -> Result<(), MigrateError> {
@@ -132,6 +191,37 @@ mod tests {
         for table in ["settings", "categories", "budgets", "recurring_transactions", "transactions", "audit_log"] {
             assert!(table_exists(&conn, table), "missing table {table}");
         }
+    }
+
+    /// Every database of a test is a copy of one migrated database (`template`): it must be what migrating gives, with a device
+    /// id and a clock of its own, or two test devices would look like one.
+    #[test]
+    fn a_copied_database_is_the_migrated_one_with_its_own_device() {
+        let schema = |conn: &Connection| -> Vec<String> {
+            let mut stmt = conn.prepare("SELECT type || ' ' || name || ' ' || COALESCE(sql, '') FROM sqlite_master ORDER BY type, name").unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap().map(Result::unwrap).collect()
+        };
+        let device = |conn: &Connection| -> String { conn.query_row("SELECT device_id FROM sync_clock", [], |r| r.get(0)).unwrap() };
+
+        let mut migrated = Connection::open_in_memory().unwrap();
+        steps(&mut migrated, MIGRATIONS, 0).unwrap();
+        let (mut a, mut b) = (Connection::open_in_memory().unwrap(), Connection::open_in_memory().unwrap());
+        run(&mut a).unwrap();
+        run(&mut b).unwrap();
+
+        for copy in [&a, &b] {
+            assert_eq!(schema(copy), schema(&migrated));
+            assert_eq!(version(copy), MIGRATIONS.len() as i64);
+            assert_eq!(device(copy).len(), 32);
+        }
+        assert_ne!(device(&a), device(&b));
+        assert_ne!(device(&a), device(&migrated));
+
+        // and one stopped at an older version is that version
+        let mut old = Connection::open_in_memory().unwrap();
+        run_up_to(&mut old, 7).unwrap();
+        assert_eq!(version(&old), 7);
+        assert!(!table_exists(&old, "sync_clock"));
     }
 
     #[test]

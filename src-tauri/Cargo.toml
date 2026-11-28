@@ -32,6 +32,8 @@ zeroize = { version = "1.8.2", features = ["derive"] }
 
 [dev-dependencies]
 flate2 = "1"
+# Tests copy one migrated database instead of migrating each new one (migrate.rs, `template`).
+rusqlite = { version = "0.42.0", features = ["serialize"] }
 tempfile = "3.27.0"
 # The mock runtime, to call the commands through the same message layer the page uses.
 tauri = { version = "2", features = ["test"] }
