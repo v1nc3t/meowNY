@@ -370,13 +370,13 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "incomeTotal: 6480.00\ntotal: 1365.98\nunknown: 5\n\npayments\nname               amount  category       categoryId  daysOverdue  dueDate     income  recurringId\nYoga class          32.00  Entertainment           8          114  2026-08-05  false            11\nMobile top-up           -  Utilities              10           85  2026-09-03  false            12\nYoga class          32.00  Entertainment           8           83  2026-09-05  false            11\nMobile top-up           -  Utilities              10           55  2026-10-03  false            12\nYoga class          32.00  Entertainment           8           53  2026-10-05  false            11\nCleaning service    30.00  Utilities             …",
+        "stdout": "incomeTotal: 6480.00\ntotal: 1365.98\nunknown: 5\n\npayments\nname               amount  category       categoryId  daysOverdue  dueDate     income  recurringId\nYoga class          32.00  Entertainment           8          115  2026-08-05  false            11\nMobile top-up           -  Utilities              10           86  2026-09-03  false            12\nYoga class          32.00  Entertainment           8           84  2026-09-05  false            11\nMobile top-up           -  Utilities              10           56  2026-10-03  false            12\nYoga class          32.00  Entertainment           8           54  2026-10-05  false            11\nCleaning service    30.00  Utilities             …",
         "truncated": true
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"incomeTotal\":\"6480.00\",\"payments\":[{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":114,\"dueDate\":\"2026-08-05\",\"income\":false,\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":85,\"dueDate\":\"2026-09-03\",\"income\":false,\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":83,\"dueDate\":\"2026-09-05\",\"income\":false,\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":55,\"dueDate\":\"2026-10-03\",\"income\":false,\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainm…",
+        "stdout": "{\"incomeTotal\":\"6480.00\",\"payments\":[{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":115,\"dueDate\":\"2026-08-05\",\"income\":false,\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":86,\"dueDate\":\"2026-09-03\",\"income\":false,\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainment\",\"categoryId\":\"8\",\"daysOverdue\":84,\"dueDate\":\"2026-09-05\",\"income\":false,\"name\":\"Yoga class\",\"recurringId\":\"11\"},{\"amount\":null,\"category\":\"Utilities\",\"categoryId\":\"10\",\"daysOverdue\":56,\"dueDate\":\"2026-10-03\",\"income\":false,\"name\":\"Mobile top-up\",\"recurringId\":\"12\"},{\"amount\":\"32.00\",\"category\":\"Entertainm…",
         "truncated": true
       }
     },
@@ -400,12 +400,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "today: 2026-11-27\n\ndue\nname                                               dueOn       personId\nSorin                                              2026-11-21         4\nTomás                                              2026-11-22         2\nMarta                                              2026-11-23         1\nBob                                                2026-11-23         7\nAlexandra-Maria Constantinescu (tennis club mate)  2026-11-24         5\nAnna                                               2026-11-24         6\n\nupcoming\ncount  date\n    1  2026-11-28\n    1  2026-11-29\n    2  2026-11-30\n    2  2026-12-01\n"
+        "stdout": "today: 2026-11-28\n\ndue\nname                                               dueOn       personId\nTomás                                              2026-11-22         2\nMarta                                              2026-11-23         1\nBob                                                2026-11-23         7\nAlexandra-Maria Constantinescu (tennis club mate)  2026-11-24         5\nAnna                                               2026-11-24         6\nSorin                                              2026-11-28         4\n\nupcoming\ncount  date\n    1  2026-11-28\n    1  2026-11-29\n    2  2026-11-30\n    2  2026-12-01\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"due\":[{\"dueOn\":\"2026-11-21\",\"name\":\"Sorin\",\"personId\":\"4\"},{\"dueOn\":\"2026-11-22\",\"name\":\"Tomás\",\"personId\":\"2\"},{\"dueOn\":\"2026-11-23\",\"name\":\"Marta\",\"personId\":\"1\"},{\"dueOn\":\"2026-11-23\",\"name\":\"Bob\",\"personId\":\"7\"},{\"dueOn\":\"2026-11-24\",\"name\":\"Alexandra-Maria Constantinescu (tennis club mate)\",\"personId\":\"5\"},{\"dueOn\":\"2026-11-24\",\"name\":\"Anna\",\"personId\":\"6\"}],\"today\":\"2026-11-27\",\"upcoming\":[{\"count\":1,\"date\":\"2026-11-28\"},{\"count\":1,\"date\":\"2026-11-29\"},{\"count\":2,\"date\":\"2026-11-30\"},{\"count\":2,\"date\":\"2026-12-01\"}]}\n"
+        "stdout": "{\"due\":[{\"dueOn\":\"2026-11-22\",\"name\":\"Tomás\",\"personId\":\"2\"},{\"dueOn\":\"2026-11-23\",\"name\":\"Marta\",\"personId\":\"1\"},{\"dueOn\":\"2026-11-23\",\"name\":\"Bob\",\"personId\":\"7\"},{\"dueOn\":\"2026-11-24\",\"name\":\"Alexandra-Maria Constantinescu (tennis club mate)\",\"personId\":\"5\"},{\"dueOn\":\"2026-11-24\",\"name\":\"Anna\",\"personId\":\"6\"},{\"dueOn\":\"2026-11-28\",\"name\":\"Sorin\",\"personId\":\"4\"}],\"today\":\"2026-11-28\",\"upcoming\":[{\"count\":1,\"date\":\"2026-11-28\"},{\"count\":1,\"date\":\"2026-11-29\"},{\"count\":2,\"date\":\"2026-11-30\"},{\"count\":2,\"date\":\"2026-12-01\"}]}\n"
       }
     },
     "debts summary": {
@@ -428,7 +428,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-11-27T23:13:27.930Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"alreadyThere\":false,\"createdAt\":\"2026-11-28T07:06:32.015Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents delete": {
@@ -460,12 +460,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-11-27T23:13:27.930Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
+        "stdout": "limit: 50\noffset: 0\ntotal: 1\n\ndocuments\nid  name                createdAt                 documentDate  hasFile  keepOnPhone  linkCount  mediaType        sha256                                                        sizeBytes\n 1  boiler-receipt.pdf  2026-11-28T07:06:32.015Z  2026-10-01    true     false                0  application/pdf  735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0fe…         45\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"documents\":[{\"createdAt\":\"2026-11-27T23:13:27.930Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
+        "stdout": "{\"documents\":[{\"createdAt\":\"2026-11-28T07:06:32.015Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}],\"limit\":50,\"offset\":0,\"total\":1}\n"
       }
     },
     "documents show": {
@@ -473,12 +473,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "createdAt: 2026-11-27T23:13:27.930Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
+        "stdout": "createdAt: 2026-11-28T07:06:32.015Z\ndocumentDate: 2026-10-01\nhasFile: true\nid: 1\nkeepOnPhone: false\nlinkCount: 0\nmediaType: application/pdf\nname: boiler-receipt.pdf\nsha256: 735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\nsizeBytes: 45\n\nlinks\n(none)\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-11-27T23:13:27.930Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-11-28T07:06:32.015Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":false,\"linkCount\":0,\"links\":[],\"mediaType\":\"application/pdf\",\"name\":\"boiler-receipt.pdf\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "documents unlink": {
@@ -494,7 +494,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"createdAt\":\"2026-11-27T23:13:27.930Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
+        "stdout": "{\"createdAt\":\"2026-11-28T07:06:32.015Z\",\"documentDate\":\"2026-10-01\",\"hasFile\":true,\"id\":\"1\",\"keepOnPhone\":true,\"linkCount\":0,\"mediaType\":\"application/pdf\",\"name\":\"Boiler repair\",\"sha256\":\"735a7713978716d1e65eb6bf069e2f410eb72ec5b285861be417aeca0feeb935\",\"sizeBytes\":45}\n"
       }
     },
     "export csv": {
@@ -547,7 +547,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "bytes: 43329\npath: /home/you/budget.xlsx\n"
+        "stdout": "bytes: 43335\npath: /home/you/budget.xlsx\n"
       }
     },
     "ledger add": {
@@ -692,7 +692,7 @@
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"accountId\":\"1\",\"amount\":\"20.00\",\"categoryId\":\"18\",\"description\":null,\"endDate\":\"2026-11-27\",\"id\":\"14\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
+        "stdout": "{\"accountId\":\"1\",\"amount\":\"20.00\",\"categoryId\":\"18\",\"description\":null,\"endDate\":\"2026-11-28\",\"id\":\"14\",\"intervalCount\":1,\"intervalUnit\":\"MONTH\",\"isActive\":false,\"name\":\"Vet plan plus\",\"nextDueDate\":\"2026-12-20\",\"split\":null,\"startDate\":\"2026-10-20\"}\n"
       }
     },
     "recurring list": {
@@ -771,7 +771,7 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"cli\":{\"api\":1,\"name\":\"meowny\",\"version\":\"1.0.0\"},\"commands\":[{\"command\":\"status\",\"confirm\":false,\"destructive\":false,\"flags\":[],\"positional\":null,\"route\":\"status\",\"scope\":\"read\",\"summary\":\"The app version, the API version and the scope of the token used.\",\"usage\":\"meowny status\"},{\"command\":\"schema\",\"confirm\":false,\"destructive\":false,\"flags\":[],\"positional\":null,\"route\":\"schema\",\"scope\":\"read\",\"summary\":\"Every route with its scope and arguments, so a client can discover them.\",\"usage\":\"meowny schema\"},{\"command\":\"today\",\"confirm\":false,\"destructive\":false,\"flags\":[],\"positional\":null,\"route\":\"today\",\"scope\":\"read\",\"summary\":\"Today's date and the current month in the time zone set in the a…",
+        "stdout": "{\"cli\":{\"api\":1,\"name\":\"meowny\",\"version\":\"1.0.1\"},\"commands\":[{\"command\":\"status\",\"confirm\":false,\"destructive\":false,\"flags\":[],\"positional\":null,\"route\":\"status\",\"scope\":\"read\",\"summary\":\"The app version, the API version and the scope of the token used.\",\"usage\":\"meowny status\"},{\"command\":\"schema\",\"confirm\":false,\"destructive\":false,\"flags\":[],\"positional\":null,\"route\":\"schema\",\"scope\":\"read\",\"summary\":\"Every route with its scope and arguments, so a client can discover them.\",\"usage\":\"meowny schema\"},{\"command\":\"today\",\"confirm\":false,\"destructive\":false,\"flags\":[],\"positional\":null,\"route\":\"today\",\"scope\":\"read\",\"summary\":\"Today's date and the current month in the time zone set in the a…",
         "truncated": true
       }
     },
@@ -1046,12 +1046,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "api: 1\napp: meowny\nschemaVersion: 22\nscope: read\nversion: 1.0.0\n"
+        "stdout": "api: 1\napp: meowny\nschemaVersion: 22\nscope: read\nversion: 1.0.1\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":22,\"scope\":\"read\",\"version\":\"1.0.0\"}\n"
+        "stdout": "{\"api\":1,\"app\":\"meowny\",\"schemaVersion\":22,\"scope\":\"read\",\"version\":\"1.0.1\"}\n"
       }
     },
     "today": {
@@ -1059,12 +1059,12 @@
       "human": {
         "exit": 0,
         "stderr": "",
-        "stdout": "date: 2026-11-27\nmonth: 2026-11\n"
+        "stdout": "date: 2026-11-28\nmonth: 2026-11\n"
       },
       "json": {
         "exit": 0,
         "stderr": "",
-        "stdout": "{\"date\":\"2026-11-27\",\"month\":\"2026-11\"}\n"
+        "stdout": "{\"date\":\"2026-11-28\",\"month\":\"2026-11\"}\n"
       }
     },
     "transactions create": {
